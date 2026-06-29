@@ -49,20 +49,18 @@ jobs:
           body: |
             CF Rez Manager ${{ github.ref_name }}
 
-            ## v1.2.2 更新 / Highlights
+            ## v1.2.3 更新 / Highlights
 
-            - 修复更多暗色主题残留白底控件，包括右键菜单、选择项、输入框、下拉项和进度/滑块。
-            - OBJ 导出现在会生成可直接导入的模型包：`.obj` 引用 `.mtl`，`.mtl` 通过 `map_Kd` 指向 `_textures` 下导出的 PNG 贴图。
-            - 优化 OBJ 贴图解析：建立全局贴图索引、模型贴图 CFG 索引和路径启发式，避免 UI 脚本与无关贴图目录拖慢导出。
-            - 新增 CFG 文本解码链路，支持普通文本、LZMA、ENC Base64 和 REZ phase 尝试，并提前识别二进制 RGB 条带型 CFG。
-            - 全局贴图索引和 CFG 配置索引按当前资源树缓存，重复导出时不再反复重建大字典。
-            - 在 `F:\CrossFile\CrossFileREZBack\7.2.1` 测试中，`ak47` OBJ 导出约 2.8 秒，2 张贴图全部导出，缺失贴图为 0。
-            - Fixed additional dark-theme white surfaces, including context menus, selection items, inputs, combo items, progress bars, and sliders.
-            - OBJ export now creates a ready-to-import package: `.obj` references `.mtl`, and `.mtl` uses `map_Kd` paths into the exported `_textures` PNG folder.
-            - Optimized OBJ texture resolution with global texture indexes, model-texture CFG indexes, and path heuristics so unrelated UI/config resources no longer dominate lookup work.
-            - Added a CFG text decode pipeline for plain text, LZMA, ENC Base64, and REZ phase attempts, with early detection for binary RGB-strip CFG files.
-            - Cached global texture indexes and CFG config indexes per loaded resource tree so repeated exports avoid rebuilding large dictionaries.
-            - On the `F:\CrossFile\CrossFileREZBack\7.2.1` test tree, `ak47` OBJ export completes in about 2.8 seconds with 2 textures exported and 0 missing textures.
+            - 在“内容”标题栏右侧新增类型过滤下拉，同时支持当前目录和全局搜索结果。
+            - 新增经过源路径、文件大小和修改时间校验的 REZ 目录索引磁盘缓存。
+            - OBJ 导出新增 DAT 贴图引用索引，并与现有 CFG 配置索引合并解析。
+            - 改进 `SGFX_*` 模型家族和分件识别，并自动导出 `_GLOW`、`_GLOW_01`、`_GLOW_02` 辅助贴图。
+            - 图形界面和 `--export-obj` 命令行均已接入新的组合贴图解析流程。
+            - Added a content-type filter to the Contents header for both folder browsing and global search results.
+            - Added a persistent REZ directory-index cache validated by source path, file size, and modification time.
+            - Added DAT texture-reference indexing for OBJ export and combined it with the existing CFG configuration index.
+            - Improved `SGFX_*` model-family and multipart recognition, including automatic export of `_GLOW`, `_GLOW_01`, and `_GLOW_02` auxiliary textures.
+            - Updated both the desktop UI and `--export-obj` command to use the combined texture-reference pipeline.
 
             ## 中文说明
 

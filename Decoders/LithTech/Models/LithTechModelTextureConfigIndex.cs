@@ -322,6 +322,15 @@ internal static class LithTechModelTextureConfigIndex
         {
             yield return numberedBase;
         }
+
+        foreach (string familyBase in LithTechModelPartGrouper.EnumerateModelFamilyBaseCandidates(normalized))
+        {
+            if (!string.Equals(familyBase, normalized, StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(familyBase, numberedBase, StringComparison.OrdinalIgnoreCase))
+            {
+                yield return familyBase;
+            }
+        }
     }
 
     private static IEnumerable<string> ExtractModelReferencesFromValue(string value)

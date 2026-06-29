@@ -145,6 +145,17 @@ public partial class MainWindow : Window
         Output
     }
 
+    private enum ContentFilter
+    {
+        All,
+        Folders,
+        Images,
+        Models,
+        Audio,
+        Text,
+        Other
+    }
+
     private ExplorerItem? _rootItem;
     private ExplorerItem? _currentItem;
     private readonly List<ExplorerItem> _backHistory = new();
@@ -154,6 +165,7 @@ public partial class MainWindow : Window
     private List<SearchEntry> _searchIndex = new();
     private AppLanguage _language = AppLanguage.Chinese;
     private AppTheme _theme = AppTheme.Light;
+    private ContentFilter _contentFilter = ContentFilter.All;
     private string _statusKey = "Ready";
     private object[] _statusArgs = [];
     private string _selectedDirectory = string.Empty;
@@ -246,6 +258,16 @@ public partial class MainWindow : Window
             ["PackFolder"] = ("打包文件夹...", "Pack Folder..."),
             ["HeaderDefault"] = ("选择一个文件夹扫描 REZ 资源包", "Choose a folder to scan REZ archives"),
             ["Contents"] = ("内容", "Contents"),
+            ["ContentFilterTooltip"] = ("按内容类型过滤", "Filter by content type"),
+            ["FilterAll"] = ("全部", "All types"),
+            ["FilterFolders"] = ("文件夹", "Folders"),
+            ["FilterImages"] = ("图片", "Images"),
+            ["FilterModels"] = ("模型", "Models"),
+            ["FilterAudio"] = ("音频", "Audio"),
+            ["FilterText"] = ("文本", "Text"),
+            ["FilterOther"] = ("其他", "Other"),
+            ["FilterEmpty"] = ("没有符合过滤条件的项目", "No items match this filter"),
+            ["SearchEmpty"] = ("没有搜索结果", "No search results"),
             ["SearchLabel"] = ("搜索:", "Search:"),
             ["SearchTooltip"] = ("输入关键字快速搜索已扫描的文件和目录", "Type keywords to quickly search indexed files and folders"),
             ["ClearSearch"] = ("清除搜索", "Clear search"),
@@ -284,6 +306,7 @@ public partial class MainWindow : Window
             ["LoadingItem"] = ("正在加载 {0}...", "Loading {0}..."),
             ["LoadedItems"] = ("已从 {1} 加载 {0:N0} 项", "Loaded {0:N0} items from {1}"),
             ["ShowingItems"] = ("显示 {0:N0} 项", "Showing {0:N0} items"),
+            ["ShowingFilteredItems"] = ("过滤后显示 {0:N0}/{1:N0} 项", "Showing {0:N0} of {1:N0} filtered items"),
             ["ExtractThisItem"] = ("导出此项...", "Extract This Item..."),
             ["ExtractSelectedItems"] = ("导出 {0:N0} 个选中项...", "Extract {0:N0} Selected Items..."),
             ["ExtractSelectedDefault"] = ("导出选中项...", "Extract Selected..."),
@@ -934,6 +957,11 @@ public partial class MainWindow : Window
             Func<IEnumerable<string>, IReadOnlyList<string>>? textureConfigResolver = exportRoot is null
                 ? null
                 : await Task.Run(() => LithTechModelTextureConfigIndex.CreateResolver(exportRoot));
+            Func<IEnumerable<string>, IReadOnlyList<string>>? datTextureReferenceResolver = exportRoot is null
+                ? null
+                : await Task.Run(() => LithTechDatTextureReferenceIndex.CreateResolver(exportRoot));
+            Func<IEnumerable<string>, IReadOnlyList<string>>? textureReferenceResolver =
+                TextureReferenceResolver.Combine(textureConfigResolver, datTextureReferenceResolver);
 
             WorkProgress.IsIndeterminate = false;
             WorkProgress.Minimum = 0;
@@ -946,7 +974,7 @@ public partial class MainWindow : Window
                 SetStatus("DecodingModelObjExport", state.Completed, state.Total, state.FileName);
             });
 
-            ModelObjExportBatchResult result = await Task.Run(() => ExportModelObjJobs(outputPath, jobs, exportRoot, globalTextureResolver, textureConfigResolver, progress));
+            ModelObjExportBatchResult result = await Task.Run(() => ExportModelObjJobs(outputPath, jobs, exportRoot, globalTextureResolver, textureReferenceResolver, progress));
             SetStatus(
                 "ExportedModelObjResult",
                 result.ExportResult.SourceCount,
@@ -2549,6 +2577,34 @@ public partial class MainWindow : Window
         ClearSearchText();
     }
 
+    private void ContentFilterComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ContentFilterComboBox.SelectedItem is not ComboBoxItem { Tag: string tag } ||
+            !Enum.TryParse(tag, ignoreCase: true, out ContentFilter filter))
+        {
+            return;
+        }
+
+        _contentFilter = filter;
+        if (!IsInitialized)
+        {
+            return;
+        }
+
+        string query = SearchTextBox.Text.Trim();
+        if (query.Length > 0)
+        {
+            if (_isSearchIndexReady)
+            {
+                ApplySearch(query);
+            }
+
+            return;
+        }
+
+        ShowCurrentFolderItems();
+    }
+
     private void ViewSizeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (!IsInitialized)
@@ -2795,16 +2851,17 @@ public partial class MainWindow : Window
     private void ApplySearch(string query)
     {
         string[] terms = query.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        List<ExplorerItem> results = _searchIndex
+        List<ExplorerItem> matches = _searchIndex
             .Where(entry => terms.All(term => entry.SearchText.Contains(term, StringComparison.OrdinalIgnoreCase)))
             .Select(entry => entry.Item)
             .Distinct()
             .ToList();
+        IReadOnlyList<ExplorerItem> results = ApplyContentFilter(matches);
 
         _isSearchMode = true;
         ContentsList.SelectedItems.Clear();
         ContentsList.ItemsSource = results;
-        EmptyStatePanel.Visibility = results.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        UpdateEmptyState(results.Count, matches.Count, isSearch: true);
 
         if (results.Count == 0)
         {
@@ -2832,14 +2889,83 @@ public partial class MainWindow : Window
             return;
         }
 
-        ContentsList.SelectedItems.Clear();
-        ContentsList.ItemsSource = _currentItem.Children;
-        EmptyStatePanel.Visibility = _currentItem.Children.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        SetFolderStatus(_currentItem);
-        if (_currentItem.Children.Count > 0)
+        ShowCurrentFolderItems();
+    }
+
+    private void ShowCurrentFolderItems()
+    {
+        if (_currentItem is null)
         {
-            ContentsList.ScrollIntoView(_currentItem.Children[0]);
+            ContentsList.ItemsSource = null;
+            EmptyStatePanel.Visibility = Visibility.Collapsed;
+            return;
         }
+
+        IReadOnlyList<ExplorerItem> visibleItems = ApplyContentFilter(_currentItem.Children);
+        ContentsList.SelectedItems.Clear();
+        ContentsList.ItemsSource = visibleItems;
+        UpdateEmptyState(visibleItems.Count, _currentItem.Children.Count, isSearch: false);
+        SetFolderStatus(_currentItem);
+        if (visibleItems.Count > 0)
+        {
+            ContentsList.ScrollIntoView(visibleItems[0]);
+        }
+    }
+
+    private IReadOnlyList<ExplorerItem> ApplyContentFilter(IReadOnlyList<ExplorerItem> items)
+    {
+        if (_contentFilter == ContentFilter.All)
+        {
+            return items;
+        }
+
+        return items
+            .Where(item => ClassifyContent(item) == _contentFilter)
+            .ToList();
+    }
+
+    private static ContentFilter ClassifyContent(ExplorerItem item)
+    {
+        if (item.IsContainer)
+        {
+            return ContentFilter.Folders;
+        }
+
+        if (item.IsModelPreviewCandidate)
+        {
+            return ContentFilter.Models;
+        }
+
+        if (item.IsFile &&
+            (AudioMetadataDecoder.IsSupportedExtension(item.FileExtension) ||
+             FmodBankDecoder.IsCandidate(item.FileExtension)))
+        {
+            return ContentFilter.Audio;
+        }
+
+        if (item.IsImagePreviewCandidate || IsSpritePreviewCandidate(item))
+        {
+            return ContentFilter.Images;
+        }
+
+        return item.IsTextPreviewCandidate
+            ? ContentFilter.Text
+            : ContentFilter.Other;
+    }
+
+    private void UpdateEmptyState(int visibleCount, int unfilteredCount, bool isSearch)
+    {
+        EmptyStatePanel.Visibility = visibleCount == 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (visibleCount != 0)
+        {
+            return;
+        }
+
+        EmptyStateText.Text = isSearch
+            ? T("SearchEmpty")
+            : _contentFilter != ContentFilter.All && unfilteredCount > 0
+                ? T("FilterEmpty")
+                : T("EmptyFolder");
     }
 
     private void ClearSearchText()
@@ -2899,7 +3025,15 @@ public partial class MainWindow : Window
         PackFolderButton.Content = T("PackFolder");
         SettingsButton.Content = T("Settings");
         ContentsHeaderText.Text = T("Contents");
-        EmptyStateText.Text = T("EmptyFolder");
+        FilterAllItem.Content = T("FilterAll");
+        FilterFoldersItem.Content = T("FilterFolders");
+        FilterImagesItem.Content = T("FilterImages");
+        FilterModelsItem.Content = T("FilterModels");
+        FilterAudioItem.Content = T("FilterAudio");
+        FilterTextItem.Content = T("FilterText");
+        FilterOtherItem.Content = T("FilterOther");
+        ContentFilterComboBox.ToolTip = T("ContentFilterTooltip");
+        UpdateEmptyStateText();
         OpenPreviewMenuItem.Header = T("OpenPreview");
         DecodeBankMenuItem.Header = T("DecodeBank");
         ExportObjMenuItem.Header = T("ExportObj");
@@ -2919,6 +3053,21 @@ public partial class MainWindow : Window
 
         RefreshStatusText();
         _settingsWindow?.ApplyLanguage(ToLanguageCode(_language));
+    }
+
+    private void UpdateEmptyStateText()
+    {
+        if (_isSearchMode)
+        {
+            EmptyStateText.Text = T("SearchEmpty");
+            return;
+        }
+
+        EmptyStateText.Text = _contentFilter != ContentFilter.All &&
+                              _currentItem is not null &&
+                              _currentItem.Children.Count > 0
+            ? T("FilterEmpty")
+            : T("EmptyFolder");
     }
 
     private static AppLanguage ParseLanguage(string? value)
@@ -2992,7 +3141,20 @@ public partial class MainWindow : Window
 
     private void SetFolderStatus(ExplorerItem item)
     {
-        SetStatus(item.Children.Count == 0 ? "EmptyFolder" : "ShowingItems", item.Children.Count);
+        if (item.Children.Count == 0)
+        {
+            SetStatus("EmptyFolder");
+            return;
+        }
+
+        if (_contentFilter == ContentFilter.All)
+        {
+            SetStatus("ShowingItems", item.Children.Count);
+            return;
+        }
+
+        int visibleCount = ApplyContentFilter(item.Children).Count;
+        SetStatus("ShowingFilteredItems", visibleCount, item.Children.Count);
     }
 
     private async void BreadcrumbButton_Click(object sender, RoutedEventArgs e)
@@ -3204,17 +3366,10 @@ public partial class MainWindow : Window
 
         _currentItem = item;
         ClearSearchTextSilently();
-        ContentsList.SelectedItem = null;
-        ContentsList.ItemsSource = item.Children;
-        EmptyStatePanel.Visibility = item.Children.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         HeaderText.Text = item.Name;
-        SetFolderStatus(item);
         RenderBreadcrumb(item);
         UpdateCommandState();
-        if (item.Children.Count > 0)
-        {
-            ContentsList.ScrollIntoView(item.Children[0]);
-        }
+        ShowCurrentFolderItems();
     }
 
     private async Task EnsureContainerLoadedAsync(ExplorerItem item)
@@ -3251,6 +3406,7 @@ public partial class MainWindow : Window
         bool searchEnabled = !isBusy || keepSearchEnabled;
         SearchTextBox.IsEnabled = searchEnabled;
         ClearSearchButton.IsEnabled = searchEnabled && SearchTextBox.Text.Length > 0;
+        ContentFilterComboBox.IsEnabled = searchEnabled;
         ContentsList.IsHitTestVisible = !isBusy;
         UpdateCommandState();
     }

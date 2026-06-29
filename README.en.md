@@ -157,14 +157,14 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 - `--scan-cfg`: scan CFG files, extract texture references, and write TXT/CSV reports.
 - `--decode-cfg`: retry failed CFG files, export recovered text or binary previews, and classify high-entropy configs.
 
-## v1.2.2 Changes
+## v1.2.3 Changes
 
-- Fixed additional dark-theme white surfaces, including context menus, selection items, inputs, combo items, progress bars, and sliders.
-- OBJ export now creates a ready-to-import model package: `.obj` references `.mtl`, and `.mtl` uses `map_Kd` paths into the exported `_textures` PNG folder.
-- Optimized OBJ texture resolution with global texture indexes, model-texture CFG indexes, and model/texture path heuristics so UI scripts and unrelated texture folders no longer dominate lookup work.
-- Added a dedicated CFG text decode pipeline for plain text, LZMA, ENC Base64, and REZ phase attempts; binary RGB-strip CFG files are detected early and skip expensive phase brute forcing.
-- Cached global texture indexes and CFG config indexes per loaded resource tree so repeated exports do not rebuild large dictionaries.
-- On the `F:\CrossFile\CrossFileREZBack\7.2.1` test tree, `ak47` OBJ export completes in about 2.8 seconds with 2 textures exported and 0 missing textures.
+- Added a content-type filter to the right side of the Contents header for folders, images, models, audio, text, and other resources; it applies to both the current folder and global search results.
+- Added a persistent REZ directory-index cache validated against source path, file size, and modification time, avoiding a full directory-tree parse when reopening an unchanged archive.
+- Added a DAT texture-reference index for OBJ export that extracts texture paths from plain or LZMA data and combines them with the existing CFG configuration index.
+- Improved `SGFX_*` model-family and multipart recognition, including terminal names such as `MASK`, `LEFT`, `RIGHT`, `CIRCLE`, `LINE`, and `PLANE*`.
+- SGFX model export now looks for and exports `_GLOW`, `_GLOW_01`, and `_GLOW_02` auxiliary textures.
+- Both the desktop UI and the `--export-obj` command now use the combined texture-reference pipeline.
 
 ## Support The Project
 

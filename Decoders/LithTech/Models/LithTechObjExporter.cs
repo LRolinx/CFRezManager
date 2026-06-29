@@ -32,6 +32,7 @@ internal static class LithTechObjExporter
     private const double BlenderFitSize = 4.5;
 
     private static readonly ConcurrentDictionary<string, IReadOnlyList<string>> TextureNameCandidateCache = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly string[] SgfxAuxiliaryTextureSuffixes = ["_GLOW_01", "_GLOW_02", "_GLOW"];
 
     private static readonly (double R, double G, double B)[] FallbackColors =
     [
@@ -494,9 +495,12 @@ internal static class LithTechObjExporter
             candidates.Add(numberedBase);
         }
 
+        AddModelFamilyTextureCandidates(candidates, stem);
+
         foreach (string stripped in StripModelVariantSuffixes(stem))
         {
             candidates.Add(stripped);
+            AddModelFamilyTextureCandidates(candidates, stripped);
         }
 
         foreach (string stripped in StripViewModelPrefixes(stem))
@@ -509,13 +513,51 @@ internal static class LithTechObjExporter
                 candidates.Add(strippedNumberedBase);
             }
 
+            AddModelFamilyTextureCandidates(candidates, stripped);
+
             foreach (string variantStripped in StripModelVariantSuffixes(stripped))
             {
                 candidates.Add(variantStripped);
+                AddModelFamilyTextureCandidates(candidates, variantStripped);
             }
         }
 
-        return candidates;
+        return candidates
+            .Where(candidate => !string.IsNullOrWhiteSpace(candidate))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static void AddModelFamilyTextureCandidates(List<string> candidates, string stem)
+    {
+        foreach (string familyBase in LithTechModelPartGrouper.EnumerateModelFamilyBaseCandidates(stem))
+        {
+            candidates.Add(familyBase);
+            foreach (string relatedTexture in EnumerateRelatedSgfxTextureCandidates(familyBase))
+            {
+                candidates.Add(relatedTexture);
+            }
+        }
+    }
+
+    private static IEnumerable<string> EnumerateRelatedSgfxTextureCandidates(string stem)
+    {
+        if (string.IsNullOrWhiteSpace(stem) ||
+            !stem.StartsWith("SGFX_", StringComparison.OrdinalIgnoreCase))
+        {
+            yield break;
+        }
+
+        string[] tokens = stem.Split('_', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (tokens.Length < 4)
+        {
+            yield break;
+        }
+
+        foreach (string suffix in SgfxAuxiliaryTextureSuffixes)
+        {
+            yield return stem + suffix;
+        }
     }
 
     private static IEnumerable<string> StripModelVariantSuffixes(string stem)
@@ -599,8 +641,10 @@ internal static class LithTechObjExporter
         out string? resolvedReference)
     {
         resolvedReference = null;
-        foreach (string textureCandidate in textureCandidates.Distinct(StringComparer.OrdinalIgnoreCase))
+        List<string> distinctCandidates = textureCandidates.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        for (int index = 0; index < distinctCandidates.Count; index++)
         {
+            string textureCandidate = distinctCandidates[index];
             string? textureRelativePath = TryExportTexture(
                 textureCandidate,
                 textureResolver,
@@ -613,11 +657,94 @@ internal static class LithTechObjExporter
             if (!string.IsNullOrWhiteSpace(textureRelativePath))
             {
                 resolvedReference = textureCandidate;
+                ExportRelatedSgfxTextures(
+                    distinctCandidates.Skip(index + 1),
+                    textureCandidate,
+                    textureResolver,
+                    outputDirectory,
+                    textureDirectory,
+                    textureDirectoryName,
+                    usedTextureNames,
+                    exportedTextureByCandidate,
+                    exportedTextureByBitmap);
                 return textureRelativePath;
             }
         }
 
         return null;
+    }
+
+    private static void ExportRelatedSgfxTextures(
+        IEnumerable<string> textureCandidates,
+        string primaryTextureCandidate,
+        Func<string, ImageSource?>? textureResolver,
+        string outputDirectory,
+        string textureDirectory,
+        string textureDirectoryName,
+        HashSet<string> usedTextureNames,
+        Dictionary<string, string?> exportedTextureByCandidate,
+        Dictionary<BitmapSource, string> exportedTextureByBitmap)
+    {
+        foreach (string textureCandidate in textureCandidates)
+        {
+            if (!IsRelatedSgfxTextureCandidate(primaryTextureCandidate, textureCandidate))
+            {
+                continue;
+            }
+
+            TryExportTexture(
+                textureCandidate,
+                textureResolver,
+                outputDirectory,
+                textureDirectory,
+                textureDirectoryName,
+                usedTextureNames,
+                exportedTextureByCandidate,
+                exportedTextureByBitmap);
+        }
+    }
+
+    private static bool IsRelatedSgfxTextureCandidate(string primaryTextureCandidate, string textureCandidate)
+    {
+        string primaryBase = GetSgfxRelatedTextureBase(primaryTextureCandidate);
+        if (string.IsNullOrWhiteSpace(primaryBase))
+        {
+            return false;
+        }
+
+        string candidateBase = GetSgfxRelatedTextureBase(textureCandidate);
+        return !string.IsNullOrWhiteSpace(candidateBase) &&
+               string.Equals(primaryBase, candidateBase, StringComparison.OrdinalIgnoreCase) &&
+               (IsSgfxAuxiliaryTextureName(primaryTextureCandidate) || IsSgfxAuxiliaryTextureName(textureCandidate));
+    }
+
+    private static string GetSgfxRelatedTextureBase(string textureCandidate)
+    {
+        string stem = Path.GetFileNameWithoutExtension(NormalizeTextureKey(textureCandidate));
+        if (string.IsNullOrWhiteSpace(stem) ||
+            !stem.StartsWith("SGFX_", StringComparison.OrdinalIgnoreCase))
+        {
+            return string.Empty;
+        }
+
+        foreach (string suffix in SgfxAuxiliaryTextureSuffixes)
+        {
+            if (stem.Length > suffix.Length &&
+                stem.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            {
+                return stem[..^suffix.Length];
+            }
+        }
+
+        return stem;
+    }
+
+    private static bool IsSgfxAuxiliaryTextureName(string textureCandidate)
+    {
+        string stem = Path.GetFileNameWithoutExtension(NormalizeTextureKey(textureCandidate));
+        return SgfxAuxiliaryTextureSuffixes.Any(suffix =>
+            stem.Length > suffix.Length &&
+            stem.EndsWith(suffix, StringComparison.OrdinalIgnoreCase));
     }
 
     private static string? TryExportTexture(

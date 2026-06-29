@@ -168,6 +168,9 @@ internal static class LithTechObjExportCommand
 
         Func<string, ImageSource?>? globalTextureResolver = LithTechModelTextureLoader.CreateGlobalResolver(root);
         Func<IEnumerable<string>, IReadOnlyList<string>>? textureConfigResolver = LithTechModelTextureConfigIndex.CreateResolver(root);
+        Func<IEnumerable<string>, IReadOnlyList<string>>? datTextureReferenceResolver = LithTechDatTextureReferenceIndex.CreateResolver(root);
+        Func<IEnumerable<string>, IReadOnlyList<string>>? textureReferenceResolver =
+            TextureReferenceResolver.Combine(textureConfigResolver, datTextureReferenceResolver);
         var sources = new List<LithTechObjExportSource>();
         skippedCount = 0;
 
@@ -181,7 +184,7 @@ internal static class LithTechObjExportCommand
                     GetObjSourceResourcePath(job.Item),
                     document,
                     CreateObjTextureResolver(job.Item, globalTextureResolver),
-                    textureConfigResolver));
+                    textureReferenceResolver));
             }
             else
             {

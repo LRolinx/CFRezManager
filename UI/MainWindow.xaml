@@ -391,12 +391,30 @@
                 BorderThickness="1"
                 Background="{DynamicResource AppSurfaceBrush}">
             <DockPanel Background="{DynamicResource AppSurfaceBrush}">
-                <TextBlock x:Name="ContentsHeaderText"
-                           DockPanel.Dock="Top"
-                           Text="内容"
-                           FontWeight="SemiBold"
-                           Padding="10,8"
-                           Background="{DynamicResource AppSurfaceAltBrush}"/>
+                <Grid DockPanel.Dock="Top"
+                      Background="{DynamicResource AppSurfaceAltBrush}">
+                    <TextBlock x:Name="ContentsHeaderText"
+                               Text="内容"
+                               FontWeight="SemiBold"
+                               Padding="10,8"
+                               VerticalAlignment="Center"/>
+                    <ComboBox x:Name="ContentFilterComboBox"
+                              Width="112"
+                              Margin="0,4,6,4"
+                              Padding="8,3"
+                              HorizontalAlignment="Right"
+                              VerticalAlignment="Stretch"
+                              SelectedIndex="0"
+                              SelectionChanged="ContentFilterComboBox_SelectionChanged">
+                        <ComboBoxItem x:Name="FilterAllItem" Tag="All" Content="全部"/>
+                        <ComboBoxItem x:Name="FilterFoldersItem" Tag="Folders" Content="文件夹"/>
+                        <ComboBoxItem x:Name="FilterImagesItem" Tag="Images" Content="图片"/>
+                        <ComboBoxItem x:Name="FilterModelsItem" Tag="Models" Content="模型"/>
+                        <ComboBoxItem x:Name="FilterAudioItem" Tag="Audio" Content="音频"/>
+                        <ComboBoxItem x:Name="FilterTextItem" Tag="Text" Content="文本"/>
+                        <ComboBoxItem x:Name="FilterOtherItem" Tag="Other" Content="其他"/>
+                    </ComboBox>
+                </Grid>
 
                 <Grid Background="{DynamicResource AppSurfaceBrush}">
                     <ListBox x:Name="ContentsList"

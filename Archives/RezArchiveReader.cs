@@ -97,6 +97,12 @@ public sealed class RezArchiveReader
 
     public RezArchive Read(string filePath)
     {
+        if (RezArchiveDirectoryCache.TryLoad(filePath, out RezArchive? cachedArchive) &&
+            cachedArchive is not null)
+        {
+            return cachedArchive;
+        }
+
         using var fileStream = File.OpenRead(filePath);
         using var reader = new BinaryReader(fileStream, TextEncoding, leaveOpen: false);
 
@@ -105,6 +111,7 @@ public sealed class RezArchiveReader
         var archive = new RezArchive(filePath, header, root);
 
         ParseEntryRange(reader, archive, root, header.RootDirPos, header.RootDirSize, 0, new HashSet<string>());
+        RezArchiveDirectoryCache.TrySave(archive);
         return archive;
     }
 
