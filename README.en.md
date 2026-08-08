@@ -193,7 +193,11 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
     </td>
     <td align="center" width="220">
       <strong>Saya</strong><br />
-      <sub>打赏 66</sub>
+      <sub>Tip 66</sub>
+    </td>
+	<td align="center" width="220">
+      <strong>¹</strong><br />
+      <sub>Tip 1</sub>
     </td>
   </tr>
 </table>
