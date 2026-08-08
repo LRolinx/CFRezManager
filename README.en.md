@@ -191,9 +191,12 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
       <strong>KissJoJo</strong><br />
       <sub>Tip 100</sub>
     </td>
+    <td align="center" width="220">
+      <strong>Saya</strong><br />
+      <sub>打赏 66</sub>
+    </td>
   </tr>
 </table>
-
 <sub>Listed in the order the support was received. Thank you for helping this little tool keep moving.</sub>
 
 If this tool helps you, a small tip is appreciated.
