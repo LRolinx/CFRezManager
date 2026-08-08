@@ -14,7 +14,7 @@ CF Rez Manager is a Windows WPF tool for browsing, searching, previewing, extrac
 - Export all resources, or only selected files, folders, and REZ entries.
 - Pack a normal Windows folder into a new `.rez` archive.
 - Preview images, textures, audio, models, maps, script configs, and common CrossFire/LithTech resources.
-- Export recognized CrossFire image BIN files as standard `.png` files.
+- Choose per format whether decodable image resources such as BIN, DTX, TGA, and DDS are exported as source files or standard `.png` files.
 - Provide command-line batch entry points for OBJ/MTL model export, CFG scanning, and CFG decoding.
 
 ## Requirements
@@ -80,7 +80,7 @@ CFRezManager/
 3. Double-click a folder, REZ archive, internal REZ folder, or supported preview file.
 4. Use the breadcrumb bar to move back or jump to a parent location.
 
-Click `Settings...` in the top toolbar to open the settings window, where you can switch between `Chinese` / `English`, `Light` / `Dark` themes, and clear the thumbnail cache. The app remembers language, theme, view size, scan folder, pack folder, extract folder, and save location.
+Click `Settings...` in the top toolbar to open the settings window, where you can switch between `Chinese` / `English`, `Light` / `Dark` themes, configure image export formats, and clear the thumbnail cache. The app remembers language, theme, view size, scan folder, pack folder, extract folder, save location, and image export options.
 
 The search box builds an in-memory index the first time you type, then quickly filters scanned files, folders, and internal REZ paths. Separate keywords with spaces to require all terms to match.
 
@@ -124,9 +124,10 @@ To export selected items:
 2. Hold `Ctrl` or `Shift` when selecting multiple items.
 3. Right-click the selection.
 4. Choose `Extract This Item...` or `Extract N Selected Items...`.
-5. Select an output folder.
+5. In the export format window, choose for BIN, DTX, TGA, and DDS whether to keep the source file or export a decoded PNG.
+6. Select an output folder.
 
-Exported files keep their internal REZ folder structure. Recognized CrossFire image BIN files are exported as `.png`; script or config BIN files stay as `.bin`.
+Export format choices are saved automatically. If you enable `Do not show this window on future exports`, later exports use the saved options directly; reopen `Settings` -> `Export Format Settings...` to change them. Exported files keep their internal REZ folder structure; BIN files that are not images, such as scripts or configuration tables, and files that fail to decode keep their original extension and source data.
 
 ## Pack Into REZ
 
@@ -156,6 +157,14 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 - `--export-obj`: export LithTech models to OBJ/MTL, write a sibling `_textures` folder, and reference exported PNG textures from the MTL; diagnostics are written only when textures are missing.
 - `--scan-cfg`: scan CFG files, extract texture references, and write TXT/CSV reports.
 - `--decode-cfg`: retry failed CFG files, export recovered text or binary previews, and classify high-entropy configs.
+
+## v1.2.4 Changes
+
+- Added an image export format settings window where CrossFire image BIN, DTX, TGA, and DDS can each be kept as source files or exported as decoded PNG files.
+- Export format choices are saved in user settings, with a `Do not show this window on future exports` option; reopen `Settings` -> `Export Format Settings...` to change them later.
+- Batch extraction now falls back to the original extension and source data when image decoding is not applicable or fails.
+- Extraction completion status now reports decoded image counts and source-file fallback counts.
+- Updated Chinese and English documentation plus GitHub Release notes, and bumped the application version to `v1.2.4`.
 
 ## v1.2.3 Changes
 

@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="&#x8BBE;&#x7F6E;"
         Width="420"
-        Height="304"
+        Height="362"
         MinWidth="380"
         MinHeight="288"
         ResizeMode="NoResize"
@@ -30,6 +30,7 @@
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
@@ -82,13 +83,27 @@
                         Click="ThemeButton_Click"/>
             </Grid>
 
-            <TextBlock x:Name="CacheLabelText"
+            <TextBlock x:Name="ExportLabelText"
                        Grid.Row="2"
+                       Text="&#x5BFC;&#x51FA;"
+                       VerticalAlignment="Center"
+                       Margin="0,0,12,10"/>
+            <Button x:Name="ExportSettingsButton"
+                    Grid.Row="2"
+                    Grid.Column="1"
+                    Content="&#x5BFC;&#x51FA;&#x683C;&#x5F0F;&#x8BBE;&#x7F6E;..."
+                    MinHeight="34"
+                    Padding="14,7"
+                    Margin="0,0,0,10"
+                    Click="ExportSettingsButton_Click"/>
+
+            <TextBlock x:Name="CacheLabelText"
+                       Grid.Row="3"
                        Text="&#x7F13;&#x5B58;"
                        VerticalAlignment="Center"
                        Margin="0,0,12,0"/>
             <Button x:Name="ClearThumbnailCacheButton"
-                    Grid.Row="2"
+                    Grid.Row="3"
                     Grid.Column="1"
                     Content="&#x6E05;&#x9664;&#x7F29;&#x7565;&#x56FE;"
                     MinHeight="34"

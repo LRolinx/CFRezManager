@@ -20,6 +20,8 @@ public sealed class UserSettings
     public double ViewSize { get; set; } = 72;
     public double AudioPreviewVolume { get; set; } = 0.8;
     public string AudioPreviewRepeatMode { get; set; } = "Directory";
+    public Dictionary<string, string> ImageExportModes { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public bool SkipImageExportOptionsDialog { get; set; }
 
     public static string SettingsPath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),

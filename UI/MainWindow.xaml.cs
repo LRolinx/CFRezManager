@@ -50,7 +50,6 @@ public partial class MainWindow : Window
     private const int InitialBankPreviewStreams = 1;
     private const int BankPreviewPrefixStepBytes = 8 * 1024 * 1024;
     private const int BankBackgroundPrefetchStepBytes = 8 * 1024 * 1024;
-    private const int ImageBinHeaderProbeBytes = 20;
     private const int MaxObjModelBytes = 128 * 1024 * 1024;
     private const int MaxObjWorldDatBytes = 256 * 1024 * 1024;
     private static readonly int[] FastBankPreviewPrefixSizes =
@@ -184,7 +183,12 @@ public partial class MainWindow : Window
     private SettingsWindow? _settingsWindow;
 
     private readonly record struct ExtractionProgress(int Completed, int Total, string FileName);
-    private readonly record struct ExtractionJob(ExplorerItem Item, string RelativePath, bool DecodeImageToPng);
+    private readonly record struct ExtractionJob(
+        ExplorerItem Item,
+        string SourceRelativePath,
+        string OutputRelativePath,
+        bool DecodeImageToPng);
+    private readonly record struct ExtractionBatchResult(int DecodedImageCount, int DecodeFallbackCount);
     private readonly record struct ModelObjExportProgress(int Completed, int Total, string FileName);
     private readonly record struct ModelObjExportJob(ExplorerItem Item, string RelativePath);
     private readonly record struct SearchEntry(ExplorerItem Item, string SearchText);
@@ -297,6 +301,7 @@ public partial class MainWindow : Window
             ["ExtractingStart"] = ("正在使用 {1} 个线程导出 {0:N0} 个文件...", "Extracting {0:N0} files with {1} workers..."),
             ["ExtractingProgress"] = ("正在导出 {0:N0}/{1:N0}: {2}", "Extracting {0:N0}/{1:N0}: {2}"),
             ["ExtractedResult"] = ("已将 {0:N0} 个文件导出到 {1}", "Extracted {0:N0} files to {1}"),
+            ["ExtractedResultWithImages"] = ("已将 {0:N0} 个文件导出到 {1}；解码图片 {2:N0} 个，解码失败并保留源文件 {3:N0} 个", "Extracted {0:N0} files to {1}; decoded {2:N0} images, kept {3:N0} source files after decode was not applicable or failed"),
             ["ExtractFailed"] = ("导出失败", "Extract failed"),
             ["ScanningRezArchives"] = ("正在扫描 REZ 资源包...", "Scanning REZ archives..."),
             ["FoundRezArchives"] = ("找到 {0:N0} 个 REZ 资源包", "Found {0:N0} REZ archives"),
@@ -468,6 +473,7 @@ public partial class MainWindow : Window
         };
         window.LanguageChanged += SettingsWindow_LanguageChanged;
         window.ThemeChanged += SettingsWindow_ThemeChanged;
+        window.ExportSettingsRequested += SettingsWindow_ExportSettingsRequested;
         window.ClearThumbnailCacheRequested += SettingsWindow_ClearThumbnailCacheRequested;
         window.Closed += SettingsWindow_Closed;
         _settingsWindow = window;
@@ -480,6 +486,7 @@ public partial class MainWindow : Window
         {
             window.LanguageChanged -= SettingsWindow_LanguageChanged;
             window.ThemeChanged -= SettingsWindow_ThemeChanged;
+            window.ExportSettingsRequested -= SettingsWindow_ExportSettingsRequested;
             window.ClearThumbnailCacheRequested -= SettingsWindow_ClearThumbnailCacheRequested;
             window.Closed -= SettingsWindow_Closed;
         }
@@ -504,6 +511,12 @@ public partial class MainWindow : Window
         _settings.Theme = ThemeManager.ToSettingsValue(theme);
         _settings.Save();
         _settingsWindow?.ApplyTheme(theme);
+    }
+
+    private void SettingsWindow_ExportSettingsRequested(object? sender, EventArgs e)
+    {
+        Window owner = sender as Window ?? this;
+        SelectImageExportOptions(owner, continueExport: false);
     }
 
     private async void SettingsWindow_ClearThumbnailCacheRequested(object? sender, EventArgs e)
@@ -841,6 +854,14 @@ public partial class MainWindow : Window
             return;
         }
 
+        ImageExportOptions? imageExportOptions = _settings.SkipImageExportOptionsDialog
+            ? ImageExportOptions.FromSettings(_settings.ImageExportModes)
+            : SelectImageExportOptions(this, continueExport: true);
+        if (imageExportOptions is null)
+        {
+            return;
+        }
+
         string? outputDirectory = SelectFolder(T("SelectOutputFolderDescription"), FolderDialogKind.Output, _selectedDirectory);
         if (outputDirectory is null)
         {
@@ -856,7 +877,7 @@ public partial class MainWindow : Window
 
             await Task.Run(() => LoadItemsForExtraction(items));
 
-            List<ExtractionJob> jobs = BuildExtractionJobs(items, preserveOutputRelativePaths);
+            List<ExtractionJob> jobs = BuildExtractionJobs(items, preserveOutputRelativePaths, imageExportOptions);
             _extractableFileCount = jobs.Count;
             if (jobs.Count == 0)
             {
@@ -877,9 +898,21 @@ public partial class MainWindow : Window
                 SetStatus("ExtractingProgress", state.Completed, state.Total, state.FileName);
             });
 
-            await Task.Run(() => ExtractFilesParallel(outputDirectory, jobs, workerCount, progress));
+            ExtractionBatchResult result = await Task.Run(() => ExtractFilesParallel(outputDirectory, jobs, workerCount, progress));
 
-            SetStatus("ExtractedResult", jobs.Count, outputDirectory);
+            if (result.DecodedImageCount > 0 || result.DecodeFallbackCount > 0)
+            {
+                SetStatus(
+                    "ExtractedResultWithImages",
+                    jobs.Count,
+                    outputDirectory,
+                    result.DecodedImageCount,
+                    result.DecodeFallbackCount);
+            }
+            else
+            {
+                SetStatus("ExtractedResult", jobs.Count, outputDirectory);
+            }
         }
         catch (Exception ex)
         {
@@ -3437,6 +3470,31 @@ public partial class MainWindow : Window
         return dialog.SelectedPath;
     }
 
+    private ImageExportOptions? SelectImageExportOptions(Window owner, bool continueExport)
+    {
+        var window = new ExportOptionsWindow(
+            ToLanguageCode(_language),
+            _theme,
+            _settings.ImageExportModes,
+            _settings.SkipImageExportOptionsDialog,
+            continueExport)
+        {
+            Owner = owner
+        };
+
+        if (window.ShowDialog() != true || window.SelectedOptions is null)
+        {
+            return null;
+        }
+
+        _settings.ImageExportModes = new Dictionary<string, string>(
+            window.SelectedOptions.ToSettingsDictionary(),
+            StringComparer.OrdinalIgnoreCase);
+        _settings.SkipImageExportOptionsDialog = window.DoNotShowAgain;
+        _settings.Save();
+        return window.SelectedOptions;
+    }
+
     private string? SelectRezOutputFile(string sourceDirectory)
     {
         string sourceName = Path.GetFileName(sourceDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
@@ -3600,7 +3658,10 @@ public partial class MainWindow : Window
         }
     }
 
-    private static List<ExtractionJob> BuildExtractionJobs(IEnumerable<ExplorerItem> items, bool preserveOutputRelativePaths)
+    private static List<ExtractionJob> BuildExtractionJobs(
+        IEnumerable<ExplorerItem> items,
+        bool preserveOutputRelativePaths,
+        ImageExportOptions imageExportOptions)
     {
         var jobs = new List<ExtractionJob>();
         var seenItems = new HashSet<ExplorerItem>();
@@ -3610,12 +3671,18 @@ public partial class MainWindow : Window
         {
             if (preserveOutputRelativePaths)
             {
-                CollectExtractionJobsPreservingPaths(item, jobs, seenItems, usedRelativePaths);
+                CollectExtractionJobsPreservingPaths(item, jobs, seenItems, usedRelativePaths, imageExportOptions);
             }
             else
             {
                 string selectedRootPath = SanitizePathSegment(item.Name);
-                CollectExtractionJobsRelativeToSelection(item, selectedRootPath, jobs, seenItems, usedRelativePaths);
+                CollectExtractionJobsRelativeToSelection(
+                    item,
+                    selectedRootPath,
+                    jobs,
+                    seenItems,
+                    usedRelativePaths,
+                    imageExportOptions);
             }
         }
 
@@ -3716,17 +3783,18 @@ public partial class MainWindow : Window
         ExplorerItem item,
         List<ExtractionJob> jobs,
         HashSet<ExplorerItem> seenItems,
-        HashSet<string> usedRelativePaths)
+        HashSet<string> usedRelativePaths,
+        ImageExportOptions imageExportOptions)
     {
         if (item.Kind == ExplorerItemKind.LocalFile ||
             item.Kind == ExplorerItemKind.RezFile && item.Archive is not null && item.ArchiveFile is not null)
         {
-            AddExtractionJob(item, item.OutputRelativePath, jobs, seenItems, usedRelativePaths);
+            AddExtractionJob(item, item.OutputRelativePath, jobs, seenItems, usedRelativePaths, imageExportOptions);
         }
 
         foreach (ExplorerItem child in item.Children)
         {
-            CollectExtractionJobsPreservingPaths(child, jobs, seenItems, usedRelativePaths);
+            CollectExtractionJobsPreservingPaths(child, jobs, seenItems, usedRelativePaths, imageExportOptions);
         }
     }
 
@@ -3735,19 +3803,26 @@ public partial class MainWindow : Window
         string relativePath,
         List<ExtractionJob> jobs,
         HashSet<ExplorerItem> seenItems,
-        HashSet<string> usedRelativePaths)
+        HashSet<string> usedRelativePaths,
+        ImageExportOptions imageExportOptions)
     {
         if (item.Kind == ExplorerItemKind.LocalFile ||
             item.Kind == ExplorerItemKind.RezFile && item.Archive is not null && item.ArchiveFile is not null)
         {
-            AddExtractionJob(item, relativePath, jobs, seenItems, usedRelativePaths);
+            AddExtractionJob(item, relativePath, jobs, seenItems, usedRelativePaths, imageExportOptions);
             return;
         }
 
         foreach (ExplorerItem child in item.Children)
         {
             string childRelativePath = CombineRelativePath(relativePath, SanitizePathSegment(child.Name));
-            CollectExtractionJobsRelativeToSelection(child, childRelativePath, jobs, seenItems, usedRelativePaths);
+            CollectExtractionJobsRelativeToSelection(
+                child,
+                childRelativePath,
+                jobs,
+                seenItems,
+                usedRelativePaths,
+                imageExportOptions);
         }
     }
 
@@ -3756,7 +3831,8 @@ public partial class MainWindow : Window
         string relativePath,
         List<ExtractionJob> jobs,
         HashSet<ExplorerItem> seenItems,
-        HashSet<string> usedRelativePaths)
+        HashSet<string> usedRelativePaths,
+        ImageExportOptions imageExportOptions)
     {
         if (!seenItems.Add(item))
         {
@@ -3766,56 +3842,19 @@ public partial class MainWindow : Window
         string safeRelativePath = string.IsNullOrWhiteSpace(relativePath)
             ? SanitizePathSegment(item.Name)
             : relativePath;
-        bool decodeImageToPng = ShouldExtractImageBinAsPng(item);
+        bool decodeImageToPng = imageExportOptions.ShouldDecodeToPng(item.FileExtension) &&
+                                !CrossFireScriptBinDecoder.IsCandidate(item.Name, item.FileExtension);
         if (decodeImageToPng)
         {
-            safeRelativePath = Path.ChangeExtension(safeRelativePath, ".png") ?? $"{safeRelativePath}.png";
+            string sourceRelativePath = MakeUniqueRelativePath(safeRelativePath, usedRelativePaths);
+            string decodedRelativePath = Path.ChangeExtension(safeRelativePath, ".png") ?? $"{safeRelativePath}.png";
+            string outputRelativePath = MakeUniqueRelativePath(decodedRelativePath, usedRelativePaths);
+            jobs.Add(new ExtractionJob(item, sourceRelativePath, outputRelativePath, DecodeImageToPng: true));
+            return;
         }
 
-        jobs.Add(new ExtractionJob(item, MakeUniqueRelativePath(safeRelativePath, usedRelativePaths), decodeImageToPng));
-    }
-
-    private static bool ShouldExtractImageBinAsPng(ExplorerItem item)
-    {
-        if (!item.IsFile ||
-            !CrossFireImageBinDecoder.IsCandidate(item.FileExtension) ||
-            CrossFireScriptBinDecoder.IsCandidate(item.Name, item.FileExtension))
-        {
-            return false;
-        }
-
-        try
-        {
-            byte[] header = ReadExplorerFilePrefixBytes(item, ImageBinHeaderProbeBytes);
-            if (CrossFireImageBinDecoder.HasSupportedImageHeader(header))
-            {
-                return true;
-            }
-
-            if (LzmaAloneDecoder.IsCompressed(header))
-            {
-                byte[] lzmaCandidateData = ReadExplorerFileBytes(item, int.MaxValue);
-                return CrossFireImageBinDecoder.TryDecodeThumbnail(lzmaCandidateData, out _, out ImageStorageKind lzmaStorageKind) &&
-                       lzmaStorageKind is ImageStorageKind.CrossFireImageBin or
-                           ImageStorageKind.CrossFireImageBinLzma or
-                           ImageStorageKind.CrossFireImageBinZstd;
-            }
-
-            if (!CrossFireImageBinDecoder.HasEncodedHeader(header))
-            {
-                return false;
-            }
-
-            byte[] data = ReadExplorerFileBytes(item, int.MaxValue);
-            return CrossFireImageBinDecoder.TryDecodeThumbnail(data, out _, out ImageStorageKind storageKind) &&
-                   storageKind is ImageStorageKind.CrossFireImageBin or
-                       ImageStorageKind.CrossFireImageBinLzma or
-                       ImageStorageKind.CrossFireImageBinZstd;
-        }
-        catch
-        {
-            return false;
-        }
+        string outputPath = MakeUniqueRelativePath(safeRelativePath, usedRelativePaths);
+        jobs.Add(new ExtractionJob(item, outputPath, outputPath, DecodeImageToPng: false));
     }
 
     private static string MakeUniqueRelativePath(string relativePath, HashSet<string> usedRelativePaths)
@@ -3938,7 +3977,7 @@ public partial class MainWindow : Window
         item.IsLoaded = true;
     }
 
-    private static void ExtractFilesParallel(
+    private static ExtractionBatchResult ExtractFilesParallel(
         string outputDirectory,
         IReadOnlyList<ExtractionJob> jobs,
         int workerCount,
@@ -3950,30 +3989,32 @@ public partial class MainWindow : Window
         }
 
         int completed = 0;
+        int decodedImageCount = 0;
+        int decodeFallbackCount = 0;
         long nextReportAt = 0;
         var options = new ParallelOptions { MaxDegreeOfParallelism = workerCount };
 
         Parallel.ForEach(jobs, options, job =>
         {
             ExplorerItem item = job.Item;
-            string destinationPath = Path.Combine(outputDirectory, job.RelativePath);
+            string destinationPath = Path.Combine(outputDirectory, job.OutputRelativePath);
             if (job.DecodeImageToPng)
             {
-                WriteDecodedImageBinPng(item, destinationPath);
-            }
-            else if (item.Kind == ExplorerItemKind.LocalFile)
-            {
-                string? destinationDirectory = Path.GetDirectoryName(destinationPath);
-                if (!string.IsNullOrWhiteSpace(destinationDirectory))
+                byte[] data = ReadExplorerFileBytes(item, int.MaxValue);
+                if (DecodedImageExporter.TryWritePng(data, item.FileExtension, destinationPath))
                 {
-                    Directory.CreateDirectory(destinationDirectory);
+                    Interlocked.Increment(ref decodedImageCount);
                 }
-
-                File.Copy(item.SourcePath, destinationPath, overwrite: true);
+                else
+                {
+                    destinationPath = Path.Combine(outputDirectory, job.SourceRelativePath);
+                    WriteSourceFile(item, destinationPath);
+                    Interlocked.Increment(ref decodeFallbackCount);
+                }
             }
             else
             {
-                RezArchiveReader.ExtractFile(item.Archive!, item.ArchiveFile!, destinationPath);
+                WriteSourceFile(item, destinationPath);
             }
 
             int done = Interlocked.Increment(ref completed);
@@ -3982,15 +4023,25 @@ public partial class MainWindow : Window
                 progress.Report(new ExtractionProgress(done, jobs.Count, item.Name));
             }
         });
+
+        return new ExtractionBatchResult(decodedImageCount, decodeFallbackCount);
     }
 
-    private static void WriteDecodedImageBinPng(ExplorerItem item, string destinationPath)
+    private static void WriteSourceFile(ExplorerItem item, string destinationPath)
     {
-        byte[] data = ReadExplorerFileBytes(item, int.MaxValue);
-        if (!CrossFireImageBinDecoder.TryWritePng(data, destinationPath, out _))
+        if (item.Kind == ExplorerItemKind.LocalFile)
         {
-            throw new InvalidDataException($"Failed to decode image BIN for export: {item.Name}");
+            string? destinationDirectory = Path.GetDirectoryName(destinationPath);
+            if (!string.IsNullOrWhiteSpace(destinationDirectory))
+            {
+                Directory.CreateDirectory(destinationDirectory);
+            }
+
+            File.Copy(item.SourcePath, destinationPath, overwrite: true);
+            return;
         }
+
+        RezArchiveReader.ExtractFile(item.Archive!, item.ArchiveFile!, destinationPath);
     }
 
     private static bool ShouldReportProgress(ref long nextReportAt)
@@ -4015,10 +4066,16 @@ public partial class MainWindow : Window
         var directories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (ExtractionJob job in jobs)
         {
-            string? directory = Path.GetDirectoryName(job.RelativePath);
+            string? directory = Path.GetDirectoryName(job.OutputRelativePath);
             if (!string.IsNullOrEmpty(directory))
             {
                 directories.Add(directory);
+            }
+
+            string? sourceDirectory = Path.GetDirectoryName(job.SourceRelativePath);
+            if (!string.IsNullOrEmpty(sourceDirectory))
+            {
+                directories.Add(sourceDirectory);
             }
         }
 
