@@ -2,8 +2,8 @@
 
 English documentation is available in [README.en.md](README.en.md).
 
-![主界面](image.png)
-![预览界面](image-1.png)
+![主界面](assets/readme/image.png)
+![预览界面](assets/readme/image-1.png)
 
 CF Rez Manager 是一个 Windows WPF 工具，用来浏览、搜索、预览、解包和重新打包 LithTech / CrossFire 的 `.rez` 资源包，也能直接查看已解包目录里的散文件资源。
 
@@ -175,44 +175,14 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 - SGFX 模型导出时会继续查找并导出 `_GLOW`、`_GLOW_01`、`_GLOW_02` 辅助贴图。
 - 图形界面和 `--export-obj` 命令行导出均已接入新的组合贴图解析流程。
 
-## 感谢以下的伙伴提供项目反馈和帮助
-<style>
-.marquee {
-transform: translateX(1000%);
-font-weight:700;
-}
+## 感谢以下伙伴提供项目反馈和帮助
 
-@keyframes marquee {
-  from {
-    transform: translateX(100%);
-  }
+![项目贡献者：TigerShota、风吹、ka9ura](assets/readme/contributors.gif)
 
-  to {
-    transform: translateX(-100%);
-  }
-}
-</style>
-<div style="border:1px solid #ffffff22;overflow:hidden">
-<div class="marquee" style="animation: 8s 0s marquee linear infinite;">TigerShota</div>
-<div class="marquee" style="animation: 7s 1s marquee linear infinite;">风吹</div>
-<div class="marquee" style="animation: 6s 2s marquee linear infinite;">ka9ura</div>
-</div>
+## 感谢以下朋友的支持
 
+![项目支持者：黑猫不是警长 20、KissJoJo 100、Saya 66、¹ 1](assets/readme/supporters-smooth.gif)
 
-<div align="center">
+### 如果这个工具帮到了你，可以请我喝杯咖啡
 
-## 感谢下方这些朋友的支持
-
-<div style="border:1px solid #ffffff22;overflow:hidden">
-<div class="marquee" style="animation: 8s 0s marquee linear infinite;">黑猫不是警长 🪙20</div>
-<div class="marquee" style="animation: 7s 1s marquee linear infinite;">KissJoJo 🪙100</div>
-<div class="marquee" style="animation: 6s 2s marquee linear infinite;">Saya 🪙66</div>
-<div class="marquee" style="animation: 5s 3s marquee linear infinite;">¹ 🪙1</div>
-</div>
-
-
-### 如果这个工具帮到了你，可以请我喝杯咖啡。
-
-![支持项目二维码](afc08a3298aeb1fa378e9d89ca34e35a.jpg)
-
-</div>
+<p align="center"><img src="assets/readme/afc08a3298aeb1fa378e9d89ca34e35a.jpg" alt="支持项目二维码"></p>

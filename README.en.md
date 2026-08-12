@@ -2,8 +2,8 @@
 
 中文点这里 [README.md](README.md).
 
-![Main window](image.png)
-![Preview window](image-1.png)
+![Main window](assets/readme/image.png)
+![Preview window](assets/readme/image-1.png)
 
 CF Rez Manager is a Windows WPF tool for browsing, searching, previewing, extracting, and packing LithTech / CrossFire `.rez` archives. It can also inspect loose resource files from extracted folders.
 
@@ -175,43 +175,14 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 - SGFX model export now looks for and exports `_GLOW`, `_GLOW_01`, and `_GLOW_02` auxiliary textures.
 - Both the desktop UI and the `--export-obj` command now use the combined texture-reference pipeline.
 
-## Thanks To The Following Contributors For Their Feedback And Help
+## Thanks to the following contributors for their feedback and help
 
-<style>
-.marquee {
-transform: translateX(1000%);
-font-weight:700;
-}
+![Project contributors: TigerShota, 风吹, and ka9ura](assets/readme/contributors.gif)
 
-@keyframes marquee {
-  from {
-    transform: translateX(100%);
-  }
+## Thanks to the following supporters
 
-  to {
-    transform: translateX(-100%);
-  }
-}
-</style>
-<div style="border:1px solid #ffffff22;overflow:hidden">
-<div class="marquee" style="animation: 8s 0s marquee linear infinite;">TigerShota</div>
-<div class="marquee" style="animation: 7s 1s marquee linear infinite;">风吹</div>
-<div class="marquee" style="animation: 6s 2s marquee linear infinite;">ka9ura</div>
-</div>
+![Project supporters: 黑猫不是警长 20, KissJoJo 100, Saya 66, and ¹ 1](assets/readme/supporters-smooth.gif)
 
-<div align="center">
+### If this tool has helped you, you can buy me a coffee
 
-## Thanks To The Supporters Below
-
-<div style="border:1px solid #ffffff22;overflow:hidden">
-<div class="marquee" style="animation: 8s 0s marquee linear infinite;">黑猫不是警长 🪙20</div>
-<div class="marquee" style="animation: 7s 1s marquee linear infinite;">KissJoJo 🪙100</div>
-<div class="marquee" style="animation: 6s 2s marquee linear infinite;">Saya 🪙66</div>
-<div class="marquee" style="animation: 5s 3s marquee linear infinite;">¹ 🪙1</div>
-</div>
-
-### If This Tool Has Helped You, You Can Buy Me A Coffee.
-
-![Support QR code](afc08a3298aeb1fa378e9d89ca34e35a.jpg)
-
-</div>
+<p align="center"><img src="assets/readme/afc08a3298aeb1fa378e9d89ca34e35a.jpg" alt="Support QR code"></p>
