@@ -175,36 +175,43 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 - SGFX 模型导出时会继续查找并导出 `_GLOW`、`_GLOW_01`、`_GLOW_02` 辅助贴图。
 - 图形界面和 `--export-obj` 命令行导出均已接入新的组合贴图解析流程。
 
-## 制作不易，鼓励一下
+## 感谢以下的伙伴提供项目反馈和帮助
+<style>
+.marquee {
+transform: translateX(1000%);
+font-weight:700;
+}
+
+@keyframes marquee {
+  from {
+    transform: translateX(100%);
+  }
+
+  to {
+    transform: translateX(-100%);
+  }
+}
+</style>
+<div style="border:1px solid #ffffff22;overflow:hidden">
+<div class="marquee" style="animation: 8s 0s marquee linear infinite;">TigerShota</div>
+<div class="marquee" style="animation: 7s 1s marquee linear infinite;">风吹</div>
+<div class="marquee" style="animation: 6s 2s marquee linear infinite;">ka9ura</div>
+</div>
+
 
 <div align="center">
 
-### 感谢这些朋友的支持
+## 感谢下方这些朋友的支持
 
-<table>
-  <tr>
-    <td align="center" width="220">
-      <strong>黑猫不是警长</strong><br />
-      <sub>打赏 20</sub>
-    </td>
-    <td align="center" width="220">
-      <strong>KissJoJo</strong><br />
-      <sub>打赏 100</sub>
-    </td>
-    <td align="center" width="220">
-      <strong>Saya</strong><br />
-      <sub>打赏 66</sub>
-    </td>
-	<td align="center" width="220">
-      <strong>¹</strong><br />
-      <sub>打赏 1</sub>
-    </td>
-  </tr>
-</table>
+<div style="border:1px solid #ffffff22;overflow:hidden">
+<div class="marquee" style="animation: 8s 0s marquee linear infinite;">黑猫不是警长 🪙20</div>
+<div class="marquee" style="animation: 7s 1s marquee linear infinite;">KissJoJo 🪙100</div>
+<div class="marquee" style="animation: 6s 2s marquee linear infinite;">Saya 🪙66</div>
+<div class="marquee" style="animation: 5s 3s marquee linear infinite;">¹ 🪙1</div>
+</div>
 
-<sub>名单按收到支持的时间记录。感谢你们让这个小工具继续往前走。</sub>
 
-如果这个工具帮到了你，可以请我喝杯咖啡。
+### 如果这个工具帮到了你，可以请我喝杯咖啡。
 
 ![支持项目二维码](afc08a3298aeb1fa378e9d89ca34e35a.jpg)
 

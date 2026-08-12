@@ -175,35 +175,42 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 - SGFX model export now looks for and exports `_GLOW`, `_GLOW_01`, and `_GLOW_02` auxiliary textures.
 - Both the desktop UI and the `--export-obj` command now use the combined texture-reference pipeline.
 
-## Support The Project
+## Thanks To The Following Contributors For Their Feedback And Help
+
+<style>
+.marquee {
+transform: translateX(1000%);
+font-weight:700;
+}
+
+@keyframes marquee {
+  from {
+    transform: translateX(100%);
+  }
+
+  to {
+    transform: translateX(-100%);
+  }
+}
+</style>
+<div style="border:1px solid #ffffff22;overflow:hidden">
+<div class="marquee" style="animation: 8s 0s marquee linear infinite;">TigerShota</div>
+<div class="marquee" style="animation: 7s 1s marquee linear infinite;">风吹</div>
+<div class="marquee" style="animation: 6s 2s marquee linear infinite;">ka9ura</div>
+</div>
 
 <div align="center">
 
-### Thanks To These Supporters
+## Thanks To The Supporters Below
 
-<table>
-  <tr>
-    <td align="center" width="220">
-      <strong>黑猫不是警长</strong><br />
-      <sub>Tip 20</sub>
-    </td>
-    <td align="center" width="220">
-      <strong>KissJoJo</strong><br />
-      <sub>Tip 100</sub>
-    </td>
-    <td align="center" width="220">
-      <strong>Saya</strong><br />
-      <sub>Tip 66</sub>
-    </td>
-	<td align="center" width="220">
-      <strong>¹</strong><br />
-      <sub>Tip 1</sub>
-    </td>
-  </tr>
-</table>
-<sub>Listed in the order the support was received. Thank you for helping this little tool keep moving.</sub>
+<div style="border:1px solid #ffffff22;overflow:hidden">
+<div class="marquee" style="animation: 8s 0s marquee linear infinite;">黑猫不是警长 🪙20</div>
+<div class="marquee" style="animation: 7s 1s marquee linear infinite;">KissJoJo 🪙100</div>
+<div class="marquee" style="animation: 6s 2s marquee linear infinite;">Saya 🪙66</div>
+<div class="marquee" style="animation: 5s 3s marquee linear infinite;">¹ 🪙1</div>
+</div>
 
-If this tool helps you, a small tip is appreciated.
+### If This Tool Has Helped You, You Can Buy Me A Coffee.
 
 ![Support QR code](afc08a3298aeb1fa378e9d89ca34e35a.jpg)
 
