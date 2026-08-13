@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass
 from math import ceil
+from os import cpu_count
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -12,8 +14,13 @@ from PIL import Image, ImageDraw, ImageFont
 
 WIDTH = 900
 HEIGHT = 72
-FRAME_DURATION_MS = 10
-SCROLL_SPEED_PX = 1
+FRAME_DURATION_MS = 40
+# Three quarter-pixels per frame at 25 FPS is about 19 pixels per second.
+# Four cached sampling phases create the subpixel transitions without an
+# expensive resampling pass for every individual GIF frame.
+SUBPIXEL_SCALE = 4
+SCROLL_SUBPIXELS_PER_FRAME = 3
+FRAME_THREADS_PER_JOB = max(1, min(4, (cpu_count() or 2) // 2))
 CHIP_HEIGHT = 46
 CHIP_GAP = 30
 COIN_SIZE = 16
@@ -123,29 +130,55 @@ def render_marquee(filename: str, items: list[MarqueeItem]) -> Path:
     name_font = ImageFont.truetype(str(find_font(bold=True)), 25)
     detail_font = ImageFont.truetype(str(find_font(bold=True)), 23)
     layout, track_width = build_layout(items, name_font, detail_font)
-    frame_count = ceil(track_width / SCROLL_SPEED_PX)
-    rgb_frames: list[Image.Image] = []
+    # Padding the loop to a multiple of the subpixel step makes the final frame
+    # join the first exactly, with at most two extra pixels in the trailing gap.
+    loop_width = ceil(track_width / SCROLL_SUBPIXELS_PER_FRAME) * SCROLL_SUBPIXELS_PER_FRAME
+    frame_count = loop_width * SUBPIXEL_SCALE // SCROLL_SUBPIXELS_PER_FRAME
 
-    for frame_index in range(frame_count):
-        offset = round(frame_index * track_width / frame_count)
-        frame = Image.new("RGB", (WIDTH, HEIGHT), BACKGROUND)
-        draw = ImageDraw.Draw(frame)
+    # Draw a little more than one viewport plus one complete repeated track.
+    strip_width = WIDTH + loop_width + 2
+    strip = Image.new("RGB", (strip_width, HEIGHT), BACKGROUND)
+    strip_draw = ImageDraw.Draw(strip)
+    for track_x in range(0, strip_width + loop_width, loop_width):
+        item_x = track_x
+        for item, item_width in layout:
+            draw_chip(strip_draw, item_x, item_width, item, name_font, detail_font)
+            item_x += item_width + CHIP_GAP
 
-        first_track = -(offset // track_width + 1) * track_width
-        for track_x in range(first_track, WIDTH + track_width, track_width):
-            item_x = track_x - offset % track_width
-            for item, item_width in layout:
-                draw_chip(draw, item_x, item_width, item, name_font, detail_font)
-                item_x += item_width + CHIP_GAP
+    phase_strips = [strip]
+    for phase in range(1, SUBPIXEL_SCALE):
+        phase_strips.append(
+            strip.transform(
+                strip.size,
+                Image.Transform.AFFINE,
+                (1, 0, phase / SUBPIXEL_SCALE, 0, 1, 0),
+                resample=Image.Resampling.BICUBIC,
+                fillcolor=BACKGROUND,
+            )
+        )
 
-        draw.rounded_rectangle((0, 0, WIDTH - 1, HEIGHT - 1), radius=10, outline=BORDER, width=1)
-        rgb_frames.append(frame)
+    def make_rgb_frame(frame_index: int) -> Image.Image:
+        offset_subpixels = frame_index * SCROLL_SUBPIXELS_PER_FRAME
+        integer_offset, phase = divmod(offset_subpixels, SUBPIXEL_SCALE)
+        frame = phase_strips[phase].crop((integer_offset, 0, integer_offset + WIDTH, HEIGHT))
+        ImageDraw.Draw(frame).rounded_rectangle(
+            (0, 0, WIDTH - 1, HEIGHT - 1),
+            radius=10,
+            outline=BORDER,
+            width=1,
+        )
+        return frame
 
-    palette = rgb_frames[0].quantize(colors=128)
-    frames = [
-        frame.quantize(palette=palette, dither=Image.Dither.NONE)
-        for frame in rgb_frames
-    ]
+    palette = make_rgb_frame(2).quantize(colors=128)
+
+    def make_palette_frame(frame_index: int) -> Image.Image:
+        return make_rgb_frame(frame_index).quantize(
+            palette=palette,
+            dither=Image.Dither.NONE,
+        )
+
+    with ThreadPoolExecutor(max_workers=FRAME_THREADS_PER_JOB) as executor:
+        frames = list(executor.map(make_palette_frame, range(frame_count)))
 
     OUTPUT_DIRECTORY.mkdir(parents=True, exist_ok=True)
     output_path = OUTPUT_DIRECTORY / filename
@@ -163,8 +196,8 @@ def render_marquee(filename: str, items: list[MarqueeItem]) -> Path:
 
 
 def main() -> None:
-    outputs = [
-        render_marquee(
+    jobs = [
+        (
             "contributors.gif",
             [
                 MarqueeItem("TigerShota"),
@@ -172,7 +205,7 @@ def main() -> None:
                 MarqueeItem("ka9ura"),
             ],
         ),
-        render_marquee(
+        (
             "supporters-smooth.gif",
             [
                 MarqueeItem("黑猫不是警长", "20"),
@@ -182,6 +215,10 @@ def main() -> None:
             ],
         ),
     ]
+
+    with ProcessPoolExecutor(max_workers=len(jobs)) as executor:
+        futures = [executor.submit(render_marquee, filename, items) for filename, items in jobs]
+        outputs = [future.result() for future in futures]
 
     for output in outputs:
         print(output.relative_to(REPOSITORY_ROOT))
