@@ -212,6 +212,7 @@ def main() -> None:
                 MarqueeItem("KissJoJo", "100"),
                 MarqueeItem("Saya", "66"),
                 MarqueeItem("¹", "1"),
+                MarqueeItem("", "5"),
             ],
         ),
     ]
