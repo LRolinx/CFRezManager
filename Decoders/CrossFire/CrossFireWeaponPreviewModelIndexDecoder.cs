@@ -117,22 +117,35 @@ internal static class CrossFireWeaponPreviewModelIndexDecoder
 
     public static IReadOnlyDictionary<uint, IReadOnlyList<string>> BuildItemAliasesByWeaponIndex(
         IEnumerable<CrossFireWeaponPreviewEntry> previews,
-        IEnumerable<CrossFireWeaponModelEntry> models)
+        IEnumerable<CrossFireWeaponModelEntry> models,
+        IReadOnlySet<uint> ltcWeaponIndexIds)
     {
-        var modelsByGroupAndItem = models
+        CrossFireWeaponPreviewEntry[] previewEntries = previews.ToArray();
+        CrossFireWeaponModelEntry[] modelEntries = models.ToArray();
+        var modelsByGroupAndItem = modelEntries
             .Where(model => model.ModelGroupId > 0 && model.ItemId > 0 && model.ModelId > 0)
             .GroupBy(model => (model.ModelGroupId, model.ItemId))
             .ToDictionary(
                 group => group.Key,
                 group => group.Select(model => model.ModelId).Distinct().ToArray());
-        var previewModelIdsByGroupAndItem = previews
+        var modelIdsByItem = modelEntries
+            .Where(model => model.ItemId > 0 && model.ModelId > 0)
+            .GroupBy(model => model.ItemId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(model => model.ModelId).Distinct().ToArray());
+        var modelTableGroups = modelEntries
+            .Where(model => model.ModelGroupId > 0)
+            .Select(model => model.ModelGroupId)
+            .ToHashSet();
+        var previewModelIdsByGroupAndItem = previewEntries
             .Where(preview => preview.ModelGroupId > 0 && preview.ItemId > 0 && preview.ModelId > 0)
             .GroupBy(preview => (preview.ModelGroupId, preview.ItemId))
             .ToDictionary(
                 group => group.Key,
                 group => group.Select(preview => preview.ModelId).Distinct().ToArray());
         var aliasesByWeaponIndex = new Dictionary<uint, HashSet<string>>();
-        foreach (CrossFireWeaponPreviewEntry preview in previews)
+        foreach (CrossFireWeaponPreviewEntry preview in previewEntries)
         {
             var key = (preview.ModelGroupId, preview.ItemId);
             if (preview.ItemId == 0 || preview.ModelGroupId == 0 ||
@@ -142,7 +155,8 @@ internal static class CrossFireWeaponPreviewModelIndexDecoder
                 continue;
             }
 
-            if (previewModelIdsByGroupAndItem.TryGetValue(key, out uint[]? previewModelIds) &&
+            if (modelIds[0] != preview.ItemId &&
+                previewModelIdsByGroupAndItem.TryGetValue(key, out uint[]? previewModelIds) &&
                 previewModelIds.Any(previewModelId => previewModelId != modelIds[0]))
             {
                 continue;
@@ -153,6 +167,30 @@ internal static class CrossFireWeaponPreviewModelIndexDecoder
             {
                 aliases = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 aliasesByWeaponIndex.Add(weaponIndex, aliases);
+            }
+
+            aliases.Add("item:" + preview.ItemId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        foreach (CrossFireWeaponPreviewEntry preview in previewEntries)
+        {
+            if (preview.ItemId == 0 || preview.ModelGroupId == 0 ||
+                modelTableGroups.Contains(preview.ModelGroupId) ||
+                !ltcWeaponIndexIds.Contains(preview.ItemId))
+            {
+                continue;
+            }
+
+            if (modelIdsByItem.TryGetValue(preview.ItemId, out uint[]? modelIds) &&
+                modelIds.Any(modelId => modelId != preview.ItemId && ltcWeaponIndexIds.Contains(modelId)))
+            {
+                continue;
+            }
+
+            if (!aliasesByWeaponIndex.TryGetValue(preview.ItemId, out HashSet<string>? aliases))
+            {
+                aliases = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                aliasesByWeaponIndex.Add(preview.ItemId, aliases);
             }
 
             aliases.Add("item:" + preview.ItemId.ToString(System.Globalization.CultureInfo.InvariantCulture));

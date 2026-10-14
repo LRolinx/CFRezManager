@@ -1501,8 +1501,6 @@ internal static class LithTechModelTextureConfigIndex
         var byModelPath = new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase);
         var byModelContext = new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase);
         var modelsWithSlotSpecificBindings = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        IReadOnlyDictionary<uint, IReadOnlyList<string>> itemAliasesByWeaponIndex =
-            BuildWeaponPreviewItemAliases(crossFireScriptItems);
         var modelItemsByPath = modelResourceItems
             .Where(item => string.Equals(item.FileExtension, "ltb", StringComparison.OrdinalIgnoreCase))
             .Select(item => (Item: item, ResourcePath: GetModelResourcePath(item)))
@@ -1779,6 +1777,48 @@ internal static class LithTechModelTextureConfigIndex
             string cacheKey = ltcItem.ArchiveFile?.Md5 is { Length: > 0 } archiveHash
                 ? "md5:" + archiveHash
                 : NormalizeKey(ltcItem.OutputRelativePath);
+            if (ltcMappingCache.ContainsKey(cacheKey))
+            {
+                continue;
+            }
+
+            byte[]? ltcData = TryReadItemBytes(ltcItem, MaxLtcBytes);
+            IReadOnlyList<CrossFireLtcModelTextureMapping> mappings = ltcData is not null &&
+                       CrossFireLtcDecoder.TryDecodeNativeText(
+                           ltcData,
+                           out CrossFireLtcTextDocument? ltcDocument,
+                           out _) &&
+                       ltcDocument is not null
+                ? CrossFireLtcModelTextureMappingDecoder.Extract(ltcDocument.Text)
+                : [];
+            ltcMappingCache[cacheKey] = mappings;
+        }
+
+        var ltcWeaponIndexIds = new HashSet<uint>();
+        foreach (CrossFireLtcModelTextureMapping mapping in ltcMappingCache.Values.SelectMany(mappings => mappings))
+        {
+            foreach (string identityAlias in mapping.IdentityAliases)
+            {
+                const string weaponIndexPrefix = "WeaponIndex:";
+                if (identityAlias.StartsWith(weaponIndexPrefix, StringComparison.OrdinalIgnoreCase) &&
+                    uint.TryParse(
+                        identityAlias[weaponIndexPrefix.Length..],
+                        NumberStyles.None,
+                        CultureInfo.InvariantCulture,
+                        out uint weaponIndex))
+                {
+                    ltcWeaponIndexIds.Add(weaponIndex);
+                }
+            }
+        }
+
+        IReadOnlyDictionary<uint, IReadOnlyList<string>> itemAliasesByWeaponIndex =
+            BuildWeaponPreviewItemAliases(crossFireScriptItems, ltcWeaponIndexIds);
+        foreach (ExplorerItem ltcItem in ltcItems)
+        {
+            string cacheKey = ltcItem.ArchiveFile?.Md5 is { Length: > 0 } archiveHash
+                ? "md5:" + archiveHash
+                : NormalizeKey(ltcItem.OutputRelativePath);
             if (!ltcMappingCache.TryGetValue(cacheKey, out IReadOnlyList<CrossFireLtcModelTextureMapping>? mappings))
             {
                 byte[]? ltcData = TryReadItemBytes(ltcItem, MaxLtcBytes);
@@ -1961,7 +2001,8 @@ internal static class LithTechModelTextureConfigIndex
     }
 
     private static IReadOnlyDictionary<uint, IReadOnlyList<string>> BuildWeaponPreviewItemAliases(
-        IReadOnlyList<ExplorerItem> scriptItems)
+        IReadOnlyList<ExplorerItem> scriptItems,
+        IReadOnlySet<uint> ltcWeaponIndexIds)
     {
         var previews = new List<CrossFireWeaponPreviewEntry>();
         var models = new List<CrossFireWeaponModelEntry>();
@@ -1987,7 +2028,10 @@ internal static class LithTechModelTextureConfigIndex
             }
         }
 
-        return CrossFireWeaponPreviewModelIndexDecoder.BuildItemAliasesByWeaponIndex(previews, models);
+        return CrossFireWeaponPreviewModelIndexDecoder.BuildItemAliasesByWeaponIndex(
+            previews,
+            models,
+            ltcWeaponIndexIds);
     }
 
     private static bool TryGetLtcPlayerViewTextureOrdinal(
