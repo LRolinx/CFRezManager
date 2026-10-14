@@ -190,7 +190,14 @@ internal static class CrossFireWeaponPreviewModelIndexDecoder
             }
             else if (ltcWeaponLegacyMappingIndexIds.Contains(modelId))
             {
-                AddAlias(aliasesByLtcLegacyMappingIndex, modelId, preview.ItemId);
+                if (ltcWeaponIndexIds.Contains(preview.ItemId))
+                {
+                    AddAlias(aliasesByWeaponIndex, preview.ItemId, preview.ItemId);
+                }
+                else
+                {
+                    AddAlias(aliasesByLtcLegacyMappingIndex, modelId, preview.ItemId);
+                }
             }
         }
 

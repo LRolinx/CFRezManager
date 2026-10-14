@@ -157,7 +157,7 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 
 - `--export-obj`：导出 LithTech 模型为 OBJ/MTL，同步写出 `_textures` 贴图目录并在 MTL 中引用贴图；总会生成逐网格纹理映射与解码路径报告，非有限顶点/UV 的网格会跳过并单独列出。
 - `--model` 可重复指定多个模型；它们会导出到同一 OBJ，并保留各网格与材质分组。
-- `--texture-context` 可指定角色或道具 ID/名称：角色手臂贴图取自 CFT，道具第一人称贴图取自 LTC，并按 LTB 实际材质槽分别映射。同组 `WeaponModel` 能唯一关联时，`item:<道具编号>` 会沿 `WeaponPreview` → `WeaponModel` 查找 LTC `WeaponIndex` 或按旧去重规则还原且无冲突的武器绑定序号；模型号冲突时，仅当表内目标号与物品号相同才保留该关联。绑定按具体 LTC 模型和贴图字段分别保留，避免手臂/武器模型或同模型不同皮肤串用。预览组没有 `WeaponModel` 表时，可回退到同号 LTC `WeaponIndex`，但若其他 `WeaponModel` 目标号本身也是有效 LTC 索引则跳过回退。也可直接指定 `weaponindex:<编号>`。存在槽位证据但未匹配的网格不会套用猜测贴图。
+- `--texture-context` 可指定角色或道具 ID/名称：角色手臂贴图取自 CFT，道具第一人称贴图取自 LTC，并按 LTB 实际材质槽分别映射。同组 `WeaponModel` 能唯一关联时，`item:<道具编号>` 会沿 `WeaponPreview` → `WeaponModel` 查找 LTC `WeaponIndex` 或按旧去重规则还原且无冲突的武器绑定序号；若目标号只匹配旧序号、而道具编号本身唯一对应 LTC `WeaponIndex`，则优先采用该显式索引，避免序号撞号。绑定按具体 LTC 模型和贴图字段分别保留，避免手臂/武器模型或同模型不同皮肤串用。预览组没有 `WeaponModel` 表时，可回退到同号 LTC `WeaponIndex`，但若其他 `WeaponModel` 目标号本身也是有效 LTC 索引则跳过回退。也可直接指定 `weaponindex:<编号>`。存在槽位证据但未匹配的网格不会套用猜测贴图。
 - `--scan-cfg`：扫描 CFG，提取贴图引用，输出 TXT/CSV 报告。
 - `--decode-cfg`：重试失败 CFG，导出可还原文本或二进制预览图，并分类高熵配置。
 
