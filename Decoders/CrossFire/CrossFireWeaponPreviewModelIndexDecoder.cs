@@ -125,12 +125,25 @@ internal static class CrossFireWeaponPreviewModelIndexDecoder
             .ToDictionary(
                 group => group.Key,
                 group => group.Select(model => model.ModelId).Distinct().ToArray());
+        var previewModelIdsByGroupAndItem = previews
+            .Where(preview => preview.ModelGroupId > 0 && preview.ItemId > 0 && preview.ModelId > 0)
+            .GroupBy(preview => (preview.ModelGroupId, preview.ItemId))
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(preview => preview.ModelId).Distinct().ToArray());
         var aliasesByWeaponIndex = new Dictionary<uint, HashSet<string>>();
         foreach (CrossFireWeaponPreviewEntry preview in previews)
         {
+            var key = (preview.ModelGroupId, preview.ItemId);
             if (preview.ItemId == 0 || preview.ModelGroupId == 0 ||
-                !modelsByGroupAndItem.TryGetValue((preview.ModelGroupId, preview.ItemId), out uint[]? modelIds) ||
+                !modelsByGroupAndItem.TryGetValue(key, out uint[]? modelIds) ||
                 modelIds.Length != 1)
+            {
+                continue;
+            }
+
+            if (previewModelIdsByGroupAndItem.TryGetValue(key, out uint[]? previewModelIds) &&
+                previewModelIds.Any(previewModelId => previewModelId != modelIds[0]))
             {
                 continue;
             }
