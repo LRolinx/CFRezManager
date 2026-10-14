@@ -176,6 +176,13 @@ internal static class CrossFireScriptBinDecoder
         int recordBytes = hasHeader ? WeaponModelRecordBytes : ShopWeaponModelRecordBytes;
         int recordCount = (data.Length - headerBytes) / recordBytes;
         int fieldsPerRecord = recordBytes / sizeof(uint);
+        var modelGroupCounts = new SortedDictionary<uint, int>();
+        for (int recordIndex = 0; recordIndex < recordCount; recordIndex++)
+        {
+            int recordOffset = headerBytes + recordIndex * recordBytes;
+            uint modelGroupId = ReadUInt32(data, recordOffset + (fieldsPerRecord - 1) * sizeof(uint));
+            modelGroupCounts[modelGroupId] = modelGroupCounts.GetValueOrDefault(modelGroupId) + 1;
+        }
 
         var builder = new StringBuilder();
         builder.AppendLine("CrossFire UI script BIN");
@@ -183,6 +190,12 @@ internal static class CrossFireScriptBinDecoder
         builder.AppendLine(hasHeader ? "Kind: WeaponModel table" : "Kind: Shop2 WeaponModel table");
         builder.AppendLine($"Storage: {FormatStorage(compressed, "WeaponModel BIN", source.Length, data.Length)}");
         builder.AppendLine($"Layout: {(hasHeader ? "4-byte header + " : string.Empty)}{recordCount:N0} records x {recordBytes:N0} bytes");
+        if (modelGroupCounts.Count > 0)
+        {
+            builder.AppendLine("Model group ids (record's final uint32 field): " + string.Join(", ", modelGroupCounts.Select(pair =>
+                $"{pair.Key.ToString(CultureInfo.InvariantCulture)} ({pair.Value.ToString("N0", CultureInfo.InvariantCulture)} records)")));
+        }
+
         if (hasHeader)
         {
             builder.AppendLine($"Header/version: {ReadUInt32(data, 0)}");
@@ -195,7 +208,8 @@ internal static class CrossFireScriptBinDecoder
         {
             int recordOffset = headerBytes + recordIndex * recordBytes;
             uint modelId = ReadUInt32(data, recordOffset);
-            builder.AppendLine($"Record {recordIndex:N0} @ 0x{recordOffset:X4}, model id {modelId}:");
+            uint modelGroupId = ReadUInt32(data, recordOffset + (fieldsPerRecord - 1) * sizeof(uint));
+            builder.AppendLine($"Record {recordIndex:N0} @ 0x{recordOffset:X4}, model id {modelId}, model group id {modelGroupId}:");
             AppendCompactRecord(builder, data, recordOffset, fieldsPerRecord);
         }
 
