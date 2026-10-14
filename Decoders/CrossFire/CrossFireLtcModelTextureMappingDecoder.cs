@@ -1,15 +1,20 @@
+using System.Globalization;
 using System.IO;
 
 namespace CFRezManager;
 
 internal sealed record CrossFireLtcModelTextureMapping(
+    int RowIndex,
     string ModelReference,
     IReadOnlyList<string> TextureReferences,
+    IReadOnlyList<CrossFireLtcTextureFieldReference> TextureFieldReferences,
     IReadOnlyList<string> AuxiliaryTextureReferences,
     IReadOnlyList<string> IdentityAliases,
     string RowType,
     string ModelField,
     IReadOnlyList<string> TextureFields);
+
+internal sealed record CrossFireLtcTextureFieldReference(string FieldName, string Path);
 
 /// <summary>
 /// Extracts only same-row LTC bindings whose model and texture fields have a
@@ -49,8 +54,10 @@ internal static class CrossFireLtcModelTextureMappingDecoder
 
         var mappings = new List<CrossFireLtcModelTextureMapping>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        int rowIndex = 0;
         foreach (LtcList row in new LtcParser(text).ParseAll())
         {
+            int currentRowIndex = rowIndex++;
             string rowType = GetAtom(row.Items.FirstOrDefault()) ?? string.Empty;
             if (rowType.Length == 0)
             {
@@ -100,6 +107,12 @@ internal static class CrossFireLtcModelTextureMappingDecoder
                         .Where(IsTexturePath)
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .ToArray();
+                    CrossFireLtcTextureFieldReference[] textureFieldReferences = compatibleTextureFields
+                        .SelectMany(field => field.Values
+                            .Select(value => new CrossFireLtcTextureFieldReference(field.Name, NormalizeResourcePath(value))))
+                        .Where(reference => IsTexturePath(reference.Path))
+                        .Distinct()
+                        .ToArray();
                     string[] auxiliaryTextures = compatibleTextureFields
                         .SelectMany(field => field.Values)
                         .Select(NormalizeResourcePath)
@@ -125,16 +138,20 @@ internal static class CrossFireLtcModelTextureMappingDecoder
                     string deduplicationKey = string.Join(
                         "|",
                         rowType,
+                        currentRowIndex.ToString(CultureInfo.InvariantCulture),
                         modelField.Name,
                         modelReference,
+                        string.Join("|", textureFieldReferences.Select(reference => $"{reference.FieldName}:{reference.Path}")),
                         string.Join("|", textures),
                         string.Join("|", auxiliaryTextures),
                         string.Join("|", identityAliases));
                     if (seen.Add(deduplicationKey))
                     {
                         mappings.Add(new CrossFireLtcModelTextureMapping(
+                            currentRowIndex,
                             modelReference,
                             textures,
+                            textureFieldReferences,
                             auxiliaryTextures,
                             identityAliases,
                             rowType,

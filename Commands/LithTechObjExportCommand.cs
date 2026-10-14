@@ -199,6 +199,8 @@ internal static class LithTechObjExportCommand
         Func<string, ImageSource?>? globalTextureResolver = LithTechModelTextureLoader.CreateGlobalResolver(root);
         Func<IEnumerable<string>, IReadOnlyList<string>>? textureConfigResolver = LithTechModelTextureConfigIndex.CreateResolver(root);
         Func<string, int, IReadOnlyList<string>>? textureSlotResolver = LithTechModelTextureConfigIndex.CreateTextureSlotResolver(root);
+        Func<string, bool>? modelTextureSlotMappingPresenceResolver =
+            LithTechModelTextureConfigIndex.CreateModelTextureSlotMappingPresenceResolver(root);
         Func<string, string, int, IReadOnlyList<string>>? textureContextSlotResolver = string.IsNullOrWhiteSpace(options.TextureContext)
             ? null
             : LithTechModelTextureConfigIndex.CreateTextureContextSlotResolver(root);
@@ -229,7 +231,8 @@ internal static class LithTechObjExportCommand
                     textureSlotResolver,
                     meshTextureResolver,
                     options.TextureContext,
-                    textureContextSlotResolver));
+                    textureContextSlotResolver,
+                    modelTextureSlotMappingPresenceResolver));
             }
             else
             {

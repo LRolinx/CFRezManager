@@ -17,7 +17,8 @@ internal sealed record LithTechObjExportSource(
     Func<string, int, IReadOnlyList<string>>? TextureSlotResolver = null,
     Func<string, string, int, string, IReadOnlyList<string>>? MeshTextureResolver = null,
     string? TextureContext = null,
-    Func<string, string, int, IReadOnlyList<string>>? TextureContextSlotResolver = null);
+    Func<string, string, int, IReadOnlyList<string>>? TextureContextSlotResolver = null,
+    Func<string, bool>? ModelTextureSlotMappingPresenceResolver = null);
 
 internal sealed record LithTechObjExportResult(
     string ObjPath,
@@ -356,6 +357,8 @@ internal static class LithTechObjExporter
     {
         string textureKey = NormalizeTextureKey(mesh.TexturePath);
         IReadOnlyList<string> materialHints = mesh.MaterialHints ?? [];
+        bool hasModelSlotSpecificBindings = source.ModelTextureSlotMappingPresenceResolver is not null &&
+                                            source.ModelTextureSlotMappingPresenceResolver(source.ResourcePath);
         string materialHintKey = string.Join("|", materialHints.Take(8));
         List<string> inferredTextureCandidates = EnumerateTextureCandidates(mesh, source).ToList();
         string inferredTextureKey = inferredTextureCandidates.FirstOrDefault() ?? string.Empty;
@@ -378,6 +381,7 @@ internal static class LithTechObjExporter
                 source.ResourcePath,
                 mesh,
                 materialHints,
+                hasModelSlotSpecificBindings,
                 inferredTextureCandidates,
                 cachedResolvedReference,
                 existing.TextureRelativePath);
@@ -414,6 +418,7 @@ internal static class LithTechObjExporter
             source.ResourcePath,
             mesh,
             materialHints,
+            hasModelSlotSpecificBindings,
             inferredTextureCandidates,
             resolvedTextureReference,
             textureRelativePath);
@@ -429,6 +434,7 @@ internal static class LithTechObjExporter
         string sourcePath,
         LithTechMesh mesh,
         IReadOnlyList<string> materialHints,
+        bool hasModelSlotSpecificBindings,
         IReadOnlyList<string> inferredTextureCandidates,
         string? resolvedTextureReference,
         string? exportedRelativePath)
@@ -437,7 +443,8 @@ internal static class LithTechObjExporter
             materialHints.Count == 0 &&
             inferredTextureCandidates.Count == 0 &&
             string.IsNullOrWhiteSpace(exportedRelativePath) &&
-            !mesh.HasAuthoritativeTextureBindings)
+            !mesh.HasAuthoritativeTextureBindings &&
+            !hasModelSlotSpecificBindings)
         {
             return;
         }
@@ -570,6 +577,15 @@ internal static class LithTechObjExporter
                     }
                 }
             }
+        }
+
+        if (source.ModelTextureSlotMappingPresenceResolver is not null &&
+            source.ModelTextureSlotMappingPresenceResolver(slotModelReference))
+        {
+            // Once a model has slot-specific evidence, do not paint unmapped
+            // slots with a model-wide or mesh-name guess. That would silently
+            // assign a weapon skin to unrelated hand/arm or accessory meshes.
+            yield break;
         }
 
         // A number of LTBs contain no texture path at all, but their mesh

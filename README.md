@@ -157,7 +157,7 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 
 - `--export-obj`：导出 LithTech 模型为 OBJ/MTL，同步写出 `_textures` 贴图目录并在 MTL 中引用贴图；总会生成逐网格纹理映射与解码路径报告，非有限顶点/UV 的网格会跳过并单独列出。
 - `--model` 可重复指定多个模型；它们会导出到同一 OBJ，并保留各网格与材质分组。
-- `--texture-context` 可指定角色 ID 或名称；共享第一人称手臂模型会据此使用 CFT 中的手/臂贴图，并按 LTB 网格槽位分别映射。
+- `--texture-context` 可指定角色或道具 ID/名称：角色手臂贴图取自 CFT，道具第一人称贴图取自 LTC，并按 LTB 实际材质槽分别映射；有槽位证据但未匹配的网格不会再套用整模型贴图猜测。
 - `--scan-cfg`：扫描 CFG，提取贴图引用，输出 TXT/CSV 报告。
 - `--decode-cfg`：重试失败 CFG，导出可还原文本或二进制预览图，并分类高熵配置。
 
