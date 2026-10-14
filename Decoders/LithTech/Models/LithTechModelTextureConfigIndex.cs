@@ -168,6 +168,7 @@ internal static class LithTechModelTextureConfigIndex
         var clientFxFxfItems = new List<ExplorerItem>();
         var clientShellItems = new List<ExplorerItem>();
         var ltcItems = new List<ExplorerItem>();
+        var crossFireScriptItems = new List<ExplorerItem>();
         var resourcePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var modelPathsByBaseName = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
         var texturePathsByBaseName = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
@@ -233,6 +234,11 @@ internal static class LithTechModelTextureConfigIndex
                 ltcItems.Add(item);
             }
 
+            if (CrossFireScriptBinDecoder.IsCandidate(item.Name, item.FileExtension))
+            {
+                crossFireScriptItems.Add(item);
+            }
+
             if (!IsTextureConfigCandidate(item))
             {
                 continue;
@@ -266,6 +272,7 @@ internal static class LithTechModelTextureConfigIndex
             clientFxFxfItems,
             clientShellItems,
             ltcItems,
+            crossFireScriptItems,
             resourcePaths,
             modelPathsByBaseName.ToDictionary(
                 pair => pair.Key,
@@ -1485,6 +1492,7 @@ internal static class LithTechModelTextureConfigIndex
     private static ModelTextureSlotDictionary BuildModelTextureSlotDictionary(
         IReadOnlyList<TextureConfigItem> configItems,
         IReadOnlyList<ExplorerItem> ltcItems,
+        IReadOnlyList<ExplorerItem> crossFireScriptItems,
         IReadOnlyList<ExplorerItem> modelResourceItems,
         IReadOnlySet<string> resourcePaths,
         IReadOnlyDictionary<string, IReadOnlyList<string>> modelPathsByBaseName,
@@ -1493,6 +1501,8 @@ internal static class LithTechModelTextureConfigIndex
         var byModelPath = new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase);
         var byModelContext = new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase);
         var modelsWithSlotSpecificBindings = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        IReadOnlyDictionary<uint, IReadOnlyList<string>> itemAliasesByWeaponIndex =
+            BuildWeaponPreviewItemAliases(crossFireScriptItems);
         var modelItemsByPath = modelResourceItems
             .Where(item => string.Equals(item.FileExtension, "ltb", StringComparison.OrdinalIgnoreCase))
             .Select(item => (Item: item, ResourcePath: GetModelResourcePath(item)))
@@ -1824,7 +1834,10 @@ internal static class LithTechModelTextureConfigIndex
                     continue;
                 }
 
-                string[] contextKeys = GetLtcContextKeys(ltcItem, mapping);
+                string[] contextKeys = GetLtcContextKeys(ltcItem, mapping)
+                    .Concat(GetWeaponItemContextAliases(mapping, itemAliasesByWeaponIndex))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
                 foreach (CrossFireLtcTextureFieldReference textureReference in mapping.TextureFieldReferences)
                 {
                     if (!TryGetLtcPlayerViewTextureOrdinal(
@@ -1920,6 +1933,61 @@ internal static class LithTechModelTextureConfigIndex
             .Where(context => NormalizeLooseKey(context).Length > 0)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private static IReadOnlyList<string> GetWeaponItemContextAliases(
+        CrossFireLtcModelTextureMapping mapping,
+        IReadOnlyDictionary<uint, IReadOnlyList<string>> itemAliasesByWeaponIndex)
+    {
+        var aliases = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string identityAlias in mapping.IdentityAliases)
+        {
+            const string weaponIndexPrefix = "WeaponIndex:";
+            if (!identityAlias.StartsWith(weaponIndexPrefix, StringComparison.OrdinalIgnoreCase) ||
+                !uint.TryParse(
+                    identityAlias[weaponIndexPrefix.Length..],
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out uint weaponIndex) ||
+                !itemAliasesByWeaponIndex.TryGetValue(weaponIndex, out IReadOnlyList<string>? itemAliases))
+            {
+                continue;
+            }
+
+            aliases.UnionWith(itemAliases);
+        }
+
+        return aliases.Order(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    private static IReadOnlyDictionary<uint, IReadOnlyList<string>> BuildWeaponPreviewItemAliases(
+        IReadOnlyList<ExplorerItem> scriptItems)
+    {
+        var previews = new List<CrossFireWeaponPreviewEntry>();
+        var models = new List<CrossFireWeaponModelEntry>();
+        foreach (ExplorerItem item in scriptItems)
+        {
+            byte[]? data = TryReadItemBytes(item, 8 * 1024 * 1024);
+            if (data is null)
+            {
+                continue;
+            }
+
+            string resourcePath = item.ArchiveFile?.FullPath ?? item.OutputRelativePath;
+            if (CrossFireWeaponPreviewModelIndexDecoder.TryDecodePreview(data, resourcePath, out CrossFireWeaponPreviewEntry? preview) &&
+                preview is not null)
+            {
+                previews.Add(preview);
+                continue;
+            }
+
+            if (CrossFireWeaponPreviewModelIndexDecoder.TryDecodeWeaponModelTable(data, resourcePath, out IReadOnlyList<CrossFireWeaponModelEntry> decodedModels))
+            {
+                models.AddRange(decodedModels);
+            }
+        }
+
+        return CrossFireWeaponPreviewModelIndexDecoder.BuildItemAliasesByWeaponIndex(previews, models);
     }
 
     private static bool TryGetLtcPlayerViewTextureOrdinal(
@@ -2140,6 +2208,7 @@ internal static class LithTechModelTextureConfigIndex
             index.ModelTextureSlotDictionary = BuildModelTextureSlotDictionary(
                 index.AllItems,
                 index.LtcItems,
+                index.CrossFireScriptItems,
                 index.ModelResourceItems,
                 index.ResourcePaths,
                 index.ModelPathsByBaseName,
@@ -3368,6 +3437,7 @@ internal static class LithTechModelTextureConfigIndex
         IReadOnlyList<ExplorerItem> ClientFxFxfItems,
         IReadOnlyList<ExplorerItem> ClientShellItems,
         IReadOnlyList<ExplorerItem> LtcItems,
+        IReadOnlyList<ExplorerItem> CrossFireScriptItems,
         IReadOnlySet<string> ResourcePaths,
         IReadOnlyDictionary<string, IReadOnlyList<string>> ModelPathsByBaseName,
         IReadOnlyDictionary<string, IReadOnlyList<string>> TexturePathsByBaseName)
@@ -3387,6 +3457,7 @@ internal static class LithTechModelTextureConfigIndex
                                ClientFxFxfItems.Count == 0 &&
                                ClientShellItems.Count == 0 &&
                                LtcItems.Count == 0 &&
+                               CrossFireScriptItems.Count == 0 &&
                                ResourcePaths.Count == 0 &&
                                ModelPathsByBaseName.Count == 0 &&
                                TexturePathsByBaseName.Count == 0;
