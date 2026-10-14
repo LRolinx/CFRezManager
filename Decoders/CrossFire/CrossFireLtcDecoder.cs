@@ -98,6 +98,34 @@ internal static class CrossFireLtcDecoder
         return false;
     }
 
+    /// <summary>
+    /// Decodes LTC through the in-process paths only. Mapping-index construction
+    /// uses this to avoid launching a user-configured external converter while
+    /// walking thousands of mounted resources.
+    /// </summary>
+    public static bool TryDecodeNativeText(
+        byte[] data,
+        out CrossFireLtcTextDocument? document,
+        out string? errorMessage)
+    {
+        document = null;
+        errorMessage = null;
+
+        byte[]? prepared = LzmaAloneDecoder.TryPrepareData(data);
+        if (prepared is not null &&
+            TextPreviewDecoder.TryDecode(prepared, preferKorean: false, out string directText, out string directEncoding) &&
+            LooksLikeStructuredText(directText))
+        {
+            string storageDescription = ReferenceEquals(prepared, data) ? "LTC text" : "LZMA-compressed LTC";
+            document = new CrossFireLtcTextDocument(directText, directEncoding, storageDescription, data.Length, prepared.Length);
+            return true;
+        }
+
+        bool isCrossFireLocked = TryUnlockCrossFirePayload(data, out byte[] converterInput);
+        return TryDecodeNativeToText(converterInput, data.Length, isCrossFireLocked, out document, out errorMessage) &&
+               document is not null;
+    }
+
     public static bool TryConvertToText(
         byte[] ltcData,
         string fallbackName,
@@ -334,13 +362,16 @@ internal static class CrossFireLtcDecoder
             return true;
         }
 
-        int asciiText = 0;
+        int printableText = 0;
         int structural = 0;
         foreach (char ch in sample)
         {
-            if (ch is >= ' ' and <= '~' || ch is '\r' or '\n' or '\t')
+            // CrossFire LTC often contains Korean comments/config values. The
+            // selected decoder may correctly return CP949 Unicode, so counting
+            // only ASCII incorrectly rejects fully decoded structured text.
+            if (!char.IsControl(ch) || ch is '\r' or '\n' or '\t')
             {
-                asciiText++;
+                printableText++;
             }
 
             if (ch is '\r' or '\n' or '(' or ')' or '[' or ']' or '{' or '}' or '=' or ':' or '_' or '"' or '\'')
@@ -349,7 +380,7 @@ internal static class CrossFireLtcDecoder
             }
         }
 
-        return asciiText >= sample.Length * 85 / 100 && structural > 0;
+        return printableText >= sample.Length * 85 / 100 && structural > 0;
     }
 
     private static void TryKillProcess(Process process)

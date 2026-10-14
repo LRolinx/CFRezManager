@@ -116,10 +116,14 @@ internal static class CrossFireScriptBinDecoder
         {
             builder.AppendLine($"- File entry id: {fileEntryId}");
         }
+        else
+        {
+            builder.AppendLine($"- Preview skin entry: {Path.GetFileNameWithoutExtension(fileName)}");
+        }
 
         builder.AppendLine($"- Field 0 / item id: {itemId}");
         builder.AppendLine($"- Field 1 / preview slot: {previewSlot}");
-        builder.AppendLine($"- Field 2 / model group id: {modelGroupId} (WeaponModel{modelGroupId}.bin)");
+        builder.AppendLine($"- Field 2 / model group id: {modelGroupId} (WeaponModel table key)");
         builder.AppendLine($"- Field 3 / model id: {modelId}");
         if (fileEntryId >= 0 && itemId != fileEntryId)
         {
@@ -305,10 +309,16 @@ internal static class CrossFireScriptBinDecoder
 
     private static bool IsWeaponPreviewFileName(string fileName)
     {
-        string name = Path.GetFileName(fileName);
+        string normalizedPath = fileName.Replace('\\', '/');
+        string name = Path.GetFileName(normalizedPath);
         if (!name.EndsWith(".bin", StringComparison.OrdinalIgnoreCase))
         {
             return false;
+        }
+
+        if (normalizedPath.Contains("/WeaponPreview/Skin/", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
         }
 
         string stem = Path.GetFileNameWithoutExtension(name);

@@ -6,6 +6,7 @@ public enum TextPreviewStorageKind
 {
     Plain,
     EncBase64,
+    EncLzmaBase64,
     LtcConverted,
     CrossFireDat,
     LithTechSprite,
@@ -23,6 +24,7 @@ public sealed record TextPreviewDocument(
 internal static class EncTextDecoder
 {
     private const byte XorKey = 0x0B;
+    private const long MaxLzmaDecodedBytes = 128L * 1024 * 1024;
 
     public static bool IsCandidate(string fileName, string extension)
     {
@@ -31,6 +33,35 @@ internal static class EncTextDecoder
     }
 
     public static bool TryDecode(ReadOnlySpan<byte> source, out byte[] decoded)
+    {
+        return TryDecode(source, out decoded, out _);
+    }
+
+    public static bool TryDecode(ReadOnlySpan<byte> source, out byte[] decoded, out bool lzmaWrapped)
+    {
+        decoded = [];
+        lzmaWrapped = false;
+        if (source.IsEmpty)
+        {
+            return false;
+        }
+
+        byte[] sourceBytes = source.ToArray();
+        if (LzmaAloneDecoder.IsCompressed(sourceBytes))
+        {
+            byte[]? prepared = LzmaAloneDecoder.TryPrepareData(sourceBytes, MaxLzmaDecodedBytes);
+            if (prepared is not null && !ReferenceEquals(prepared, sourceBytes) &&
+                TryDecodeBase64(prepared, out decoded))
+            {
+                lzmaWrapped = true;
+                return true;
+            }
+        }
+
+        return TryDecodeBase64(source, out decoded);
+    }
+
+    private static bool TryDecodeBase64(ReadOnlySpan<byte> source, out byte[] decoded)
     {
         decoded = [];
         if (source.IsEmpty || source.Length % 4 != 0)

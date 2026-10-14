@@ -12,7 +12,10 @@ internal static class LithTechObjExportCommand
 
     private readonly record struct ModelObjExportJob(ExplorerItem Item, string RelativePath);
 
-    private sealed record Options(string SourceRoot, string ModelQuery, string OutputPath);
+    private sealed record Options(string SourceRoot, IReadOnlyList<string> ModelQueries, string OutputPath, string? TextureContext)
+    {
+        public string ModelQueryDescription => string.Join(" | ", ModelQueries);
+    }
 
     public static bool IsInvocation(string[] args)
     {
@@ -26,12 +29,12 @@ internal static class LithTechObjExportCommand
         try
         {
             Options options = ParseOptions(args);
-            LithTechObjExportResult result = Export(options, out string mappingReportPath, out int skippedCount);
+            LithTechObjExportResult result = Export(options, out string mappingReportPath, out int skippedCount, out List<string> skippedDetails);
 
             string summaryPath = Path.Combine(
                 Path.GetDirectoryName(result.ObjPath) ?? Environment.CurrentDirectory,
                 $"{Path.GetFileNameWithoutExtension(result.ObjPath)}_cli_export_result.txt");
-            WriteSummary(summaryPath, options, result, mappingReportPath, skippedCount);
+            WriteSummary(summaryPath, options, result, mappingReportPath, skippedCount, skippedDetails);
 
             Console.WriteLine($"OBJ: {result.ObjPath}");
             Console.WriteLine($"MTL: {result.MtlPath}");
@@ -59,8 +62,9 @@ internal static class LithTechObjExportCommand
     private static Options ParseOptions(string[] args)
     {
         string? sourceRoot = null;
-        string? modelQuery = null;
+        var modelQueries = new List<string>();
         string? outputPath = null;
+        string? textureContext = null;
 
         for (int index = 0; index < args.Length; index++)
         {
@@ -81,7 +85,7 @@ internal static class LithTechObjExportCommand
             if (TryReadOptionValue(args, ref index, "--model", out string? modelValue) ||
                 TryReadOptionValue(args, ref index, "--query", out modelValue))
             {
-                modelQuery = modelValue;
+                modelQueries.Add(modelValue!);
                 continue;
             }
 
@@ -92,9 +96,15 @@ internal static class LithTechObjExportCommand
                 continue;
             }
 
-            if (modelQuery is null)
+            if (TryReadOptionValue(args, ref index, "--texture-context", out string? textureContextValue))
             {
-                modelQuery = arg;
+                textureContext = textureContextValue;
+                continue;
+            }
+
+            if (modelQueries.Count == 0)
+            {
+                modelQueries.Add(arg);
             }
             else if (outputPath is null)
             {
@@ -112,9 +122,9 @@ internal static class LithTechObjExportCommand
             throw new InvalidOperationException("Missing --source-root, and no saved resource root directory is available.");
         }
 
-        if (string.IsNullOrWhiteSpace(modelQuery))
+        if (modelQueries.Count == 0 || modelQueries.Any(string.IsNullOrWhiteSpace))
         {
-            throw new InvalidOperationException("Missing --model <model name or resource path>.");
+            throw new InvalidOperationException("Missing --model <model name or resource path>; specify --model more than once to export multiple models together.");
         }
 
         if (string.IsNullOrWhiteSpace(outputPath))
@@ -122,10 +132,16 @@ internal static class LithTechObjExportCommand
             string outputDirectory = Directory.Exists(settings.LastOutputDirectory)
                 ? settings.LastOutputDirectory
                 : Environment.CurrentDirectory;
-            outputPath = Path.Combine(outputDirectory, $"{SanitizePathSegment(Path.GetFileNameWithoutExtension(modelQuery))}.obj");
+            string outputStem = Path.GetFileNameWithoutExtension(modelQueries[0]);
+            if (modelQueries.Count > 1)
+            {
+                outputStem = $"{outputStem}_batch_{modelQueries.Count.ToString(CultureInfo.InvariantCulture)}";
+            }
+
+            outputPath = Path.Combine(outputDirectory, $"{SanitizePathSegment(outputStem)}.obj");
         }
 
-        return new Options(Path.GetFullPath(sourceRoot), modelQuery, Path.GetFullPath(outputPath));
+        return new Options(Path.GetFullPath(sourceRoot), modelQueries.ToArray(), Path.GetFullPath(outputPath), textureContext);
     }
 
     private static bool TryReadOptionValue(string[] args, ref int index, string optionName, out string? value)
@@ -150,45 +166,76 @@ internal static class LithTechObjExportCommand
     private static LithTechObjExportResult Export(
         Options options,
         out string mappingReportPath,
-        out int skippedCount)
+        out int skippedCount,
+        out List<string> skippedDetails)
     {
         ExplorerItem root = BuildDirectoryTree(options.SourceRoot);
         LoadAllArchives(root);
 
-        List<ExplorerItem> matches = FindModelItems(root, options.ModelQuery);
+        var matches = new List<ExplorerItem>();
+        var seenMatches = new HashSet<ExplorerItem>(ReferenceEqualityComparer.Instance);
+        foreach (string modelQuery in options.ModelQueries)
+        {
+            foreach (ExplorerItem item in FindModelItems(root, modelQuery))
+            {
+                if (seenMatches.Add(item))
+                {
+                    matches.Add(item);
+                }
+            }
+        }
+
+        matches = matches.OrderBy(item => item.OutputRelativePath, StringComparer.OrdinalIgnoreCase).ToList();
         if (matches.Count == 0)
         {
-            throw new InvalidOperationException($"No model matched '{options.ModelQuery}'.");
+            throw new InvalidOperationException($"No model matched '{options.ModelQueryDescription}'.");
         }
 
         if (matches.Count > 50)
         {
-            throw new InvalidOperationException($"Model query matched {matches.Count.ToString(CultureInfo.InvariantCulture)} files; use a more specific path.");
+            throw new InvalidOperationException($"Model queries matched {matches.Count.ToString(CultureInfo.InvariantCulture)} files; use more specific paths.");
         }
 
         Func<string, ImageSource?>? globalTextureResolver = LithTechModelTextureLoader.CreateGlobalResolver(root);
         Func<IEnumerable<string>, IReadOnlyList<string>>? textureConfigResolver = LithTechModelTextureConfigIndex.CreateResolver(root);
+        Func<string, int, IReadOnlyList<string>>? textureSlotResolver = LithTechModelTextureConfigIndex.CreateTextureSlotResolver(root);
+        Func<string, string, int, IReadOnlyList<string>>? textureContextSlotResolver = string.IsNullOrWhiteSpace(options.TextureContext)
+            ? null
+            : LithTechModelTextureConfigIndex.CreateTextureContextSlotResolver(root);
+        Func<string, string, int, string, IReadOnlyList<string>>? meshTextureResolver = LithTechModelMeshTextureResolver.CreateResolver(root);
         Func<IEnumerable<string>, IReadOnlyList<string>>? datTextureReferenceResolver = LithTechDatTextureReferenceIndex.CreateResolver(root);
         Func<IEnumerable<string>, IReadOnlyList<string>>? textureReferenceResolver =
             TextureReferenceResolver.Combine(textureConfigResolver, datTextureReferenceResolver);
+        Dictionary<string, ExplorerItem> ltcItemsByPath = EnumerateFiles(root)
+            .Where(item => string.Equals(item.FileExtension, "ltc", StringComparison.OrdinalIgnoreCase))
+            .GroupBy(item => NormalizePath(item.OutputRelativePath), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
         var sources = new List<LithTechObjExportSource>();
         skippedCount = 0;
+        skippedDetails = [];
 
         foreach (ModelObjExportJob job in BuildModelObjExportJobs(matches))
         {
-            if (TryLoadModelDocument(job.Item, out LithTechModelDocument? document, out _) &&
+            if (TryLoadModelDocument(job.Item, out LithTechModelDocument? document, out string? decodeError) &&
                 document is not null)
             {
+                document = ApplyLtcShapeTextureBindings(job.Item, document, ltcItemsByPath);
                 sources.Add(new LithTechObjExportSource(
                     CreateObjSourceName(job),
                     GetObjSourceResourcePath(job.Item),
                     document,
                     CreateObjTextureResolver(job.Item, globalTextureResolver),
-                    textureReferenceResolver));
+                    textureReferenceResolver,
+                    textureSlotResolver,
+                    meshTextureResolver,
+                    options.TextureContext,
+                    textureContextSlotResolver));
             }
             else
             {
                 skippedCount++;
+                string sourcePath = GetObjSourceResourcePath(job.Item);
+                skippedDetails.Add($"{sourcePath}: {decodeError ?? "Decoder returned no model document."}");
             }
         }
 
@@ -204,18 +251,109 @@ internal static class LithTechObjExportCommand
         return result;
     }
 
+    private static LithTechModelDocument ApplyLtcShapeTextureBindings(
+        ExplorerItem modelItem,
+        LithTechModelDocument document,
+        IReadOnlyDictionary<string, ExplorerItem> ltcItemsByPath)
+    {
+        if (!string.Equals(modelItem.FileExtension, "ltb", StringComparison.OrdinalIgnoreCase))
+        {
+            return document;
+        }
+
+        string ltcPath = NormalizePath(GetObjSourceResourcePath(modelItem));
+        int ltbDirectoryIndex = ltcPath.LastIndexOf("/LTB/", StringComparison.OrdinalIgnoreCase);
+        if (ltbDirectoryIndex >= 0)
+        {
+            ltcPath = ltcPath[..ltbDirectoryIndex] + "/LTC/" + ltcPath[(ltbDirectoryIndex + "/LTB/".Length)..];
+        }
+
+        ltcPath = Path.ChangeExtension(ltcPath, ".ltc")?.Replace('\\', '/') ?? string.Empty;
+        if (ltcPath.Length == 0 || !ltcItemsByPath.TryGetValue(ltcPath, out ExplorerItem? ltcItem))
+        {
+            return document;
+        }
+
+        try
+        {
+            byte[] data = ReadExplorerFileBytes(ltcItem, MaxObjModelBytes);
+            if (!CrossFireLtcDecoder.TryDecodeNativeText(data, out CrossFireLtcTextDocument? ltcDocument, out _) ||
+                ltcDocument is null ||
+                !LithTechModelDecoder.TryParseShapeTextureBindings(
+                    ltcDocument.Text,
+                    out IReadOnlyList<LithTechShapeTextureBinding> bindings,
+                    out _))
+            {
+                return document;
+            }
+
+            var bindingsByName = new Dictionary<string, LithTechShapeTextureBinding>(StringComparer.OrdinalIgnoreCase);
+            var ambiguousNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (LithTechShapeTextureBinding binding in bindings)
+            {
+                if (ambiguousNames.Contains(binding.ShapeName))
+                {
+                    continue;
+                }
+
+                if (bindingsByName.TryGetValue(binding.ShapeName, out LithTechShapeTextureBinding? existing))
+                {
+                    bool identicalBinding = existing.RenderStyleIndex == binding.RenderStyleIndex &&
+                                            existing.TextureIndices.SequenceEqual(binding.TextureIndices);
+                    if (!identicalBinding)
+                    {
+                        bindingsByName.Remove(binding.ShapeName);
+                        ambiguousNames.Add(binding.ShapeName);
+                    }
+
+                    continue;
+                }
+
+                bindingsByName.Add(binding.ShapeName, binding);
+            }
+
+            bool anyMatched = false;
+            LithTechMesh[] meshes = document.Meshes.Select(mesh =>
+            {
+                if (!bindingsByName.TryGetValue(mesh.Name, out LithTechShapeTextureBinding? binding))
+                {
+                    return mesh;
+                }
+
+                anyMatched = true;
+                return mesh with
+                {
+                    TextureSlotIndices = binding.TextureIndices,
+                    RenderStyleIndex = binding.RenderStyleIndex,
+                    HasAuthoritativeTextureBindings = true
+                };
+            }).ToArray();
+
+            return anyMatched ? document with { Meshes = meshes } : document;
+        }
+        catch
+        {
+            return document;
+        }
+    }
+
     private static void WriteSummary(
         string summaryPath,
         Options options,
         LithTechObjExportResult result,
         string mappingReportPath,
-        int skippedCount)
+        int skippedCount,
+        IReadOnlyList<string> skippedDetails)
     {
         using var writer = new StreamWriter(summaryPath, false, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
         writer.WriteLine("CF Rez Manager command-line OBJ export");
         writer.WriteLine();
         writer.WriteLine($"Source root: {options.SourceRoot}");
-        writer.WriteLine($"Model query: {options.ModelQuery}");
+        writer.WriteLine($"Model query: {options.ModelQueryDescription}");
+        if (!string.IsNullOrWhiteSpace(options.TextureContext))
+        {
+            writer.WriteLine($"Texture context: {options.TextureContext}");
+        }
         writer.WriteLine($"OBJ: {result.ObjPath}");
         writer.WriteLine($"MTL: {result.MtlPath}");
         writer.WriteLine($"Texture folder: {result.TextureDirectoryPath}");
@@ -234,9 +372,19 @@ internal static class LithTechObjExportCommand
         writer.WriteLine($"Meshes: {result.MeshCount.ToString(CultureInfo.InvariantCulture)}");
         writer.WriteLine($"Vertices: {result.VertexCount.ToString(CultureInfo.InvariantCulture)}");
         writer.WriteLine($"Triangles: {result.TriangleCount.ToString(CultureInfo.InvariantCulture)}");
+        writer.WriteLine($"Meshes skipped (non-finite geometry): {result.InvalidGeometryMeshCount.ToString(CultureInfo.InvariantCulture)}");
         writer.WriteLine($"Textures exported: {result.TextureCount.ToString(CultureInfo.InvariantCulture)}");
         writer.WriteLine($"Missing textures: {result.MissingTextureCount.ToString(CultureInfo.InvariantCulture)}");
         writer.WriteLine($"Skipped matched files: {skippedCount.ToString(CultureInfo.InvariantCulture)}");
+        if (skippedDetails.Count > 0)
+        {
+            writer.WriteLine();
+            writer.WriteLine("Skipped file decode errors:");
+            foreach (string detail in skippedDetails)
+            {
+                writer.WriteLine($"- {detail}");
+            }
+        }
     }
 
     private static List<ExplorerItem> FindModelItems(ExplorerItem root, string query)
@@ -710,8 +858,7 @@ internal static class LithTechObjExportCommand
         }
 
         byte[] data = new byte[item.ArchiveFile.Size];
-        using FileStream source = File.OpenRead(item.Archive.FilePath);
-        source.Position = item.ArchiveFile.DataOffset;
+        using Stream source = RezArchiveReader.OpenFileRead(item.Archive, item.ArchiveFile);
         source.ReadExactly(data);
         return data;
     }

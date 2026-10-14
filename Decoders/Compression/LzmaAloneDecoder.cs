@@ -1,8 +1,6 @@
-extern alias GrindCoreSharpCompress;
-
 using System.Buffers.Binary;
 using System.IO;
-using GrindCoreSharpCompress::SharpCompress.Compressors.LZMA;
+using SharpCompress.Compressors.LZMA;
 
 namespace CFRezManager;
 

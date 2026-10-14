@@ -90,10 +90,16 @@ internal static class LithTechSpriteDecoder
             paths.Add(path);
         }
 
-        if (prepared.AsSpan(cursor).IndexOfAnyExcept((byte)0) >= 0)
+        foreach (byte trailingByte in prepared.AsSpan(cursor))
         {
-            errorMessage = $"Invalid SPR trailing data: {fileName}";
-            return false;
+            // Some native sprite tables are followed by a DOS line ending.
+            // Keep rejecting arbitrary payload bytes, but accept this benign
+            // text-file terminator after the declared frame table.
+            if (trailingByte != 0 && trailingByte != (byte)'\r' && trailingByte != (byte)'\n')
+            {
+                errorMessage = $"Invalid SPR trailing data: {fileName}";
+                return false;
+            }
         }
 
         string storageDescription = LzmaAloneDecoder.IsCompressed(data)

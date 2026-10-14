@@ -170,8 +170,7 @@ internal static class LithTechDatTextureReferenceIndex
             item.ArchiveFile.Size <= MaxDatScanSourceBytes)
         {
             byte[] data = new byte[item.ArchiveFile.Size];
-            using FileStream source = File.OpenRead(item.Archive.FilePath);
-            source.Position = item.ArchiveFile.DataOffset;
+            using Stream source = RezArchiveReader.OpenFileRead(item.Archive, item.ArchiveFile);
             source.ReadExactly(data);
             return data;
         }

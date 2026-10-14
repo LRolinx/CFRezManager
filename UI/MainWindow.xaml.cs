@@ -990,6 +990,12 @@ public partial class MainWindow : Window
             Func<IEnumerable<string>, IReadOnlyList<string>>? textureConfigResolver = exportRoot is null
                 ? null
                 : await Task.Run(() => LithTechModelTextureConfigIndex.CreateResolver(exportRoot));
+            Func<string, int, IReadOnlyList<string>>? textureSlotResolver = exportRoot is null
+                ? null
+                : await Task.Run(() => LithTechModelTextureConfigIndex.CreateTextureSlotResolver(exportRoot));
+            Func<string, string, int, string, IReadOnlyList<string>>? meshTextureResolver = exportRoot is null
+                ? null
+                : await Task.Run(() => LithTechModelMeshTextureResolver.CreateResolver(exportRoot));
             Func<IEnumerable<string>, IReadOnlyList<string>>? datTextureReferenceResolver = exportRoot is null
                 ? null
                 : await Task.Run(() => LithTechDatTextureReferenceIndex.CreateResolver(exportRoot));
@@ -1007,7 +1013,15 @@ public partial class MainWindow : Window
                 SetStatus("DecodingModelObjExport", state.Completed, state.Total, state.FileName);
             });
 
-            ModelObjExportBatchResult result = await Task.Run(() => ExportModelObjJobs(outputPath, jobs, exportRoot, globalTextureResolver, textureReferenceResolver, progress));
+            ModelObjExportBatchResult result = await Task.Run(() => ExportModelObjJobs(
+                outputPath,
+                jobs,
+                exportRoot,
+                globalTextureResolver,
+                textureReferenceResolver,
+                textureSlotResolver,
+                meshTextureResolver,
+                progress));
             SetStatus(
                 "ExportedModelObjResult",
                 result.ExportResult.SourceCount,
@@ -1036,6 +1050,8 @@ public partial class MainWindow : Window
         ExplorerItem? exportRoot,
         Func<string, ImageSource?>? globalTextureResolver,
         Func<IEnumerable<string>, IReadOnlyList<string>>? textureConfigResolver,
+        Func<string, int, IReadOnlyList<string>>? textureSlotResolver,
+        Func<string, string, int, string, IReadOnlyList<string>>? meshTextureResolver,
         IProgress<ModelObjExportProgress> progress)
     {
         var sources = new List<LithTechObjExportSource>();
@@ -1052,7 +1068,9 @@ public partial class MainWindow : Window
                     GetObjSourceResourcePath(job.Item),
                     document,
                     CreateObjTextureResolver(job.Item, globalTextureResolver),
-                    textureConfigResolver));
+                    textureConfigResolver,
+                    textureSlotResolver,
+                    meshTextureResolver));
             }
             else
             {
@@ -1463,9 +1481,7 @@ public partial class MainWindow : Window
             throw new InvalidOperationException(LocalizedText.Format("PreviewFileTooLarge", item.Name));
         }
 
-        FileStream archiveSource = File.OpenRead(item.Archive.FilePath);
-        archiveSource.Position = item.ArchiveFile.DataOffset;
-        return archiveSource;
+        return RezArchiveReader.OpenFileRead(item.Archive, item.ArchiveFile);
     }
 
     private static bool ReadBankAudioSessionTo(BankAudioStreamSession session, int targetDecodedBytes)
@@ -2291,8 +2307,7 @@ public partial class MainWindow : Window
         }
 
         byte[] data = new byte[item.ArchiveFile.Size];
-        using FileStream source = File.OpenRead(item.Archive.FilePath);
-        source.Position = item.ArchiveFile.DataOffset;
+        using Stream source = RezArchiveReader.OpenFileRead(item.Archive, item.ArchiveFile);
         source.ReadExactly(data);
         return data;
     }
@@ -2328,8 +2343,7 @@ public partial class MainWindow : Window
 
         int archiveByteCount = checked((int)Math.Min(Math.Min(item.ArchiveFile.Size, maxBytes), int.MaxValue));
         byte[] archiveData = new byte[archiveByteCount];
-        using FileStream archiveSource = File.OpenRead(item.Archive.FilePath);
-        archiveSource.Position = item.ArchiveFile.DataOffset;
+        using Stream archiveSource = RezArchiveReader.OpenFileRead(item.Archive, item.ArchiveFile);
         archiveSource.ReadExactly(archiveData);
         return archiveData;
     }
@@ -3843,7 +3857,7 @@ public partial class MainWindow : Window
             ? SanitizePathSegment(item.Name)
             : relativePath;
         bool decodeImageToPng = imageExportOptions.ShouldDecodeToPng(item.FileExtension) &&
-                                !CrossFireScriptBinDecoder.IsCandidate(item.Name, item.FileExtension);
+                                !CrossFireScriptBinDecoder.IsCandidate(safeRelativePath, item.FileExtension);
         if (decodeImageToPng)
         {
             string sourceRelativePath = MakeUniqueRelativePath(safeRelativePath, usedRelativePaths);

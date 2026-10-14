@@ -7,7 +7,7 @@ namespace CFRezManager;
 
 internal static class RezArchiveDirectoryCache
 {
-    private const int CacheVersion = 1;
+    private const int CacheVersion = 4;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = false

@@ -4,6 +4,7 @@
 
 ![Main window](assets/readme/image.png)
 ![Preview window](assets/readme/image-1.png)
+![blender](assets/readme/image-3.png)
 
 CF Rez Manager is a Windows WPF tool for browsing, searching, previewing, extracting, and packing LithTech / CrossFire `.rez` archives. It can also inspect loose resource files from extracted folders.
 
@@ -154,7 +155,8 @@ dotnet run --project .\CFRezManager.csproj -- --scan-cfg --root "C:\Extracted\cf
 dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\cfg"
 ```
 
-- `--export-obj`: export LithTech models to OBJ/MTL, write a sibling `_textures` folder, and reference exported PNG textures from the MTL; diagnostics are written only when textures are missing.
+- `--export-obj`: export LithTech models to OBJ/MTL, write a sibling `_textures` folder, and reference exported PNG textures from the MTL; always write per-mesh texture-mapping and decoder-path diagnostics, and list meshes skipped for non-finite vertices or UVs.
+- `--texture-context` accepts a character ID or name; shared first-person arm models use the corresponding CFT hand/arm textures mapped to their LTB mesh slots.
 - `--scan-cfg`: scan CFG files, extract texture references, and write TXT/CSV reports.
 - `--decode-cfg`: retry failed CFG files, export recovered text or binary previews, and classify high-entropy configs.
 

@@ -27,7 +27,7 @@ internal static class LithTechResourceHeuristics
             return false;
         }
 
-        bool supportedExtension = normalizedExtension is "cfg" or "ini" or "txt" or "cft" or "fcf" or "csv" or "dat" or "xml" or "json" or "lua" or "ref" or "apf";
+        bool supportedExtension = normalizedExtension is "cfg" or "ini" or "txt" or "cft" or "fcf" or "csv" or "dat" or "xml" or "json" or "lua" or "ref" or "apf" or "enc";
         if (!supportedExtension)
         {
             return false;
@@ -85,7 +85,7 @@ internal static class LithTechResourceHeuristics
             return false;
         }
 
-        bool supportedExtension = normalizedExtension is "cft" or "fcf" or "cfg" or "csv" or "dat" or "txt" or "ini";
+        bool supportedExtension = normalizedExtension is "cft" or "fcf" or "cfg" or "csv" or "dat" or "txt" or "ini" or "enc";
         if (!supportedExtension)
         {
             return false;

@@ -162,7 +162,7 @@ internal static class PreviewTool
                 return true;
             }
 
-            if (TryCreateTextWindow(fileName, extension, data, out window, out string? textError))
+            if (TryCreateTextWindow(fileName, filePath, extension, data, out window, out string? textError))
             {
                 window!.ShowInTaskbar = true;
                 return true;
@@ -370,6 +370,7 @@ internal static class PreviewTool
 
     private static bool TryCreateTextWindow(
         string fileName,
+        string resourcePath,
         string extension,
         byte[] data,
         out Window? window,
@@ -391,15 +392,16 @@ internal static class PreviewTool
             return true;
         }
 
-        if (EncTextDecoder.IsCandidate(fileName, extension))
+        if (EncTextDecoder.IsCandidate(resourcePath, extension))
         {
-            if (!EncTextDecoder.TryDecode(data, out byte[] decodedBytes) ||
+            if (!EncTextDecoder.TryDecode(data, out byte[] decodedBytes, out bool lzmaWrapped) ||
                 !TextPreviewDecoder.TryDecode(decodedBytes, preferKorean: true, out string decodedText, out string decodedEncoding))
             {
                 return false;
             }
 
-            string info = $"ENC / Base64 / {decodedEncoding}, {data.Length:N0} bytes -> {decodedBytes.Length:N0} bytes";
+            string storage = lzmaWrapped ? "LZMA + ENC / Base64" : "ENC / Base64";
+            string info = $"{storage} / {decodedEncoding}, {data.Length:N0} bytes -> {decodedBytes.Length:N0} bytes";
             window = new TextPreviewWindow(fileName, decodedText, info);
             return true;
         }
@@ -417,9 +419,9 @@ internal static class PreviewTool
             return true;
         }
 
-        if (CrossFireScriptBinDecoder.IsCandidate(fileName, extension))
+        if (CrossFireScriptBinDecoder.IsCandidate(resourcePath, extension))
         {
-            if (!CrossFireScriptBinDecoder.TryDecode(data, fileName, out CrossFireScriptBinDocument? scriptBinDocument, out errorMessage) ||
+            if (!CrossFireScriptBinDecoder.TryDecode(data, resourcePath, out CrossFireScriptBinDocument? scriptBinDocument, out errorMessage) ||
                 scriptBinDocument is null)
             {
                 return false;
@@ -456,9 +458,9 @@ internal static class PreviewTool
             return true;
         }
 
-        if (ResourceTextDecoder.IsCandidate(fileName, extension))
+        if (ResourceTextDecoder.IsCandidate(resourcePath, extension))
         {
-            if (!ResourceTextDecoder.TryDecode(data, fileName, extension, out ResourceTextDocument? resourceDocument, out errorMessage) ||
+            if (!ResourceTextDecoder.TryDecode(data, resourcePath, extension, out ResourceTextDocument? resourceDocument, out errorMessage) ||
                 resourceDocument is null)
             {
                 return false;

@@ -18,13 +18,21 @@ public sealed record LithTechModelDocument(
     public int TriangleCount => Meshes.Sum(mesh => mesh.TriangleIndices.Count / 3);
 }
 
+internal sealed record LithTechShapeTextureBinding(
+    string ShapeName,
+    IReadOnlyList<int> TextureIndices,
+    int? RenderStyleIndex);
+
 public sealed record LithTechMesh(
     string Name,
     IReadOnlyList<LithTechVector3> Vertices,
     IReadOnlyList<int> TriangleIndices,
     IReadOnlyList<LithTechVector2>? TextureCoordinates = null,
     string? TexturePath = null,
-    IReadOnlyList<string>? MaterialHints = null)
+    IReadOnlyList<string>? MaterialHints = null,
+    IReadOnlyList<int>? TextureSlotIndices = null,
+    int? RenderStyleIndex = null,
+    bool HasAuthoritativeTextureBindings = false)
 {
     public bool HasTextureCoordinates => TextureCoordinates is not null && TextureCoordinates.Count == Vertices.Count;
 }
@@ -118,8 +126,30 @@ internal static class LithTechModelDecoder
         if (string.Equals(extension, "ltb", StringComparison.OrdinalIgnoreCase))
         {
             string nativeStorageDescription = ReferenceEquals(prepared, data) ? "LTB binary" : "LZMA-compressed LTB";
+            if (LithTechNativeLtbDecoder.TryDecode(
+                    prepared,
+                    fallbackName,
+                    nativeStorageDescription,
+                    data.Length,
+                    prepared.Length,
+                    out document,
+                    out string? nativeStreamError))
+            {
+                errorMessage = null;
+                return true;
+            }
+
             if (TryParseLtbBinary(prepared, fallbackName, nativeStorageDescription, data.Length, prepared.Length, out document, out errorMessage))
             {
+                if (document is not null && !string.IsNullOrWhiteSpace(nativeStreamError))
+                {
+                    document = document with
+                    {
+                        StorageDescription = $"{document.StorageDescription}; native parser rejected: {nativeStreamError}"
+                    };
+                }
+
+                errorMessage = null;
                 return true;
             }
 
@@ -128,8 +158,8 @@ internal static class LithTechModelDecoder
             if (ltaText is null)
             {
                 errorMessage = string.IsNullOrWhiteSpace(converterError)
-                    ? nativeError
-                    : $"{nativeError} {converterError}";
+                    ? JoinErrors(nativeError, nativeStreamError)
+                    : $"{JoinErrors(nativeError, nativeStreamError)} {converterError}";
                 return false;
             }
 
@@ -142,6 +172,16 @@ internal static class LithTechModelDecoder
         string storageDescription = ReferenceEquals(prepared, data) ? "LTA text" : "LZMA-compressed LTA";
         string text = Encoding.ASCII.GetString(prepared);
         return TryParseLtaText(text, fallbackName, storageDescription, data.Length, prepared.Length, out document, out errorMessage);
+    }
+
+    private static string? JoinErrors(string? first, string? second)
+    {
+        if (string.IsNullOrWhiteSpace(first))
+        {
+            return second;
+        }
+
+        return string.IsNullOrWhiteSpace(second) ? first : $"{first} {second}";
     }
 
     private static bool TryDecodeLtc(
@@ -482,9 +522,12 @@ internal static class LithTechModelDecoder
         {
             if (!TryReadSingle(data, readPosition, out float x) ||
                 !TryReadSingle(data, readPosition + 4, out float y) ||
-                !TryReadSingle(data, readPosition + 8, out float z))
+                !TryReadSingle(data, readPosition + 8, out float z) ||
+                !float.IsFinite(x) ||
+                !float.IsFinite(y) ||
+                !float.IsFinite(z))
             {
-                errorMessage = LocalizedText.Format("LtbMeshVertexIncomplete", meshName, vertexIndex + 1);
+                errorMessage = $"Mesh '{meshName}' has incomplete or non-finite position data at vertex {vertexIndex + 1}.";
                 return false;
             }
 
@@ -492,6 +535,12 @@ internal static class LithTechModelDecoder
             if (TryReadSingle(data, readPosition + layout.TextureCoordinateOffset, out float u) &&
                 TryReadSingle(data, readPosition + layout.TextureCoordinateOffset + sizeof(float), out float v))
             {
+                if (!float.IsFinite(u) || !float.IsFinite(v))
+                {
+                    errorMessage = $"Mesh '{meshName}' has non-finite texture coordinates at vertex {vertexIndex + 1}.";
+                    return false;
+                }
+
                 textureCoordinates.Add(new LithTechVector2(u, v));
             }
 
@@ -955,6 +1004,49 @@ internal static class LithTechModelDecoder
         return true;
     }
 
+    internal static bool TryParseShapeTextureBindings(
+        string text,
+        out IReadOnlyList<LithTechShapeTextureBinding> bindings,
+        out string? errorMessage)
+    {
+        bindings = [];
+        errorMessage = null;
+        try
+        {
+            LtaList root = new LtaParser(text).ParseRoot();
+            var parsed = new List<LithTechShapeTextureBinding>();
+            foreach (LtaList shape in FindListsByHead(root, "shape"))
+            {
+                string shapeName = GetAtomValue(shape.Items.Skip(1).FirstOrDefault()) ?? string.Empty;
+                if (shapeName.Length == 0)
+                {
+                    continue;
+                }
+
+                LtaList? textureIndicesNode = shape.Children.FirstOrDefault(child => IsHead(child, "texture-indices"));
+                int[] textureIndices = textureIndicesNode is null ? [] : ParseIntList(textureIndicesNode).ToArray();
+                LtaList? renderStyleNode = shape.Children.FirstOrDefault(child => IsHead(child, "renderstyle-index"));
+                int? renderStyleIndex = renderStyleNode is not null &&
+                                        int.TryParse(
+                                            GetAtomValue(renderStyleNode.Items.Skip(1).FirstOrDefault()),
+                                            NumberStyles.Integer,
+                                            CultureInfo.InvariantCulture,
+                                            out int parsedRenderStyle)
+                    ? parsedRenderStyle
+                    : null;
+                parsed.Add(new LithTechShapeTextureBinding(shapeName, textureIndices, renderStyleIndex));
+            }
+
+            bindings = parsed;
+            return true;
+        }
+        catch (Exception exception) when (exception is FormatException or ArgumentException)
+        {
+            errorMessage = exception.Message;
+            return false;
+        }
+    }
+
     internal static bool TryParseLtaText(
         string text,
         string fallbackName,
@@ -973,6 +1065,7 @@ internal static class LithTechModelDecoder
             LtaList root = parser.ParseRoot();
             string rootHead = GetAtomValue(root.Items.FirstOrDefault()) ?? string.Empty;
             bool isWorld = string.Equals(rootHead, "world", StringComparison.OrdinalIgnoreCase);
+            bool isShape = string.Equals(rootHead, "shape", StringComparison.OrdinalIgnoreCase);
             bool isModel = string.Equals(rootHead, "lt-model", StringComparison.OrdinalIgnoreCase) ||
                            text.Contains("(lt-model", StringComparison.OrdinalIgnoreCase);
 
@@ -983,7 +1076,7 @@ internal static class LithTechModelDecoder
                 meshes = ParseWorldMeshes(root);
                 documentStorageDescription = $"{storageDescription} world";
             }
-            else if (isModel)
+            else if (isModel || isShape)
             {
                 meshes = FindListsByHead(root, "mesh")
                     .Select(ParseMesh)
@@ -1005,7 +1098,11 @@ internal static class LithTechModelDecoder
                 return false;
             }
 
-            string name = isWorld ? fallbackName : GetAtomValue(root.Items.FirstOrDefault()) ?? fallbackName;
+            string name = isWorld
+                ? fallbackName
+                : isShape
+                    ? GetAtomValue(root.Items.Skip(1).FirstOrDefault()) ?? fallbackName
+                    : GetAtomValue(root.Items.FirstOrDefault()) ?? fallbackName;
             document = new LithTechModelDocument(name, meshes, documentStorageDescription, sourceByteCount, decodedByteCount);
             return true;
         }

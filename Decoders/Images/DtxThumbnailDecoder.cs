@@ -17,7 +17,6 @@ internal static class DtxThumbnailDecoder
     private const int BytesPerPixelDxt5 = 6;
     private const int BytesPerPixel32Palette = 7;
     private const uint FormatRgba = 136;
-    private const uint FormatBgra = 8;
     private const int MaxDecodedPixels = 4096 * 4096;
     private const int ThumbnailMaxSide = 192;
 
@@ -161,7 +160,10 @@ internal static class DtxThumbnailDecoder
         return header.BytesPerPixel switch
         {
             BytesPerPixel32 when header.Flags == FormatRgba => DtxPixelFormat.Rgba32,
-            BytesPerPixel32 when header.Flags == FormatBgra && header.TextureGroup == 0 => DtxPixelFormat.Bgra32,
+            // LithTech 2.x files may store extended texture/property flags
+            // here instead of the legacy RGBA marker. BPPIdent 3 is the
+            // 32-bit ARGB format; on disk its byte order is BGRA.
+            BytesPerPixel32 when header.TextureGroup == 0 => DtxPixelFormat.Bgra32,
             BytesPerPixelDxt1 => DtxPixelFormat.Dxt1,
             BytesPerPixelDxt3 => DtxPixelFormat.Dxt3,
             BytesPerPixelDxt5 => DtxPixelFormat.Dxt5,

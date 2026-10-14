@@ -151,7 +151,8 @@ internal static class LithTechThumbnailGeometryReducer
             indices,
             textureCoordinates,
             mesh.TexturePath,
-            mesh.MaterialHints);
+            mesh.MaterialHints,
+            mesh.TextureSlotIndices);
     }
 
     private static LithTechModelDocument SampleGeometry(

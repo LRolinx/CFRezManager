@@ -1,5 +1,6 @@
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
@@ -128,13 +129,30 @@ internal static class LithTechModelTextureLoader
             string normalizedCandidate = NormalizeTexturePath(candidate);
             if (textureIndex.FilesByPath.TryGetValue(normalizedCandidate, out ExplorerItem? exactMatch))
             {
-                return TryReadTextureItem(textureIndex, exactMatch);
+                ImageSource? image = TryReadTextureItem(textureIndex, exactMatch);
+                if (image is not null)
+                {
+                    return image;
+                }
             }
 
             if (textureIndex.UniqueFilesBySuffix.TryGetValue(normalizedCandidate, out ExplorerItem? suffixMatch) &&
                 suffixMatch is not null)
             {
-                return TryReadTextureItem(textureIndex, suffixMatch);
+                ImageSource? image = TryReadTextureItem(textureIndex, suffixMatch);
+                if (image is not null)
+                {
+                    return image;
+                }
+            }
+
+            if (textureIndex.FilesBySuffixCandidates.TryGetValue(normalizedCandidate, out List<ExplorerItem>? suffixCandidates))
+            {
+                ImageSource? image = TryReadEquivalentTextureVersions(textureIndex, suffixCandidates);
+                if (image is not null)
+                {
+                    return image;
+                }
             }
         }
 
@@ -143,11 +161,96 @@ internal static class LithTechModelTextureLoader
             if (textureIndex.UniqueFilesByName.TryGetValue(candidateName, out ExplorerItem? item) &&
                 item is not null)
             {
-                return TryReadTextureItem(textureIndex, item);
+                ImageSource? image = TryReadTextureItem(textureIndex, item);
+                if (image is not null)
+                {
+                    return image;
+                }
+            }
+
+            if (textureIndex.FilesByNameCandidates.TryGetValue(candidateName, out List<ExplorerItem>? nameCandidates))
+            {
+                ImageSource? image = TryReadEquivalentTextureVersions(textureIndex, nameCandidates);
+                if (image is not null)
+                {
+                    return image;
+                }
             }
         }
 
         return null;
+    }
+
+    private static ImageSource? TryReadEquivalentTextureVersions(
+        TextureIndex textureIndex,
+        IReadOnlyList<ExplorerItem> candidates)
+    {
+        if (candidates.Count < 2 || !HaveSameLogicalTexturePath(candidates))
+        {
+            return null;
+        }
+
+        string expectedMd5 = GetArchiveFileMd5(candidates[0]);
+        foreach (ExplorerItem candidate in candidates.OrderBy(item =>
+                     string.Equals(GetArchiveFileMd5(item), expectedMd5, StringComparison.OrdinalIgnoreCase) ? 0 : 1))
+        {
+            ImageSource? image = TryReadVerifiedTextureItem(candidate);
+            if (image is not null)
+            {
+                lock (textureIndex.ImageCache)
+                {
+                    textureIndex.ImageCache[candidate] = image;
+                }
+
+                return image;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool HaveSameLogicalTexturePath(IReadOnlyList<ExplorerItem> candidates)
+    {
+        string? expectedPath = null;
+        foreach (ExplorerItem candidate in candidates)
+        {
+            string logicalPath = NormalizeTexturePath(
+                candidate.ArchiveFile?.FullPath ?? candidate.OutputRelativePath);
+            if (string.IsNullOrWhiteSpace(logicalPath))
+            {
+                return false;
+            }
+
+            if (expectedPath is null)
+            {
+                expectedPath = logicalPath;
+            }
+            else if (!string.Equals(expectedPath, logicalPath, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+
+        return expectedPath is not null;
+    }
+
+    private static string GetArchiveFileMd5(ExplorerItem item)
+    {
+        return item.Kind == ExplorerItemKind.RezFile
+            ? item.ArchiveFile?.Md5 ?? string.Empty
+            : string.Empty;
+    }
+
+    private static ImageSource? TryReadVerifiedTextureItem(ExplorerItem item)
+    {
+        if (item.Kind == ExplorerItemKind.RezFile &&
+            item.Archive is not null &&
+            item.ArchiveFile is not null)
+        {
+            return TryReadArchiveTexture(item.Archive, item.ArchiveFile, verifyIndexMd5: true);
+        }
+
+        return TryReadTextureItem(item);
     }
 
     private static ImageSource? TryResolveLocalTexture(
@@ -323,26 +426,113 @@ internal static class LithTechModelTextureLoader
             yield break;
         }
 
-        yield return normalized;
+        foreach (string candidate in EnumerateTexturePathVariants(normalized))
+        {
+            yield return candidate;
+        }
+    }
 
-        string extension = Path.GetExtension(normalized);
+    private static IEnumerable<string> EnumerateTexturePathVariants(string normalizedPath)
+    {
+        yield return normalizedPath;
+
+        string extension = Path.GetExtension(normalizedPath);
+        if (!TextureExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase))
+        {
+            // Model texture references are often extensionless resource names,
+            // and some valid names contain dots (for example "AI3.0_Door").
+            // Path.GetExtension would mistake the suffix after the last dot for
+            // a real extension and replace part of the resource name instead of
+            // appending candidate texture extensions.
+            extension = string.Empty;
+        }
+
         if (string.IsNullOrWhiteSpace(extension))
         {
             foreach (string textureExtension in TextureExtensions)
             {
-                yield return normalized + textureExtension;
+                yield return normalizedPath + textureExtension;
+            }
+
+            foreach (string alias in GetKnownTexturePathAliases(normalizedPath))
+            {
+                yield return alias;
+                foreach (string textureExtension in TextureExtensions)
+                {
+                    yield return alias + textureExtension;
+                }
+            }
+
+            yield break;
+        }
+
+        string withoutExtension = normalizedPath[..^extension.Length];
+        foreach (string textureExtension in TextureExtensions)
+        {
+            if (!string.Equals(extension, textureExtension, StringComparison.OrdinalIgnoreCase))
+            {
+                yield return withoutExtension + textureExtension;
             }
         }
-        else
+
+        foreach (string alias in GetKnownTexturePathAliases(withoutExtension))
         {
-            string withoutExtension = normalized[..^extension.Length];
+            yield return alias + extension;
             foreach (string textureExtension in TextureExtensions)
             {
                 if (!string.Equals(extension, textureExtension, StringComparison.OrdinalIgnoreCase))
                 {
-                    yield return withoutExtension + textureExtension;
+                    yield return alias + textureExtension;
                 }
             }
+        }
+    }
+
+    private static IEnumerable<string> GetKnownTexturePathAliases(string pathWithoutExtension)
+    {
+        if (pathWithoutExtension.Contains("/Character/AI/GSG9/GSG9_BODY_", StringComparison.OrdinalIgnoreCase))
+        {
+            yield return pathWithoutExtension.Replace(
+                "/Character/AI/GSG9/GSG9_BODY_",
+                "/Character/GSG9/GSG9_CH_Body_",
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (pathWithoutExtension.Contains("/Character/AI/GSG9/GSG9_FACE_", StringComparison.OrdinalIgnoreCase))
+        {
+            yield return pathWithoutExtension.Replace(
+                "/Character/AI/GSG9/GSG9_FACE_",
+                "/Character/GSG9/GSG9_CH_Face_",
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (pathWithoutExtension.Contains("FVEIW_", StringComparison.OrdinalIgnoreCase))
+        {
+            yield return pathWithoutExtension.Replace("FVEIW_", "FVIEW_", StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (pathWithoutExtension.Contains("HumanheroTerminator_BDOY", StringComparison.OrdinalIgnoreCase))
+        {
+            yield return pathWithoutExtension.Replace(
+                "HumanheroTerminator_BDOY",
+                "HumanheroTerminator_BODY",
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (pathWithoutExtension.Contains("LanXier_NGLanXier_NG_", StringComparison.OrdinalIgnoreCase))
+        {
+            yield return pathWithoutExtension.Replace(
+                "LanXier_NGLanXier_NG_",
+                "LanXier_NG/LanXier_NG_",
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (pathWithoutExtension.Contains("WildWest_Santa_Weist_", StringComparison.OrdinalIgnoreCase))
+        {
+            yield return pathWithoutExtension.Replace(
+                "WildWest_Santa_Weist_",
+                "WildWest_Santa_Waist_",
+                StringComparison.OrdinalIgnoreCase);
         }
     }
 
@@ -360,7 +550,18 @@ internal static class LithTechModelTextureLoader
 
     private static ImageSource? TryReadArchiveTexture(RezArchive archive, RezFileNode file)
     {
-        if (file.Size < 0 || file.Size > MaxTextureBytes)
+        return TryReadArchiveTexture(archive, file, verifyIndexMd5: false);
+    }
+
+    private static ImageSource? TryReadArchiveTexture(
+        RezArchive archive,
+        RezFileNode file,
+        bool verifyIndexMd5)
+    {
+        if (file.DataOffset < 0 ||
+            file.Size < 0 ||
+            file.Size > MaxTextureBytes ||
+            (verifyIndexMd5 && (string.IsNullOrWhiteSpace(file.Md5) || file.Md5.Length != 32)))
         {
             return null;
         }
@@ -368,9 +569,14 @@ internal static class LithTechModelTextureLoader
         try
         {
             byte[] data = new byte[file.Size];
-            using FileStream source = File.OpenRead(archive.FilePath);
-            source.Position = file.DataOffset;
+            using Stream source = RezArchiveReader.OpenFileRead(archive, file);
             source.ReadExactly(data);
+            if (verifyIndexMd5 &&
+                !string.Equals(Convert.ToHexString(MD5.HashData(data)), file.Md5, StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
             return TryDecodeTexture(file.Extension, data);
         }
         catch
@@ -475,13 +681,29 @@ internal static class LithTechModelTextureLoader
             }
         }
 
+        // Several non-DTX game textures (notably PNG UI/material assets) are
+        // stored as LZMA-Alone streams. DTX and TGA decoders prepare their own
+        // input, but the generic bitmap path otherwise receives the compressed
+        // bytes and silently misses a valid image.
+        if (!string.Equals(extension, "dtx", StringComparison.OrdinalIgnoreCase) &&
+            LzmaAloneDecoder.IsCompressed(data))
+        {
+            byte[]? prepared = LzmaAloneDecoder.TryPrepareData(data, MaxTextureBytes);
+            if (prepared is null)
+            {
+                return null;
+            }
+
+            data = prepared;
+        }
+
+        // A DTX that fails its own header/payload checks must remain missing.
+        // Falling through to the permissive raw-TGA or generic bitmap readers
+        // can turn encrypted DTX bytes into plausible-looking garbage and
+        // incorrectly report the texture as successfully exported.
         if (string.Equals(extension, "dtx", StringComparison.OrdinalIgnoreCase))
         {
-            ImageSource? image = DtxThumbnailDecoder.TryDecodeOriginal(data);
-            if (image is not null)
-            {
-                return image;
-            }
+            return DtxThumbnailDecoder.TryDecodeOriginal(data);
         }
 
         if (string.Equals(extension, "dds", StringComparison.OrdinalIgnoreCase))
@@ -569,15 +791,25 @@ internal static class LithTechModelTextureLoader
         var filesByPath = new Dictionary<string, ExplorerItem>(StringComparer.OrdinalIgnoreCase);
         var filesByName = new Dictionary<string, ExplorerItem?>(StringComparer.OrdinalIgnoreCase);
         var filesBySuffix = new Dictionary<string, ExplorerItem?>(StringComparer.OrdinalIgnoreCase);
-        CollectTextureItems(root, filesByPath, filesByName, filesBySuffix);
-        return new TextureIndex(filesByPath, filesByName, filesBySuffix, []);
+        var filesByNameCandidates = new Dictionary<string, List<ExplorerItem>>(StringComparer.OrdinalIgnoreCase);
+        var filesBySuffixCandidates = new Dictionary<string, List<ExplorerItem>>(StringComparer.OrdinalIgnoreCase);
+        CollectTextureItems(root, filesByPath, filesByName, filesBySuffix, filesByNameCandidates, filesBySuffixCandidates);
+        return new TextureIndex(
+            filesByPath,
+            filesByName,
+            filesBySuffix,
+            filesByNameCandidates,
+            filesBySuffixCandidates,
+            []);
     }
 
     private static void CollectTextureItems(
         ExplorerItem item,
         Dictionary<string, ExplorerItem> filesByPath,
         Dictionary<string, ExplorerItem?> filesByName,
-        Dictionary<string, ExplorerItem?> filesBySuffix)
+        Dictionary<string, ExplorerItem?> filesBySuffix,
+        Dictionary<string, List<ExplorerItem>> filesByNameCandidates,
+        Dictionary<string, List<ExplorerItem>> filesBySuffixCandidates)
     {
         if (item.IsFile && IsTextureExtension(item.FileExtension))
         {
@@ -590,18 +822,26 @@ internal static class LithTechModelTextureLoader
             if (LithTechResourceHeuristics.IsLikelyModelTexturePath(normalizedPath, item.FileExtension))
             {
                 AddSuffixIndexCandidates(filesBySuffix, normalizedPath, item);
+                AddSuffixIndexCandidates(filesBySuffixCandidates, normalizedPath, item);
 
                 string fileName = GetResourceFileName(normalizedPath);
                 if (!string.IsNullOrWhiteSpace(fileName))
                 {
                     AddUniqueIndexCandidate(filesByName, fileName, item);
+                    AddVersionFallbackCandidate(filesByNameCandidates, fileName, item);
                 }
             }
         }
 
         foreach (ExplorerItem child in item.Children)
         {
-            CollectTextureItems(child, filesByPath, filesByName, filesBySuffix);
+            CollectTextureItems(
+                child,
+                filesByPath,
+                filesByName,
+                filesBySuffix,
+                filesByNameCandidates,
+                filesBySuffixCandidates);
         }
     }
 
@@ -689,6 +929,41 @@ internal static class LithTechModelTextureLoader
         index[key] = null;
     }
 
+    private static void AddSuffixIndexCandidates(
+        Dictionary<string, List<ExplorerItem>> index,
+        string normalizedPath,
+        ExplorerItem item)
+    {
+        string[] segments = normalizedPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        for (int startIndex = 1; startIndex < segments.Length - 1; startIndex++)
+        {
+            AddVersionFallbackCandidate(index, string.Join("/", segments.Skip(startIndex)), item);
+        }
+    }
+
+    private static void AddVersionFallbackCandidate<T>(
+        Dictionary<string, List<T>> index,
+        string key,
+        T item)
+        where T : class
+    {
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            return;
+        }
+
+        if (!index.TryGetValue(key, out List<T>? candidates))
+        {
+            candidates = [];
+            index[key] = candidates;
+        }
+
+        if (!candidates.Any(candidate => ReferenceEquals(candidate, item)))
+        {
+            candidates.Add(item);
+        }
+    }
+
     private static string GetResourceFileName(string normalizedPath)
     {
         int slashIndex = normalizedPath.LastIndexOf('/');
@@ -708,9 +983,15 @@ internal static class LithTechModelTextureLoader
         Dictionary<string, ExplorerItem> FilesByPath,
         Dictionary<string, ExplorerItem?> UniqueFilesByName,
         Dictionary<string, ExplorerItem?> UniqueFilesBySuffix,
+        Dictionary<string, List<ExplorerItem>> FilesByNameCandidates,
+        Dictionary<string, List<ExplorerItem>> FilesBySuffixCandidates,
         Dictionary<ExplorerItem, ImageSource?> ImageCache)
     {
-        public bool IsEmpty => FilesByPath.Count == 0 && UniqueFilesByName.Count == 0 && UniqueFilesBySuffix.Count == 0;
+        public bool IsEmpty => FilesByPath.Count == 0 &&
+                               UniqueFilesByName.Count == 0 &&
+                               UniqueFilesBySuffix.Count == 0 &&
+                               FilesByNameCandidates.Count == 0 &&
+                               FilesBySuffixCandidates.Count == 0;
     }
 
     private sealed record ArchiveTextureIndex(

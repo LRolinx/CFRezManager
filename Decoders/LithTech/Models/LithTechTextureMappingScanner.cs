@@ -35,6 +35,7 @@ internal static class LithTechTextureMappingScanner
         "cfg",
         "csv",
         "dat",
+        "enc",
         "fcf",
         "ini",
         "json",
@@ -1398,6 +1399,12 @@ internal static class LithTechTextureMappingScanner
             return cfgDocument.Text;
         }
 
+        string? encText = TryDecodeEncSearchText(item, data);
+        if (encText is not null)
+        {
+            return encText;
+        }
+
         if (ResourceTextDecoder.IsCandidate(item.Name, extension) &&
             ResourceTextDecoder.TryDecode(data, item.Name, extension, out ResourceTextDocument? resourceDocument, out _) &&
             resourceDocument is not null)
@@ -1449,6 +1456,12 @@ internal static class LithTechTextureMappingScanner
             return cfgDocument.Text;
         }
 
+        string? encText = TryDecodeEncSearchText(item, data);
+        if (encText is not null)
+        {
+            return encText;
+        }
+
         byte[] prepared = LzmaAloneDecoder.TryPrepareData(data, MaxScanBytes) ?? data;
         var parts = new List<string>();
         if (TextPreviewDecoder.TryDecode(prepared, preferKorean: false, out string text, out _))
@@ -1476,6 +1489,12 @@ internal static class LithTechTextureMappingScanner
             return cfgDocument.Text;
         }
 
+        string? encText = TryDecodeEncSearchText(item, data);
+        if (encText is not null)
+        {
+            return encText;
+        }
+
         byte[] prepared = LzmaAloneDecoder.TryPrepareData(data, MaxRawNeedleScanBytes) ?? data;
         var parts = new List<string>();
         if (TextPreviewDecoder.TryDecode(prepared, preferKorean: false, out string text, out _))
@@ -1491,6 +1510,18 @@ internal static class LithTechTextureMappingScanner
         return parts.Count == 0
             ? null
             : string.Join('\n', parts.Distinct(StringComparer.OrdinalIgnoreCase));
+    }
+
+    private static string? TryDecodeEncSearchText(ExplorerItem item, byte[] data)
+    {
+        if (!EncTextDecoder.IsCandidate(item.Name, item.FileExtension) ||
+            !EncTextDecoder.TryDecode(data, out byte[] decodedBytes) ||
+            !TextPreviewDecoder.TryDecode(decodedBytes, preferKorean: false, out string decodedText, out _))
+        {
+            return null;
+        }
+
+        return decodedText;
     }
 
     private static byte[]? TryReadItemBytes(ExplorerItem item, int maxBytes)
@@ -1515,8 +1546,7 @@ internal static class LithTechTextureMappingScanner
                 item.ArchiveFile.Size <= maxBytes)
             {
                 byte[] data = new byte[item.ArchiveFile.Size];
-                using FileStream source = File.OpenRead(item.Archive.FilePath);
-                source.Position = item.ArchiveFile.DataOffset;
+                using Stream source = RezArchiveReader.OpenFileRead(item.Archive, item.ArchiveFile);
                 source.ReadExactly(data);
                 return data;
             }

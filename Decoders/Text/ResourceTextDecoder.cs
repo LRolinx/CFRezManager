@@ -27,6 +27,7 @@ internal static class ResourceTextDecoder
         "fcf",
         "fxf",
         "fxo",
+        "lto",
         "nav",
         "nav2",
         "nav3",
@@ -42,6 +43,7 @@ internal static class ResourceTextDecoder
     public static bool IsCandidate(string fileName, string extension)
     {
         return Extensions.Contains(NormalizeExtension(extension)) ||
+               LithTechRenderStyleDecoder.IsCandidate(fileName, extension) ||
                IsNavExtension(Path.GetExtension(fileName).TrimStart('.'));
     }
 
@@ -63,6 +65,72 @@ internal static class ResourceTextDecoder
 
         try
         {
+            if (string.Equals(normalizedExtension, "lto", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!CrossFireObjectLtoDecoder.TryDecode(data, fileName, out string objectText, out errorMessage))
+                {
+                    return false;
+                }
+
+                document = new ResourceTextDocument(
+                    objectText,
+                    "CrossFire compiled object resource",
+                    data.Length,
+                    data.Length);
+                return true;
+            }
+
+            if (LithTechRenderStyleDecoder.IsCandidate(fileName, normalizedExtension))
+            {
+                byte[]? prepared = LzmaAloneDecoder.TryPrepareData(data);
+                if (prepared is null)
+                {
+                    errorMessage = "RenderStyle outer LZMA stream could not be decoded.";
+                    return false;
+                }
+
+                string storageDescription = ReferenceEquals(prepared, data)
+                    ? "Packed LithTech RenderStyle"
+                    : "LZMA-compressed packed LithTech RenderStyle";
+                if (LithTechRenderStyleDecoder.TryDecode(
+                        prepared,
+                        fileName,
+                        storageDescription,
+                        data.Length,
+                        out LithTechRenderStyleDocument? renderStyle,
+                        out errorMessage) &&
+                    renderStyle is not null)
+                {
+                    document = new ResourceTextDocument(
+                        renderStyle.ToText(fileName),
+                        $"{storageDescription} / {renderStyle.Styles.Count} styles",
+                        data.Length,
+                        prepared.Length);
+                    return true;
+                }
+
+                if (!LithTechRenderStyleDecoder.TryDecodeShaderAssemblyExtension(
+                        prepared,
+                        fileName,
+                        storageDescription,
+                        data.Length,
+                        out LithTechRenderStyleShaderExtensionDocument? shaderExtension,
+                        out string? extensionError) ||
+                    shaderExtension is null)
+                {
+                    errorMessage = string.IsNullOrWhiteSpace(extensionError) ? errorMessage : extensionError;
+                    return false;
+                }
+
+                errorMessage = null;
+                document = new ResourceTextDocument(
+                    shaderExtension.Text,
+                    $"{storageDescription} / D3DX8 Shader Assembly extension ({shaderExtension.ShaderAssemblyBlockCount} blocks)",
+                    data.Length,
+                    prepared.Length);
+                return true;
+            }
+
             if (string.Equals(normalizedExtension, "cft", StringComparison.OrdinalIgnoreCase))
             {
                 return TryDecodeCft(data, fileName, out document, out errorMessage);
@@ -343,16 +411,20 @@ internal static class ResourceTextDecoder
             return false;
         }
 
-        if (prepared.Length < 16 || !prepared.AsSpan(12, 4).SequenceEqual("VAND"u8))
+        bool currentHeader = prepared.Length >= 16 && prepared.AsSpan(12, 4).SequenceEqual("VAND"u8);
+        bool legacyHeader = prepared.Length >= 12 && prepared.AsSpan(4, 4).SequenceEqual("VAND"u8);
+        if (!currentHeader && !legacyHeader)
         {
             errorMessage = "NAV data does not contain a VAND signature.";
             return false;
         }
 
-        int version = ReadInt32(prepared, 0);
-        int layerMask = ReadInt32(prepared, 4);
-        int declaredByteCount = ReadInt32(prepared, 8);
-        int vandVersion = prepared.Length >= 20 ? ReadInt32(prepared, 16) : 0;
+        int version = legacyHeader ? ReadInt32(prepared, 8) : ReadInt32(prepared, 0);
+        int layerMask = legacyHeader ? 0 : ReadInt32(prepared, 4);
+        int declaredByteCount = legacyHeader ? ReadInt32(prepared, 0) : ReadInt32(prepared, 8);
+        int vandVersion = legacyHeader
+            ? version
+            : prepared.Length >= 20 ? ReadInt32(prepared, 16) : 0;
         int[] headerInts = ReadInt32Values(prepared, 0, Math.Min(prepared.Length, 96));
         List<string> strings = ExtractAsciiStrings(prepared, minLength: 4, maxCount: 16);
 
@@ -360,10 +432,15 @@ internal static class ResourceTextDecoder
         builder.AppendLine("LithTech VAND navigation data");
         builder.AppendLine($"File: {fileName}");
         builder.AppendLine($"Extension layer: {extension.ToUpperInvariant()}");
+        builder.AppendLine($"Header layout: {(legacyHeader ? "legacy VAND@4" : "VAND@12")}");
         builder.AppendLine($"Storage: {FormatStorage(compressed, "NAV", data.Length, decodedBytes, prepared.Length)}");
         builder.AppendLine($"Version: {version}");
-        builder.AppendLine($"Layer mask: {layerMask}");
-        builder.AppendLine($"Declared payload bytes: {declaredByteCount:N0}");
+        if (!legacyHeader)
+        {
+            builder.AppendLine($"Layer mask: {layerMask}");
+        }
+
+        builder.AppendLine($"Declared {(legacyHeader ? "file" : "payload")} bytes: {declaredByteCount:N0}");
         builder.AppendLine($"VAND version: {vandVersion}");
         builder.AppendLine();
         builder.AppendLine("Header int32 values:");

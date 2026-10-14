@@ -14,7 +14,7 @@ internal static class LithTechSpritePreviewLoader
     private const int MaxSpriteBytes = 8 * 1024 * 1024;
     private const int MaxFrameBytes = 64 * 1024 * 1024;
     private const int MaxPreviewFrames = 512;
-    private static readonly ConditionalWeakTable<RezArchive, Dictionary<string, RezFileNode>> ArchiveFileLookupCache = new();
+    private static readonly ConditionalWeakTable<RezArchive, ArchiveFileLookup> ArchiveFileLookupCache = new();
 
     public static bool TryLoadFromArchive(
         RezArchive archive,
@@ -39,7 +39,7 @@ internal static class LithTechSpritePreviewLoader
             return false;
         }
 
-        Dictionary<string, RezFileNode> filesByPath = GetArchiveFileLookup(archive);
+        ArchiveFileLookup files = GetArchiveFileLookup(archive);
         var frames = new List<ImagePreviewFrame>(Math.Min(sprite.FramePaths.Count, MaxPreviewFrames));
         var missingPaths = new List<string>();
         int skippedFrames = 0;
@@ -47,7 +47,7 @@ internal static class LithTechSpritePreviewLoader
         for (int i = 0; i < sprite.FramePaths.Count && frames.Count < MaxPreviewFrames; i++)
         {
             string framePath = sprite.FramePaths[i];
-            if (!TryFindFrame(filesByPath, framePath, out RezFileNode? frameFile) || frameFile is null)
+            if (!TryFindFrame(files, framePath, out RezFileNode? frameFile) || frameFile is null)
             {
                 missingPaths.Add(framePath);
                 continue;
@@ -138,10 +138,10 @@ internal static class LithTechSpritePreviewLoader
 
     public static ImageSource? TryLoadThumbnailFromArchive(RezArchive archive, LithTechSpriteDocument sprite)
     {
-        Dictionary<string, RezFileNode> filesByPath = GetArchiveFileLookup(archive);
+        ArchiveFileLookup files = GetArchiveFileLookup(archive);
         foreach (string framePath in sprite.FramePaths)
         {
-            if (!TryFindFrame(filesByPath, framePath, out RezFileNode? frameFile) || frameFile is null)
+            if (!TryFindFrame(files, framePath, out RezFileNode? frameFile) || frameFile is null)
             {
                 continue;
             }
@@ -207,70 +207,85 @@ internal static class LithTechSpritePreviewLoader
         return info;
     }
 
-    private static Dictionary<string, RezFileNode> BuildFileLookup(RezDirectoryNode root)
+    private static ArchiveFileLookup BuildFileLookup(RezDirectoryNode root)
     {
         var filesByPath = new Dictionary<string, RezFileNode>(StringComparer.OrdinalIgnoreCase);
-        AddFiles(root, filesByPath);
-        return filesByPath;
+        var filesBySuffix = new Dictionary<string, List<RezFileNode>>(StringComparer.OrdinalIgnoreCase);
+        AddFiles(root, filesByPath, filesBySuffix);
+        return new ArchiveFileLookup(filesByPath, filesBySuffix);
     }
 
-    private static Dictionary<string, RezFileNode> GetArchiveFileLookup(RezArchive archive)
+    private static ArchiveFileLookup GetArchiveFileLookup(RezArchive archive)
     {
         return ArchiveFileLookupCache.GetValue(archive, static archiveValue => BuildFileLookup(archiveValue.Root));
     }
 
-    private static void AddFiles(RezDirectoryNode directory, Dictionary<string, RezFileNode> filesByPath)
+    private static void AddFiles(
+        RezDirectoryNode directory,
+        Dictionary<string, RezFileNode> filesByPath,
+        Dictionary<string, List<RezFileNode>> filesBySuffix)
     {
         foreach (RezNode child in directory.Children)
         {
             if (child is RezFileNode file)
             {
-                filesByPath.TryAdd(NormalizeRezPath(file.FullPath), file);
+                string path = NormalizeRezPath(file.FullPath);
+                filesByPath.TryAdd(path, file);
+                for (int offset = 0; offset <= path.Length;)
+                {
+                    string suffix = path[offset..];
+                    if (!filesBySuffix.TryGetValue(suffix, out List<RezFileNode>? matches))
+                    {
+                        matches = [];
+                        filesBySuffix[suffix] = matches;
+                    }
+
+                    matches.Add(file);
+                    int separator = path.IndexOf('/', offset);
+                    if (separator < 0)
+                    {
+                        break;
+                    }
+
+                    offset = separator + 1;
+                }
             }
             else if (child is RezDirectoryNode childDirectory)
             {
-                AddFiles(childDirectory, filesByPath);
+                AddFiles(childDirectory, filesByPath, filesBySuffix);
             }
         }
     }
 
     private static bool TryFindFrame(
-        Dictionary<string, RezFileNode> filesByPath,
+        ArchiveFileLookup files,
         string framePath,
         out RezFileNode? frameFile)
     {
         string normalized = NormalizeRezPath(framePath);
-        if (filesByPath.TryGetValue(normalized, out frameFile))
+        if (files.FilesByPath.TryGetValue(normalized, out frameFile))
         {
             return true;
         }
 
-        string fileName = Path.GetFileName(normalized);
-        RezFileNode? match = null;
-        foreach ((string path, RezFileNode candidate) in filesByPath)
+        if (files.FilesBySuffix.TryGetValue(normalized, out List<RezFileNode>? suffixMatches) && suffixMatches.Count == 1)
         {
-            if (!path.EndsWith(fileName, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            if (match is not null)
-            {
-                frameFile = null;
-                return false;
-            }
-
-            match = candidate;
+            frameFile = suffixMatches[0];
+            return true;
         }
 
-        frameFile = match;
-        return frameFile is not null;
+        frameFile = null;
+        return false;
     }
 
     private static string NormalizeRezPath(string path)
     {
         return path.Replace('\\', '/').TrimStart('/');
     }
+
+    private sealed record ArchiveFileLookup(
+        Dictionary<string, RezFileNode> FilesByPath,
+        Dictionary<string, List<RezFileNode>> FilesBySuffix);
 
     private static bool TryFindLocalFrame(string spriteFilePath, string spriteFramePath, out string? framePath)
     {
@@ -307,8 +322,7 @@ internal static class LithTechSpritePreviewLoader
         }
 
         byte[] data = new byte[file.Size];
-        using FileStream source = File.OpenRead(archive.FilePath);
-        source.Position = file.DataOffset;
+        using Stream source = RezArchiveReader.OpenFileRead(archive, file);
         source.ReadExactly(data);
         return data;
     }

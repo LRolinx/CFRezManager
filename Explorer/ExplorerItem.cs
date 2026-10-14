@@ -583,6 +583,7 @@ public sealed class ExplorerItem : INotifyPropertyChanged
     private bool CanLoadThumbnail()
     {
         string extension = FileExtension;
+        string resourcePath = string.IsNullOrWhiteSpace(OutputRelativePath) ? Name : OutputRelativePath;
         return IsFile &&
                (ThumbnailExtensions.Contains(extension) ||
                 TextThumbnailExtensions.Contains(extension) ||
@@ -591,7 +592,7 @@ public sealed class ExplorerItem : INotifyPropertyChanged
                 LithTechModelDecoder.IsCandidate(extension) ||
                 LithTechWorldDatDecoder.IsCandidate(extension) ||
                 CrossFireDatDecoder.IsCandidate(extension) ||
-                CrossFireScriptBinDecoder.IsCandidate(Name, extension) ||
+                CrossFireScriptBinDecoder.IsCandidate(resourcePath, extension) ||
                 LithTechSpriteDecoder.IsCandidate(extension) ||
                 FmodBankDecoder.IsCandidate(extension));
     }
@@ -604,14 +605,15 @@ public sealed class ExplorerItem : INotifyPropertyChanged
     private bool CanLoadTextPreview()
     {
         string extension = FileExtension;
+        string resourcePath = string.IsNullOrWhiteSpace(OutputRelativePath) ? Name : OutputRelativePath;
         return IsFile &&
-               (EncTextDecoder.IsCandidate(Name, extension) ||
+               (EncTextDecoder.IsCandidate(resourcePath, extension) ||
                 CrossFireLtcDecoder.IsCandidate(extension) ||
                 CrossFireDatDecoder.IsCandidate(extension) ||
-                CrossFireScriptBinDecoder.IsCandidate(Name, extension) ||
+                CrossFireScriptBinDecoder.IsCandidate(resourcePath, extension) ||
                 LithTechSpriteDecoder.IsCandidate(extension) ||
                 FmodBankDecoder.IsCandidate(extension) ||
-                ResourceTextDecoder.IsCandidate(Name, extension) ||
+                ResourceTextDecoder.IsCandidate(resourcePath, extension) ||
                 TextPreviewDecoder.IsPlainTextExtension(extension));
     }
 
@@ -628,6 +630,7 @@ public sealed class ExplorerItem : INotifyPropertyChanged
         try
         {
             string extension = FileExtension;
+            string resourcePath = string.IsNullOrWhiteSpace(OutputRelativePath) ? Name : OutputRelativePath;
             if (string.IsNullOrWhiteSpace(extension))
             {
                 return null;
@@ -665,8 +668,8 @@ public sealed class ExplorerItem : INotifyPropertyChanged
                 return LoadCrossFireDatThumbnail(data);
             }
 
-            if (CrossFireScriptBinDecoder.IsCandidate(Name, extension) &&
-                CrossFireScriptBinDecoder.TryDecode(data, Name, out CrossFireScriptBinDocument? scriptBinDocument, out _) &&
+            if (CrossFireScriptBinDecoder.IsCandidate(resourcePath, extension) &&
+                CrossFireScriptBinDecoder.TryDecode(data, resourcePath, out CrossFireScriptBinDocument? scriptBinDocument, out _) &&
                 scriptBinDocument is not null)
             {
                 SetImageStorageKind(ImageStorageKind.CrossFireScriptBin);
@@ -1135,6 +1138,7 @@ public sealed class ExplorerItem : INotifyPropertyChanged
         try
         {
             string extension = FileExtension;
+            string resourcePath = string.IsNullOrWhiteSpace(OutputRelativePath) ? Name : OutputRelativePath;
             int maxBytes = FmodBankDecoder.IsCandidate(extension)
                 ? FmodBankDecoder.MaxSourceBytes
                 : MaxTextPreviewBytes;
@@ -1144,9 +1148,9 @@ public sealed class ExplorerItem : INotifyPropertyChanged
                 return null;
             }
 
-            if (EncTextDecoder.IsCandidate(Name, extension))
+            if (EncTextDecoder.IsCandidate(resourcePath, extension))
             {
-                if (!EncTextDecoder.TryDecode(data, out byte[] decodedBytes) ||
+                if (!EncTextDecoder.TryDecode(data, out byte[] decodedBytes, out bool lzmaWrapped) ||
                     !TextPreviewDecoder.TryDecode(decodedBytes, preferKorean: true, out string decodedText, out string decodedEncoding))
                 {
                     return null;
@@ -1154,8 +1158,8 @@ public sealed class ExplorerItem : INotifyPropertyChanged
 
                 return new TextPreviewDocument(
                     decodedText,
-                    decodedEncoding,
-                    TextPreviewStorageKind.EncBase64,
+                    lzmaWrapped ? $"LZMA + ENC / Base64 / {decodedEncoding}" : $"ENC / Base64 / {decodedEncoding}",
+                    lzmaWrapped ? TextPreviewStorageKind.EncLzmaBase64 : TextPreviewStorageKind.EncBase64,
                     data.Length,
                     decodedBytes.Length);
             }
@@ -1192,9 +1196,9 @@ public sealed class ExplorerItem : INotifyPropertyChanged
                     datDocument.DecodedByteCount);
             }
 
-            if (CrossFireScriptBinDecoder.IsCandidate(Name, extension))
+            if (CrossFireScriptBinDecoder.IsCandidate(resourcePath, extension))
             {
-                if (!CrossFireScriptBinDecoder.TryDecode(data, Name, out CrossFireScriptBinDocument? scriptBinDocument, out _) ||
+                if (!CrossFireScriptBinDecoder.TryDecode(data, resourcePath, out CrossFireScriptBinDocument? scriptBinDocument, out _) ||
                     scriptBinDocument is null)
                 {
                     return null;
@@ -1240,9 +1244,9 @@ public sealed class ExplorerItem : INotifyPropertyChanged
                     bankDocument.DecodedByteCount);
             }
 
-            if (ResourceTextDecoder.IsCandidate(Name, extension))
+            if (ResourceTextDecoder.IsCandidate(resourcePath, extension))
             {
-                if (!ResourceTextDecoder.TryDecode(data, Name, extension, out ResourceTextDocument? resourceDocument, out _) ||
+                if (!ResourceTextDecoder.TryDecode(data, resourcePath, extension, out ResourceTextDocument? resourceDocument, out _) ||
                     resourceDocument is null)
                 {
                     return null;
@@ -1557,8 +1561,7 @@ public sealed class ExplorerItem : INotifyPropertyChanged
         }
 
         byte[] data = new byte[ArchiveFile.Size];
-        using FileStream source = File.OpenRead(Archive.FilePath);
-        source.Position = ArchiveFile.DataOffset;
+        using Stream source = RezArchiveReader.OpenFileRead(Archive, ArchiveFile);
         source.ReadExactly(data);
         return data;
     }
@@ -1594,8 +1597,7 @@ public sealed class ExplorerItem : INotifyPropertyChanged
 
         int archiveByteCount = checked((int)Math.Min(Math.Min(ArchiveFile.Size, maxBytes), int.MaxValue));
         byte[] archiveData = new byte[archiveByteCount];
-        using FileStream archiveSource = File.OpenRead(Archive.FilePath);
-        archiveSource.Position = ArchiveFile.DataOffset;
+        using Stream archiveSource = RezArchiveReader.OpenFileRead(Archive, ArchiveFile);
         archiveSource.ReadExactly(archiveData);
         return archiveData;
     }
@@ -1633,8 +1635,7 @@ public sealed class ExplorerItem : INotifyPropertyChanged
             return null;
         }
 
-        using FileStream archiveSource = File.OpenRead(Archive.FilePath);
-        archiveSource.Position = ArchiveFile.DataOffset;
+        using Stream archiveSource = RezArchiveReader.OpenFileRead(Archive, ArchiveFile);
         return LzmaAloneDecoder.TryDecompressPrefix(archiveSource, ArchiveFile.Size, maxDecodedBytes);
     }
 

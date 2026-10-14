@@ -195,8 +195,63 @@ internal static class CrossFireDatDecoder
             return true;
         }
 
+        // The shared sound-filter resource is a legacy LithTech attributes
+        // file rather than one of CrossFire's zone/path object blocks. Its
+        // version header and body still use the CrossFire REZ transform, so
+        // expose the decrypted body losslessly instead of reporting it as an
+        // undecodable DAT.
+        if (rawText.Contains("No One Lives Forever Sound Filters Attributes file", StringComparison.OrdinalIgnoreCase))
+        {
+            string storageDescription = FormatStorageDescription(prepared, data, "SoundFilterAttributes");
+            string text = FormatEscapedText(fallbackName, version, data.Length, prepared.Length, decodedBody);
+            document = new CrossFireDatDocument(
+                version,
+                "SoundFilterAttributes",
+                1,
+                [],
+                [],
+                null,
+                null,
+                text,
+                storageDescription,
+                data.Length,
+                prepared.Length);
+            return true;
+        }
+
         errorMessage = "DAT body did not contain recognizable CrossFire objects.";
         return false;
+    }
+
+    private static string FormatEscapedText(
+        string fileName,
+        int version,
+        int sourceByteCount,
+        int decodedByteCount,
+        ReadOnlySpan<byte> bytes)
+    {
+        var builder = new StringBuilder(bytes.Length + 256);
+        builder.AppendLine($"CrossFire DAT sound-filter attributes: {fileName}");
+        builder.AppendLine($"Version: {version}");
+        builder.AppendLine($"Source/decoded bytes: {sourceByteCount:N0} / {decodedByteCount:N0}");
+        builder.AppendLine("Non-ASCII/control bytes are retained as <0xNN>.");
+        builder.AppendLine();
+
+        foreach (byte value in bytes)
+        {
+            if (value is (byte)'\r' or (byte)'\n' or (byte)'\t' || value is >= 0x20 and <= 0x7E)
+            {
+                builder.Append((char)value);
+            }
+            else
+            {
+                builder.Append("<0x");
+                builder.Append(value.ToString("X2", CultureInfo.InvariantCulture));
+                builder.Append('>');
+            }
+        }
+
+        return builder.ToString();
     }
 
     private static List<CrossFireDatZone> ParseZones(string rawText)

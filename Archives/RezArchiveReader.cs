@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text;
+using System.Collections.Concurrent;
 
 namespace CFRezManager;
 
@@ -93,7 +94,9 @@ public sealed class RezArchiveReader
 {
     private const int HeaderSize = 168;
     private const int MaxDepth = 128;
+    private const int MaxSplitIndex = 255;
     private static readonly Encoding TextEncoding = Encoding.ASCII;
+    private static readonly ConcurrentDictionary<string, bool> RezHeaderCache = new(StringComparer.OrdinalIgnoreCase);
 
     public RezArchive Read(string filePath)
     {
@@ -111,6 +114,16 @@ public sealed class RezArchiveReader
         var archive = new RezArchive(filePath, header, root);
 
         ParseEntryRange(reader, archive, root, header.RootDirPos, header.RootDirSize, 0, new HashSet<string>());
+        if (root.Children.Count == 0 && header.RootDirSize > 0)
+        {
+            if (!TryParseLegacyEntryRange(reader, archive, root, header.RootDirPos, header.RootDirSize, 0, new HashSet<string>()))
+            {
+                root.Children.Clear();
+                archive.DirectoryCount = 0;
+                archive.FileCount = 0;
+            }
+        }
+
         RezArchiveDirectoryCache.TrySave(archive);
         return archive;
     }
@@ -123,11 +136,195 @@ public sealed class RezArchiveReader
             Directory.CreateDirectory(destinationDirectory);
         }
 
-        using var source = File.OpenRead(archive.FilePath);
+        using var source = OpenFileRead(archive, file);
         using var destination = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None);
 
-        source.Position = file.DataOffset;
         CopyExactly(source, destination, file.Size);
+    }
+
+    /// <summary>
+    /// Opens a resource stream whose length and readable range are limited to the
+    /// indexed resource, even when the underlying bytes live in a shared REZ shard.
+    /// </summary>
+    public static Stream OpenFileRead(RezArchive archive, RezFileNode file)
+    {
+        ArgumentNullException.ThrowIfNull(archive);
+        ArgumentNullException.ThrowIfNull(file);
+
+        string dataPath = ResolveDataFilePath(archive.FilePath, file.Time);
+        var source = File.OpenRead(dataPath);
+        if (file.DataOffset < 0 ||
+            file.Size < 0 ||
+            (long)file.DataOffset + file.Size > source.Length)
+        {
+            source.Dispose();
+            throw new InvalidDataException(
+                $"Resource range is outside its data file: {file.FullPath} ({dataPath})");
+        }
+
+        source.Position = file.DataOffset;
+        return new BoundedReadStream(source, file.Size);
+    }
+
+    private sealed class BoundedReadStream : Stream
+    {
+        private readonly Stream _source;
+        private readonly long _startOffset;
+        private readonly long _length;
+        private long _position;
+
+        public BoundedReadStream(Stream source, long length)
+        {
+            _source = source;
+            _startOffset = source.Position;
+            _length = length;
+        }
+
+        public override bool CanRead => _source.CanRead;
+        public override bool CanSeek => _source.CanSeek;
+        public override bool CanWrite => false;
+        public override long Length => _length;
+
+        public override long Position
+        {
+            get => _position;
+            set => Seek(value, SeekOrigin.Begin);
+        }
+
+        public override void Flush()
+        {
+        }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            ArgumentNullException.ThrowIfNull(buffer);
+            ArgumentOutOfRangeException.ThrowIfNegative(offset);
+            ArgumentOutOfRangeException.ThrowIfNegative(count);
+            if (offset > buffer.Length - count)
+            {
+                throw new ArgumentException("The buffer range is invalid.");
+            }
+
+            int boundedCount = (int)Math.Min(count, _length - _position);
+            if (boundedCount <= 0)
+            {
+                return 0;
+            }
+
+            int read = _source.Read(buffer, offset, boundedCount);
+            _position += read;
+            return read;
+        }
+
+        public override int Read(Span<byte> buffer)
+        {
+            int boundedCount = (int)Math.Min(buffer.Length, _length - _position);
+            if (boundedCount <= 0)
+            {
+                return 0;
+            }
+
+            int read = _source.Read(buffer[..boundedCount]);
+            _position += read;
+            return read;
+        }
+
+        public override int ReadByte()
+        {
+            if (_position >= _length)
+            {
+                return -1;
+            }
+
+            int value = _source.ReadByte();
+            if (value >= 0)
+            {
+                _position++;
+            }
+
+            return value;
+        }
+
+        public override long Seek(long offset, SeekOrigin origin)
+        {
+            long target = origin switch
+            {
+                SeekOrigin.Begin => offset,
+                SeekOrigin.Current => checked(_position + offset),
+                SeekOrigin.End => checked(_length + offset),
+                _ => throw new ArgumentOutOfRangeException(nameof(origin))
+            };
+            if (target < 0 || target > _length)
+            {
+                throw new IOException("Seek is outside the indexed resource.");
+            }
+
+            _source.Seek(checked(_startOffset + target), SeekOrigin.Begin);
+            _position = target;
+            return _position;
+        }
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _source.Dispose();
+            }
+
+            base.Dispose(disposing);
+        }
+    }
+
+    private static string ResolveDataFilePath(string archivePath, int splitIndex)
+    {
+        if (splitIndex <= 0 || splitIndex > MaxSplitIndex)
+        {
+            return archivePath;
+        }
+
+        string? directory = Path.GetDirectoryName(archivePath);
+        if (string.IsNullOrEmpty(directory))
+        {
+            return archivePath;
+        }
+
+        string archiveName = Path.GetFileNameWithoutExtension(archivePath);
+        string extension = Path.GetExtension(archivePath);
+        string candidate = Path.Combine(directory, $"{archiveName}_{splitIndex}{extension}");
+        if (!File.Exists(candidate) || IsRezArchive(candidate))
+        {
+            return archivePath;
+        }
+
+        return candidate;
+    }
+
+    private static bool IsRezArchive(string path)
+    {
+        return RezHeaderCache.GetOrAdd(path, static candidate =>
+        {
+            try
+            {
+                using var source = File.OpenRead(candidate);
+                if (source.Length < HeaderSize || source.ReadByte() != 0x0D || source.ReadByte() != 0x0A)
+                {
+                    return false;
+                }
+
+                using var reader = new BinaryReader(source, TextEncoding, leaveOpen: true);
+                string fileType = ReadFixedString(reader, 60);
+                source.Position = 127;
+                int version = reader.ReadInt32();
+                return fileType.StartsWith("RezMgr Version", StringComparison.OrdinalIgnoreCase) && version == 1;
+            }
+            catch
+            {
+                return true;
+            }
+        });
     }
 
     private static RezHeader ReadHeader(BinaryReader reader)
@@ -288,11 +485,15 @@ public sealed class RezArchiveReader
         string md5 = ReadFixedString(rangeReader, 32);
 
         string extension = DecodeExtension(extensionBytes);
+        string dataPath = ResolveDataFilePath(archive.FilePath, time);
+        long dataLength = string.Equals(dataPath, archive.FilePath, StringComparison.OrdinalIgnoreCase)
+            ? fileLength
+            : new FileInfo(dataPath).Length;
         if (!IsUsableName(name) ||
             string.IsNullOrWhiteSpace(extension) ||
             fileSize < 0 ||
             dataOffset < 0 ||
-            dataOffset + (long)fileSize > fileLength)
+            dataOffset + (long)fileSize > dataLength)
         {
             return true;
         }
@@ -310,6 +511,280 @@ public sealed class RezArchiveReader
         byte[] buffer = fileReader.ReadBytes(size);
         RezCrypto.Decode(buffer, offset);
         return new BinaryReader(new MemoryStream(buffer), TextEncoding, leaveOpen: false);
+    }
+
+    private static bool TryParseLegacyEntryRange(
+        BinaryReader fileReader,
+        RezArchive archive,
+        RezDirectoryNode owner,
+        int offset,
+        int size,
+        int depth,
+        HashSet<string> visitedRanges)
+    {
+        if (depth > MaxDepth || size <= 0 || !IsUsableRange(fileReader.BaseStream.Length, offset, size))
+        {
+            return false;
+        }
+
+        string rangeKey = $"legacy:{offset}:{size}";
+        if (!visitedRanges.Add(rangeKey))
+        {
+            return true;
+        }
+
+        long originalPosition = fileReader.BaseStream.Position;
+        byte[] bytes;
+        try
+        {
+            fileReader.BaseStream.Position = offset;
+            bytes = fileReader.ReadBytes(size);
+        }
+        finally
+        {
+            fileReader.BaseStream.Position = originalPosition;
+        }
+
+        using var rangeReader = new BinaryReader(new MemoryStream(bytes), TextEncoding, leaveOpen: false);
+        var directories = new List<(RezDirectoryNode Node, int Offset, int Size)>();
+        var files = new List<RezFileNode>();
+
+        while (rangeReader.BaseStream.Position < rangeReader.BaseStream.Length)
+        {
+            long entryStart = rangeReader.BaseStream.Position;
+            long remaining = RemainingBytes(rangeReader);
+            if (remaining < sizeof(int))
+            {
+                if (bytes.AsSpan((int)entryStart).IndexOfAnyExcept((byte)0) < 0)
+                {
+                    break;
+                }
+
+                return false;
+            }
+
+            int type = rangeReader.ReadInt32();
+            if (type is not (0 or 1))
+            {
+                return false;
+            }
+
+            if (type == 1)
+            {
+                if (RemainingBytes(rangeReader) < 12)
+                {
+                    return false;
+                }
+
+                int tableOffset = rangeReader.ReadInt32();
+                int tableSize = rangeReader.ReadInt32();
+                _ = rangeReader.ReadInt32();
+                if (!TryReadLegacyName(rangeReader, out string name) ||
+                    !IsUsableName(name) ||
+                    !IsUsableRange(fileReader.BaseStream.Length, tableOffset, tableSize))
+                {
+                    return false;
+                }
+
+                string fullPath = CombineRezPath(owner.FullPath, name);
+                directories.Add((new RezDirectoryNode(name, fullPath, tableOffset, tableSize), tableOffset, tableSize));
+            }
+            else
+            {
+                if (RemainingBytes(rangeReader) < 24)
+                {
+                    return false;
+                }
+
+                int dataOffset = rangeReader.ReadInt32();
+                int fileSize = rangeReader.ReadInt32();
+                int time = rangeReader.ReadInt32();
+                int id = rangeReader.ReadInt32();
+                byte[] extensionBytes = rangeReader.ReadBytes(4);
+                _ = rangeReader.ReadInt32();
+                if (!TryReadLegacyName(rangeReader, out string name) || !IsUsableName(name))
+                {
+                    return false;
+                }
+
+                string extension = DecodeExtension(extensionBytes);
+                string dataPath = ResolveDataFilePath(archive.FilePath, time);
+                long dataLength;
+                try
+                {
+                    dataLength = string.Equals(dataPath, archive.FilePath, StringComparison.OrdinalIgnoreCase)
+                        ? fileReader.BaseStream.Length
+                        : new FileInfo(dataPath).Length;
+                }
+                catch
+                {
+                    return false;
+                }
+
+                if (string.IsNullOrWhiteSpace(extension) ||
+                    fileSize < 0 ||
+                    dataOffset < 0 ||
+                    dataOffset + (long)fileSize > dataLength)
+                {
+                    return false;
+                }
+
+                string fileName = $"{name}.{extension}";
+                files.Add(new RezFileNode(fileName, CombineRezPath(owner.FullPath, fileName), extension, dataOffset, fileSize, time, id, string.Empty));
+            }
+
+            if (!TryAdvanceLegacyEntry(rangeReader, archive, fileReader.BaseStream.Length))
+            {
+                return false;
+            }
+
+            if (rangeReader.BaseStream.Position <= entryStart)
+            {
+                return false;
+            }
+        }
+
+        if (directories.Count == 0 && files.Count == 0)
+        {
+            return false;
+        }
+
+        owner.Children.AddRange(directories.Select(directory => directory.Node));
+        owner.Children.AddRange(files);
+        archive.DirectoryCount += directories.Count;
+        archive.FileCount += files.Count;
+
+        foreach ((RezDirectoryNode directory, int tableOffset, int tableSize) in directories)
+        {
+            if (tableSize > 0 && !TryParseLegacyEntryRange(fileReader, archive, directory, tableOffset, tableSize, depth + 1, visitedRanges))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool TryReadLegacyName(BinaryReader reader, out string name)
+    {
+        name = string.Empty;
+        long remaining = RemainingBytes(reader);
+        if (remaining <= 0 || remaining > int.MaxValue)
+        {
+            return false;
+        }
+
+        byte[] bytes = reader.ReadBytes((int)Math.Min(remaining, 1024));
+        int terminator = Array.IndexOf(bytes, (byte)0);
+        if (terminator <= 0)
+        {
+            return false;
+        }
+
+        name = TextEncoding.GetString(bytes, 0, terminator);
+        reader.BaseStream.Position = reader.BaseStream.Position - bytes.Length + terminator + 1;
+        return name.All(character => character is >= ' ' and <= '~');
+    }
+
+    private static bool TryAdvanceLegacyEntry(BinaryReader reader, RezArchive archive, long fileLength)
+    {
+        long position = reader.BaseStream.Position;
+        long length = reader.BaseStream.Length;
+        if (position == length)
+        {
+            return true;
+        }
+
+        for (int padding = 0; padding <= 3 && position + padding + sizeof(int) <= length; padding++)
+        {
+            if (padding > 0)
+            {
+                reader.BaseStream.Position = position + padding - 1;
+                if (reader.ReadByte() != 0)
+                {
+                    break;
+                }
+            }
+
+            if (IsPlausibleLegacyEntryAt(reader, position + padding, archive, fileLength))
+            {
+                reader.BaseStream.Position = position + padding;
+                return true;
+            }
+        }
+
+        reader.BaseStream.Position = position;
+        byte[] trailing = reader.ReadBytes((int)RemainingBytes(reader));
+        if (trailing.All(value => value == 0))
+        {
+            reader.BaseStream.Position = length;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsPlausibleLegacyEntryAt(BinaryReader reader, long position, RezArchive archive, long fileLength)
+    {
+        long originalPosition = reader.BaseStream.Position;
+        try
+        {
+            reader.BaseStream.Position = position;
+            if (RemainingBytes(reader) < sizeof(int))
+            {
+                return false;
+            }
+
+            int type = reader.ReadInt32();
+            if (type == 1)
+            {
+                if (RemainingBytes(reader) < 12)
+                {
+                    return false;
+                }
+
+                int tableOffset = reader.ReadInt32();
+                int tableSize = reader.ReadInt32();
+                _ = reader.ReadInt32();
+                return TryReadLegacyName(reader, out string name) &&
+                       IsUsableName(name) &&
+                       IsUsableRange(fileLength, tableOffset, tableSize);
+            }
+
+            if (type != 0 || RemainingBytes(reader) < 24)
+            {
+                return false;
+            }
+
+            int dataOffset = reader.ReadInt32();
+            int size = reader.ReadInt32();
+            int time = reader.ReadInt32();
+            _ = reader.ReadInt32();
+            byte[] extensionBytes = reader.ReadBytes(4);
+            _ = reader.ReadInt32();
+            if (!TryReadLegacyName(reader, out string fileName) || !IsUsableName(fileName))
+            {
+                return false;
+            }
+
+            string extension = DecodeExtension(extensionBytes);
+            string dataPath = ResolveDataFilePath(archive.FilePath, time);
+            long dataLength = string.Equals(dataPath, archive.FilePath, StringComparison.OrdinalIgnoreCase)
+                ? fileLength
+                : new FileInfo(dataPath).Length;
+            return !string.IsNullOrWhiteSpace(extension) &&
+                   size >= 0 &&
+                   dataOffset >= 0 &&
+                   dataOffset + (long)size <= dataLength;
+        }
+        catch
+        {
+            return false;
+        }
+        finally
+        {
+            reader.BaseStream.Position = originalPosition;
+        }
     }
 
     private static string DecodeExtension(byte[] extensionBytes)
