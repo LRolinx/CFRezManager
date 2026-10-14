@@ -1812,8 +1812,8 @@ internal static class LithTechModelTextureConfigIndex
             }
         }
 
-        IReadOnlyDictionary<uint, IReadOnlyList<string>> itemAliasesByWeaponIndex =
-            BuildWeaponPreviewItemAliases(crossFireScriptItems, ltcWeaponIndexIds);
+        CrossFireWeaponPreviewItemAliasIndex itemAliases =
+            BuildWeaponPreviewItemAliases(crossFireScriptItems, ltcWeaponIndexIds, ltcMappingCache.Values);
         foreach (ExplorerItem ltcItem in ltcItems)
         {
             string cacheKey = ltcItem.ArchiveFile?.Md5 is { Length: > 0 } archiveHash
@@ -1875,7 +1875,7 @@ internal static class LithTechModelTextureConfigIndex
                 }
 
                 string[] contextKeys = GetLtcContextKeys(ltcItem, mapping)
-                    .Concat(GetWeaponItemContextAliases(mapping, itemAliasesByWeaponIndex))
+                    .Concat(GetWeaponItemContextAliases(mapping, itemAliases))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToArray();
                 foreach (CrossFireLtcTextureFieldReference textureReference in mapping.TextureFieldReferences)
@@ -1977,7 +1977,7 @@ internal static class LithTechModelTextureConfigIndex
 
     private static IReadOnlyList<string> GetWeaponItemContextAliases(
         CrossFireLtcModelTextureMapping mapping,
-        IReadOnlyDictionary<uint, IReadOnlyList<string>> itemAliasesByWeaponIndex)
+        CrossFireWeaponPreviewItemAliasIndex itemAliases)
     {
         var aliases = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (string identityAlias in mapping.IdentityAliases)
@@ -1989,20 +1989,27 @@ internal static class LithTechModelTextureConfigIndex
                     NumberStyles.None,
                     CultureInfo.InvariantCulture,
                     out uint weaponIndex) ||
-                !itemAliasesByWeaponIndex.TryGetValue(weaponIndex, out IReadOnlyList<string>? itemAliases))
+                !itemAliases.ByWeaponIndex.TryGetValue(weaponIndex, out IReadOnlyList<string>? weaponItemAliases))
             {
                 continue;
             }
 
-            aliases.UnionWith(itemAliases);
+            aliases.UnionWith(weaponItemAliases);
+        }
+
+        if (mapping.LegacyMappingIndex >= 0 &&
+            itemAliases.ByLtcLegacyMappingIndex.TryGetValue((uint)mapping.LegacyMappingIndex, out IReadOnlyList<string>? mappingItemAliases))
+        {
+            aliases.UnionWith(mappingItemAliases);
         }
 
         return aliases.Order(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
-    private static IReadOnlyDictionary<uint, IReadOnlyList<string>> BuildWeaponPreviewItemAliases(
+    private static CrossFireWeaponPreviewItemAliasIndex BuildWeaponPreviewItemAliases(
         IReadOnlyList<ExplorerItem> scriptItems,
-        IReadOnlySet<uint> ltcWeaponIndexIds)
+        IReadOnlySet<uint> ltcWeaponIndexIds,
+        IEnumerable<IReadOnlyList<CrossFireLtcModelTextureMapping>> ltcTables)
     {
         var previews = new List<CrossFireWeaponPreviewEntry>();
         var models = new List<CrossFireWeaponModelEntry>();
@@ -2028,10 +2035,42 @@ internal static class LithTechModelTextureConfigIndex
             }
         }
 
-        return CrossFireWeaponPreviewModelIndexDecoder.BuildItemAliasesByWeaponIndex(
+        IReadOnlySet<uint> ltcWeaponLegacyMappingIndexIds = GetUnambiguousWeaponLtcLegacyMappingIndices(ltcTables);
+        CrossFireWeaponPreviewItemAliasIndex aliases = CrossFireWeaponPreviewModelIndexDecoder.BuildItemAliases(
             previews,
             models,
-            ltcWeaponIndexIds);
+            ltcWeaponIndexIds,
+            ltcWeaponLegacyMappingIndexIds);
+        return aliases;
+    }
+
+    private static IReadOnlySet<uint> GetUnambiguousWeaponLtcLegacyMappingIndices(
+        IEnumerable<IReadOnlyList<CrossFireLtcModelTextureMapping>> ltcTables)
+    {
+        var signaturesByLegacyMappingIndex = new Dictionary<int, Dictionary<string, bool>>();
+        foreach (IReadOnlyList<CrossFireLtcModelTextureMapping> ltcTable in ltcTables)
+        {
+            foreach (CrossFireLtcModelTextureMapping mapping in ltcTable.Where(mapping => mapping.LegacyMappingIndex >= 0))
+            {
+                string signature = mapping.LegacyDeduplicationKey;
+
+                if (!signaturesByLegacyMappingIndex.TryGetValue(mapping.LegacyMappingIndex, out Dictionary<string, bool>? signatures))
+                {
+                    signatures = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+                    signaturesByLegacyMappingIndex.Add(mapping.LegacyMappingIndex, signatures);
+                }
+
+                bool isWeaponMapping = string.Equals(mapping.RowType, "Weapon", StringComparison.OrdinalIgnoreCase);
+                signatures[signature] = signatures.TryGetValue(signature, out bool previousIsWeaponMapping)
+                    ? previousIsWeaponMapping || isWeaponMapping
+                    : isWeaponMapping;
+            }
+        }
+
+        return signaturesByLegacyMappingIndex
+            .Where(pair => pair.Value.Count == 1 && pair.Value.Single().Value)
+            .Select(pair => (uint)pair.Key)
+            .ToHashSet();
     }
 
     private static bool TryGetLtcPlayerViewTextureOrdinal(

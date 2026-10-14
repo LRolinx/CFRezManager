@@ -5,6 +5,8 @@ namespace CFRezManager;
 
 internal sealed record CrossFireLtcModelTextureMapping(
     int RowIndex,
+    int LegacyMappingIndex,
+    string LegacyDeduplicationKey,
     string ModelReference,
     IReadOnlyList<string> TextureReferences,
     IReadOnlyList<CrossFireLtcTextureFieldReference> TextureFieldReferences,
@@ -54,6 +56,7 @@ internal static class CrossFireLtcModelTextureMappingDecoder
 
         var mappings = new List<CrossFireLtcModelTextureMapping>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var legacyIndices = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         int rowIndex = 0;
         foreach (LtcList row in new LtcParser(text).ParseAll())
         {
@@ -76,6 +79,13 @@ internal static class CrossFireLtcModelTextureMappingDecoder
                 .SelectMany(field => field.Name.Equals("WeaponIndex", StringComparison.OrdinalIgnoreCase)
                     ? field.Values.Select(value => $"WeaponIndex:{value}")
                     : field.Values)
+                .Select(value => value.Trim())
+                .Where(value => value.Length is > 0 and <= 256 && !value.Any(char.IsControl))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            string[] legacyIdentityAliases = fields
+                .Where(field => IsIdentityField(field.Name))
+                .SelectMany(field => field.Values)
                 .Select(value => value.Trim())
                 .Where(value => value.Length is > 0 and <= 256 && !value.Any(char.IsControl))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -138,6 +148,19 @@ internal static class CrossFireLtcModelTextureMappingDecoder
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .Order(StringComparer.OrdinalIgnoreCase)
                         .ToArray();
+                    string legacyKey = BuildLegacyDeduplicationKey(
+                        rowType,
+                        modelField.Name,
+                        modelReference,
+                        textures,
+                        auxiliaryTextures,
+                        legacyIdentityAliases);
+                    if (!legacyIndices.TryGetValue(legacyKey, out int legacyMappingIndex))
+                    {
+                        legacyMappingIndex = legacyIndices.Count;
+                        legacyIndices.Add(legacyKey, legacyMappingIndex);
+                    }
+
                     string deduplicationKey = string.Join(
                         "|",
                         rowType,
@@ -152,6 +175,8 @@ internal static class CrossFireLtcModelTextureMappingDecoder
                     {
                         mappings.Add(new CrossFireLtcModelTextureMapping(
                             currentRowIndex,
+                            legacyMappingIndex,
+                            legacyKey,
                             modelReference,
                             textures,
                             textureFieldReferences,
@@ -166,6 +191,24 @@ internal static class CrossFireLtcModelTextureMappingDecoder
         }
 
         return mappings;
+    }
+
+    internal static string BuildLegacyDeduplicationKey(
+        string rowType,
+        string modelField,
+        string modelReference,
+        IReadOnlyList<string> textures,
+        IReadOnlyList<string> auxiliaryTextures,
+        IReadOnlyList<string> identityAliases)
+    {
+        return string.Join(
+            "|",
+            rowType,
+            modelField,
+            modelReference,
+            string.Join("|", textures),
+            string.Join("|", auxiliaryTextures),
+            string.Join("|", identityAliases));
     }
 
     private static string[] GetCompatibleTextureFields(string modelField, IReadOnlyList<LtcField> fields)

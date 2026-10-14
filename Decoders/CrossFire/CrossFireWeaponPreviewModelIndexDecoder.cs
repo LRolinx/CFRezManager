@@ -14,6 +14,10 @@ internal sealed record CrossFireWeaponModelEntry(
     uint ItemId,
     uint ModelGroupId);
 
+internal sealed record CrossFireWeaponPreviewItemAliasIndex(
+    IReadOnlyDictionary<uint, IReadOnlyList<string>> ByWeaponIndex,
+    IReadOnlyDictionary<uint, IReadOnlyList<string>> ByLtcLegacyMappingIndex);
+
 /// <summary>
 /// Reads the explicit item/group relation between WeaponPreview and WeaponModel
 /// BINs. WeaponModel's first and second uint32 fields are model and item IDs;
@@ -115,10 +119,11 @@ internal static class CrossFireWeaponPreviewModelIndexDecoder
         return true;
     }
 
-    public static IReadOnlyDictionary<uint, IReadOnlyList<string>> BuildItemAliasesByWeaponIndex(
+    public static CrossFireWeaponPreviewItemAliasIndex BuildItemAliases(
         IEnumerable<CrossFireWeaponPreviewEntry> previews,
         IEnumerable<CrossFireWeaponModelEntry> models,
-        IReadOnlySet<uint> ltcWeaponIndexIds)
+        IReadOnlySet<uint> ltcWeaponIndexIds,
+        IReadOnlySet<uint> ltcWeaponLegacyMappingIndexIds)
     {
         CrossFireWeaponPreviewEntry[] previewEntries = previews.ToArray();
         CrossFireWeaponModelEntry[] modelEntries = models.ToArray();
@@ -145,6 +150,22 @@ internal static class CrossFireWeaponPreviewModelIndexDecoder
                 group => group.Key,
                 group => group.Select(preview => preview.ModelId).Distinct().ToArray());
         var aliasesByWeaponIndex = new Dictionary<uint, HashSet<string>>();
+        var aliasesByLtcLegacyMappingIndex = new Dictionary<uint, HashSet<string>>();
+
+        static void AddAlias(
+            IDictionary<uint, HashSet<string>> aliasesByTarget,
+            uint target,
+            uint itemId)
+        {
+            if (!aliasesByTarget.TryGetValue(target, out HashSet<string>? aliases))
+            {
+                aliases = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                aliasesByTarget.Add(target, aliases);
+            }
+
+            aliases.Add("item:" + itemId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+
         foreach (CrossFireWeaponPreviewEntry preview in previewEntries)
         {
             var key = (preview.ModelGroupId, preview.ItemId);
@@ -162,14 +183,15 @@ internal static class CrossFireWeaponPreviewModelIndexDecoder
                 continue;
             }
 
-            uint weaponIndex = modelIds[0];
-            if (!aliasesByWeaponIndex.TryGetValue(weaponIndex, out HashSet<string>? aliases))
+            uint modelId = modelIds[0];
+            if (ltcWeaponIndexIds.Contains(modelId))
             {
-                aliases = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                aliasesByWeaponIndex.Add(weaponIndex, aliases);
+                AddAlias(aliasesByWeaponIndex, modelId, preview.ItemId);
             }
-
-            aliases.Add("item:" + preview.ItemId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            else if (ltcWeaponLegacyMappingIndexIds.Contains(modelId))
+            {
+                AddAlias(aliasesByLtcLegacyMappingIndex, modelId, preview.ItemId);
+            }
         }
 
         foreach (CrossFireWeaponPreviewEntry preview in previewEntries)
@@ -182,21 +204,25 @@ internal static class CrossFireWeaponPreviewModelIndexDecoder
             }
 
             if (modelIdsByItem.TryGetValue(preview.ItemId, out uint[]? modelIds) &&
-                modelIds.Any(modelId => modelId != preview.ItemId && ltcWeaponIndexIds.Contains(modelId)))
+                modelIds.Any(modelId =>
+                    modelId != preview.ItemId &&
+                    (ltcWeaponIndexIds.Contains(modelId) || ltcWeaponLegacyMappingIndexIds.Contains(modelId))))
             {
                 continue;
             }
 
-            if (!aliasesByWeaponIndex.TryGetValue(preview.ItemId, out HashSet<string>? aliases))
-            {
-                aliases = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                aliasesByWeaponIndex.Add(preview.ItemId, aliases);
-            }
-
-            aliases.Add("item:" + preview.ItemId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            AddAlias(aliasesByWeaponIndex, preview.ItemId, preview.ItemId);
         }
 
-        return aliasesByWeaponIndex.ToDictionary(
+        return new CrossFireWeaponPreviewItemAliasIndex(
+            Freeze(aliasesByWeaponIndex),
+            Freeze(aliasesByLtcLegacyMappingIndex));
+    }
+
+    private static IReadOnlyDictionary<uint, IReadOnlyList<string>> Freeze(
+        IDictionary<uint, HashSet<string>> aliases)
+    {
+        return aliases.ToDictionary(
             pair => pair.Key,
             pair => (IReadOnlyList<string>)pair.Value.Order(StringComparer.OrdinalIgnoreCase).ToArray());
     }
