@@ -71,8 +71,11 @@ internal static class CrossFireLtcModelTextureMappingDecoder
                 .Cast<LtcField>()
                 .ToList();
             string[] identityAliases = fields
-                .Where(field => IsIdentityField(field.Name))
-                .SelectMany(field => field.Values)
+                .Where(field => IsIdentityField(field.Name) ||
+                                field.Name.Equals("WeaponIndex", StringComparison.OrdinalIgnoreCase))
+                .SelectMany(field => field.Name.Equals("WeaponIndex", StringComparison.OrdinalIgnoreCase)
+                    ? field.Values.Select(value => $"WeaponIndex:{value}")
+                    : field.Values)
                 .Select(value => value.Trim())
                 .Where(value => value.Length is > 0 and <= 256 && !value.Any(char.IsControl))
                 .Distinct(StringComparer.OrdinalIgnoreCase)

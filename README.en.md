@@ -156,7 +156,7 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 ```
 
 - `--export-obj`: export LithTech models to OBJ/MTL, write a sibling `_textures` folder, and reference exported PNG textures from the MTL; always write per-mesh texture-mapping and decoder-path diagnostics, and list meshes skipped for non-finite vertices or UVs.
-- `--texture-context` accepts a character or item ID/name. Character hand/arm textures come from CFT; first-person item textures come from LTC and map to slots present in the LTB. When slot evidence exists, unmapped meshes are left unresolved instead of receiving a guessed model-wide texture.
+- `--texture-context` accepts a character or item ID/name. Character hand/arm textures come from CFT; first-person item textures come from LTC and map to slots present in the LTB. Use `weaponindex:<number>` to select an LTC weapon precisely. When slot evidence exists, unmapped meshes are left unresolved instead of receiving a guessed model-wide texture.
 - `--scan-cfg`: scan CFG files, extract texture references, and write TXT/CSV reports.
 - `--decode-cfg`: retry failed CFG files, export recovered text or binary previews, and classify high-entropy configs.
 
