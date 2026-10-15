@@ -964,8 +964,12 @@ internal static class LithTechModelMeshTextureResolver
         string meshName)
     {
         string normalizedModelPath = NormalizePath(modelPath);
+        // Some first-person arm assets are stored flat under Models/PLAYERVIEW
+        // instead of the ArmModel subdirectory, with the same role-bearing mesh names.
         bool isArmModelPath = normalizedModelPath.StartsWith("ArmModel/Arm_", StringComparison.OrdinalIgnoreCase) ||
-                              normalizedModelPath.Contains("/ArmModel/Arm_", StringComparison.OrdinalIgnoreCase);
+                              normalizedModelPath.Contains("/ArmModel/Arm_", StringComparison.OrdinalIgnoreCase) ||
+                              normalizedModelPath.StartsWith("Models/PLAYERVIEW/Arm_", StringComparison.OrdinalIgnoreCase) ||
+                              normalizedModelPath.Contains("/Models/PLAYERVIEW/Arm_", StringComparison.OrdinalIgnoreCase);
         if (!isArmModelPath)
         {
             return [];
