@@ -7,6 +7,22 @@ public partial class App : System.Windows.Application
         base.OnStartup(e);
 
         ShutdownMode = System.Windows.ShutdownMode.OnMainWindowClose;
+        if (LithTechLtbHeaderInspectCommand.IsInvocation(e.Args))
+        {
+            ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
+            int exitCode = LithTechLtbHeaderInspectCommand.Run(e.Args);
+            Shutdown(exitCode);
+            return;
+        }
+
+        if (LithTechTextureMapAuditCommand.IsInvocation(e.Args))
+        {
+            ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
+            int exitCode = LithTechTextureMapAuditCommand.Run(e.Args);
+            Shutdown(exitCode);
+            return;
+        }
+
         if (LithTechObjExportCommand.IsInvocation(e.Args))
         {
             ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;

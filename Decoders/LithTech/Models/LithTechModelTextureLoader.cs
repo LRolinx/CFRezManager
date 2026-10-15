@@ -72,6 +72,30 @@ internal static class LithTechModelTextureLoader
         };
     }
 
+    internal static void ClearDecodedTextureCaches(ExplorerItem root, IEnumerable<RezArchive?> archives)
+    {
+        if (GlobalTextureIndexCache.TryGetValue(root, out TextureIndex? globalIndex))
+        {
+            lock (globalIndex.ImageCache)
+            {
+                globalIndex.ImageCache.Clear();
+            }
+        }
+
+        foreach (RezArchive archive in archives.Where(archive => archive is not null).Cast<RezArchive>().Distinct())
+        {
+            if (!ArchiveTextureIndexCache.TryGetValue(archive, out ArchiveTextureIndex? archiveIndex))
+            {
+                continue;
+            }
+
+            lock (archiveIndex.ImageCache)
+            {
+                archiveIndex.ImageCache.Clear();
+            }
+        }
+    }
+
     private static Func<string, ImageSource?> CreateArchiveResolver(RezArchive archive)
     {
         ArchiveTextureIndex textureIndex = GetArchiveTextureIndex(archive);
@@ -432,7 +456,7 @@ internal static class LithTechModelTextureLoader
         }
     }
 
-    private static IEnumerable<string> EnumerateTexturePathVariants(string normalizedPath)
+    internal static IEnumerable<string> EnumerateTexturePathVariants(string normalizedPath)
     {
         yield return normalizedPath;
 

@@ -488,7 +488,7 @@ internal static class LithTechObjExportCommand
         }
     }
 
-    private static ExplorerItem BuildDirectoryTree(string folder)
+    internal static ExplorerItem BuildDirectoryTree(string folder)
     {
         string rootName = Path.GetFileName(folder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
         if (string.IsNullOrWhiteSpace(rootName))
@@ -635,7 +635,7 @@ internal static class LithTechObjExportCommand
         }
     }
 
-    private static void LoadAllArchives(ExplorerItem rootItem)
+    internal static void LoadAllArchives(ExplorerItem rootItem)
     {
         var archives = new List<ExplorerItem>();
         CollectArchiveItems(rootItem, archives);
@@ -810,7 +810,7 @@ internal static class LithTechObjExportCommand
             : item.OutputRelativePath;
     }
 
-    private static Func<string, ImageSource?>? CreateObjTextureResolver(
+    internal static Func<string, ImageSource?>? CreateObjTextureResolver(
         ExplorerItem item,
         Func<string, ImageSource?>? globalTextureResolver)
     {

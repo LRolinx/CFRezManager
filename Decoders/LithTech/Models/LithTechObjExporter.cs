@@ -571,6 +571,11 @@ internal static class LithTechObjExporter
             exportedRelativePath));
     }
 
+    internal static void ClearTextureNameCandidateCache()
+    {
+        TextureNameCandidateCache.Clear();
+    }
+
     internal static IEnumerable<string> EnumerateTextureCandidates(LithTechMesh mesh, LithTechObjExportSource source)
     {
         var yielded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
