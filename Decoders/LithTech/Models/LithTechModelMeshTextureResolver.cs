@@ -107,7 +107,8 @@ internal static class LithTechModelMeshTextureResolver
         MeshTextureIndex index = IndexCache.GetValue(root, BuildIndex);
         if (index.UniqueDtxByBaseName.Count == 0 &&
             index.NumberedModelDtxByFamily.Count == 0 &&
-            index.UniqueUccModelDtxByBaseName.Count == 0)
+            index.UniqueUccModelDtxByBaseName.Count == 0 &&
+            index.UniqueUccObjectDtxByBaseName.Count == 0)
         {
             return null;
         }
@@ -241,6 +242,7 @@ internal static class LithTechModelMeshTextureResolver
 
         var uniqueDtxByBaseName = new Dictionary<string, DtxCandidate>(StringComparer.OrdinalIgnoreCase);
         var uniqueUccModelDtxByBaseName = new Dictionary<string, DtxCandidate>(StringComparer.OrdinalIgnoreCase);
+        var uniqueUccObjectDtxByBaseName = new Dictionary<string, DtxCandidate>(StringComparer.OrdinalIgnoreCase);
         foreach (var pair in texturesByBaseName)
         {
             var uccModelVersions = pair.Value
@@ -258,6 +260,26 @@ internal static class LithTechModelMeshTextureResolver
                     uniqueUccModelDtxByBaseName[uccTextureBaseName] = new DtxCandidate(
                         uccOutputPath,
                         uccModelVersion.Key,
+                        GetContextTokens(uccTextureBaseName));
+                }
+            }
+
+            var uccObjectVersions = pair.Value
+                .Where(version =>
+                    (version.Key.StartsWith("UCC/ModelAssets/UCC_Textures/Object/", StringComparison.OrdinalIgnoreCase) ||
+                     version.Key.Contains("/UCC/ModelAssets/UCC_Textures/Object/", StringComparison.OrdinalIgnoreCase)) &&
+                    version.Value.FileExtension.Equals("dtx", StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (uccObjectVersions.Length == 1)
+            {
+                var uccObjectVersion = uccObjectVersions[0];
+                string uccOutputPath = NormalizePath(uccObjectVersion.Value.OutputRelativePath);
+                if (uccOutputPath.Length > 0)
+                {
+                    string uccTextureBaseName = Path.GetFileNameWithoutExtension(uccObjectVersion.Key);
+                    uniqueUccObjectDtxByBaseName[uccTextureBaseName] = new DtxCandidate(
+                        uccOutputPath,
+                        uccObjectVersion.Key,
                         GetContextTokens(uccTextureBaseName));
                 }
             }
@@ -398,6 +420,7 @@ internal static class LithTechModelMeshTextureResolver
             uniqueDtxByBaseName,
             uniqueModelFolderDtxByNormalizedBaseName,
             uniqueUccModelDtxByBaseName,
+            uniqueUccObjectDtxByBaseName,
             numberedModelDtxByFamily,
             verifiedMotionBaseStemsByModelPath,
             modelItemsByPath,
@@ -862,6 +885,9 @@ internal static class LithTechModelMeshTextureResolver
             meshName,
             textureBaseName => index.UniqueUccModelDtxByBaseName.TryGetValue(textureBaseName, out DtxCandidate? candidate)
                 ? candidate.OutputPath
+                : null,
+            textureBaseName => index.UniqueUccObjectDtxByBaseName.TryGetValue(textureBaseName, out DtxCandidate? candidate)
+                ? candidate.OutputPath
                 : null);
         return string.IsNullOrWhiteSpace(texturePath) ? [] : [texturePath];
     }
@@ -869,11 +895,18 @@ internal static class LithTechModelMeshTextureResolver
     internal static string? ResolveUccModelMeshTexturePath(
         string modelPath,
         string meshName,
-        Func<string, string?> texturePathByBaseName)
+        Func<string, string?> modelTexturePathByBaseName,
+        Func<string, string?> objectTexturePathByBaseName)
     {
         const string UccModelRoot = "UCC/ModelAssets/UCC_Model/";
-        int rootIndex = modelPath.IndexOf(UccModelRoot, StringComparison.OrdinalIgnoreCase);
-        if (rootIndex < 0 ||
+        const string UccObjectRoot = "UCC/ModelAssets/UCC_Object/LTB/";
+        Func<string, string?>? texturePathByBaseName =
+            modelPath.Contains(UccModelRoot, StringComparison.OrdinalIgnoreCase)
+                ? modelTexturePathByBaseName
+                : modelPath.Contains(UccObjectRoot, StringComparison.OrdinalIgnoreCase)
+                    ? objectTexturePathByBaseName
+                    : null;
+        if (texturePathByBaseName is null ||
             !Path.GetExtension(modelPath).Equals(".ltb", StringComparison.OrdinalIgnoreCase))
         {
             return null;
@@ -1734,6 +1767,7 @@ internal static class LithTechModelMeshTextureResolver
         Dictionary<string, DtxCandidate> UniqueDtxByBaseName,
         Dictionary<string, DtxCandidate> UniqueModelFolderDtxByNormalizedBaseName,
         Dictionary<string, DtxCandidate> UniqueUccModelDtxByBaseName,
+        Dictionary<string, DtxCandidate> UniqueUccObjectDtxByBaseName,
         Dictionary<string, Dictionary<int, DtxCandidate>> NumberedModelDtxByFamily,
         Dictionary<string, string> VerifiedMotionBaseStemsByModelPath,
         Dictionary<string, List<ExplorerItem>> ModelItemsByPath,

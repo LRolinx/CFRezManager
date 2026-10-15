@@ -202,6 +202,13 @@ internal static class LithTechModelTextureConfigIndex
         int MeshResolverMappings,
         int ExporterCandidateMappings,
         int SemanticCandidateMappings,
+        int UnresolvedCandidateResourceRows,
+        int OutOfScopeUnresolvedCandidateRows,
+        int ExactTextureResourcePathsProbed,
+        int ExactTextureDecodeAttempts,
+        int ExactTextureResourcePathsDecoded,
+        int ExactTextureResourcePathsFailed,
+        int ExactTextureResourcePathsNotFound,
         int ModelGroupsWithDecodeFailures,
         int NonGeometryLtbResourceGroups,
         int ModelsWithEvidence,
@@ -219,6 +226,9 @@ internal static class LithTechModelTextureConfigIndex
         var meshResolverMappings = 0;
         var exporterCandidateMappings = 0;
         var semanticCandidateMappings = 0;
+        var unresolvedCandidateResourceRows = 0;
+        var outOfScopeUnresolvedCandidateRows = 0;
+        var exactTexturePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var modelGroupsWithDecodeFailures = 0;
         var nonGeometryLtbResourceGroups = 0;
 
@@ -345,8 +355,8 @@ internal static class LithTechModelTextureConfigIndex
             Func<string, int, IReadOnlyList<string>>? inferredTextureSlotResolver = CreateInferredTextureSlotResolver(root);
             Func<string, bool>? slotMappingPresenceResolver = CreateModelTextureSlotMappingPresenceResolver(root);
             var perCopyMeshMappings = new List<Dictionary<string, HashSet<string>>>();
-            var perCopyExporterMappings = new List<Dictionary<string, (string? TexturePath, string? Candidate, int CandidateCount, string? AmbiguousCandidate)>>();
-            var perCopySemanticMappings = new List<Dictionary<string, (string? TexturePath, string? Candidate, int CandidateCount, string? AmbiguousCandidate)>>();
+            var perCopyExporterMappings = new List<Dictionary<string, (string? TexturePath, string? Candidate, int CandidateCount, string? AmbiguousCandidate, string? UndecodedTexturePath, string? UndecodedCandidate)>>();
+            var perCopySemanticMappings = new List<Dictionary<string, (string? TexturePath, string? Candidate, int CandidateCount, string? AmbiguousCandidate, string? UndecodedTexturePath, string? UndecodedCandidate)>>();
             var decodeFailures = new List<string>();
             bool hasDecodeFailure = false;
             var decodedModels = new Dictionary<string, (LithTechModelDocument? Document, string? Error)>(StringComparer.OrdinalIgnoreCase);
@@ -388,14 +398,14 @@ internal static class LithTechModelTextureConfigIndex
                     string physicalPath = modelItem.ArchiveFile?.FullPath ?? modelItem.OutputRelativePath;
                     decodeFailures.Add($"{physicalPath}: {decodeResult.Error ?? "decoder returned no model"}");
                     perCopyMeshMappings.Add(new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase));
-                    perCopyExporterMappings.Add(new Dictionary<string, (string?, string?, int, string?)>(StringComparer.OrdinalIgnoreCase));
-                    perCopySemanticMappings.Add(new Dictionary<string, (string?, string?, int, string?)>(StringComparer.OrdinalIgnoreCase));
+                    perCopyExporterMappings.Add(new Dictionary<string, (string?, string?, int, string?, string?, string?)>(StringComparer.OrdinalIgnoreCase));
+                    perCopySemanticMappings.Add(new Dictionary<string, (string?, string?, int, string?, string?, string?)>(StringComparer.OrdinalIgnoreCase));
                     continue;
                 }
 
                 var copyMappings = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
-                var copyExporterMappings = new Dictionary<string, (string? TexturePath, string? Candidate, int CandidateCount, string? AmbiguousCandidate)>(StringComparer.OrdinalIgnoreCase);
-                var copySemanticMappings = new Dictionary<string, (string? TexturePath, string? Candidate, int CandidateCount, string? AmbiguousCandidate)>(StringComparer.OrdinalIgnoreCase);
+                var copyExporterMappings = new Dictionary<string, (string? TexturePath, string? Candidate, int CandidateCount, string? AmbiguousCandidate, string? UndecodedTexturePath, string? UndecodedCandidate)>(StringComparer.OrdinalIgnoreCase);
+                var copySemanticMappings = new Dictionary<string, (string? TexturePath, string? Candidate, int CandidateCount, string? AmbiguousCandidate, string? UndecodedTexturePath, string? UndecodedCandidate)>(StringComparer.OrdinalIgnoreCase);
                 string resolverModelPath = modelItem.OutputRelativePath.Length > 0
                     ? modelItem.OutputRelativePath
                     : modelItem.Name;
@@ -422,6 +432,8 @@ internal static class LithTechModelTextureConfigIndex
                     string? selectedTexture = null;
                     string? selectedCandidate = null;
                     string? ambiguousCandidate = null;
+                    string? undecodedTexturePath = null;
+                    string? undecodedCandidate = null;
                     foreach (string candidate in exporterCandidates)
                     {
                         string? resolved = ResolveAuditTextureCandidate(index, candidate, out bool isAmbiguous);
@@ -430,6 +442,12 @@ internal static class LithTechModelTextureConfigIndex
                             selectedTexture = resolved ?? NormalizeKey(candidate);
                             selectedCandidate = candidate;
                             break;
+                        }
+
+                        if (resolved is not null && undecodedTexturePath is null)
+                        {
+                            undecodedTexturePath = resolved;
+                            undecodedCandidate = candidate;
                         }
 
                         if (isAmbiguous && ambiguousCandidate is null)
@@ -443,12 +461,16 @@ internal static class LithTechModelTextureConfigIndex
                         selectedTexture,
                         selectedCandidate,
                         exporterCandidates.Length,
-                        ambiguousCandidate);
+                        ambiguousCandidate,
+                        selectedTexture is null ? undecodedTexturePath : null,
+                        selectedTexture is null ? undecodedCandidate : null);
 
                     string[] semanticCandidates = LithTechObjExporter.EnumerateTextureCandidates(mesh, semanticSource).ToArray();
                     string? semanticTexture = null;
                     string? semanticCandidate = null;
                     string? ambiguousSemanticCandidate = null;
+                    string? undecodedSemanticTexturePath = null;
+                    string? undecodedSemanticCandidate = null;
                     foreach (string candidate in semanticCandidates)
                     {
                         string? resolved = ResolveAuditTextureCandidate(index, candidate, out bool isAmbiguous);
@@ -457,6 +479,12 @@ internal static class LithTechModelTextureConfigIndex
                             semanticTexture = resolved ?? NormalizeKey(candidate);
                             semanticCandidate = candidate;
                             break;
+                        }
+
+                        if (resolved is not null && undecodedSemanticTexturePath is null)
+                        {
+                            undecodedSemanticTexturePath = resolved;
+                            undecodedSemanticCandidate = candidate;
                         }
 
                         if (isAmbiguous && ambiguousSemanticCandidate is null)
@@ -469,7 +497,9 @@ internal static class LithTechModelTextureConfigIndex
                         semanticTexture,
                         semanticCandidate,
                         semanticCandidates.Length,
-                        ambiguousSemanticCandidate);
+                        ambiguousSemanticCandidate,
+                        semanticTexture is null ? undecodedSemanticTexturePath : null,
+                        semanticTexture is null ? undecodedSemanticCandidate : null);
 
                     int[] meshSlots = (mesh.TextureSlotIndices ?? []).Distinct().ToArray();
                     if (meshSlots.Length == 0)
@@ -627,16 +657,18 @@ internal static class LithTechModelTextureConfigIndex
                 }
 
                 string meshName = meshKey[(separator + 1)..];
-                (string? TexturePath, string? Candidate, int CandidateCount, string? AmbiguousCandidate)? reference = null;
+                (string? TexturePath, string? Candidate, int CandidateCount, string? AmbiguousCandidate, string? UndecodedTexturePath, string? UndecodedCandidate)? reference = null;
                 bool copiesAgree = !hasDecodeFailure && perCopyExporterMappings.Count == group.Count();
                 var allTextures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (Dictionary<string, (string? TexturePath, string? Candidate, int CandidateCount, string? AmbiguousCandidate)> copy in perCopyExporterMappings)
+                var allUndecodedTextures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (Dictionary<string, (string? TexturePath, string? Candidate, int CandidateCount, string? AmbiguousCandidate, string? UndecodedTexturePath, string? UndecodedCandidate)> copy in perCopyExporterMappings)
                 {
                     var current = copy.TryGetValue(meshKey, out var found)
                         ? found
-                        : (null, null, 0, null);
+                        : (null, null, 0, null, null, null);
                     reference ??= current;
-                    if (!string.Equals(reference.Value.TexturePath, current.TexturePath, StringComparison.OrdinalIgnoreCase))
+                    if (!string.Equals(reference.Value.TexturePath, current.TexturePath, StringComparison.OrdinalIgnoreCase) ||
+                        !string.Equals(reference.Value.UndecodedTexturePath, current.UndecodedTexturePath, StringComparison.OrdinalIgnoreCase))
                     {
                         copiesAgree = false;
                     }
@@ -645,7 +677,14 @@ internal static class LithTechModelTextureConfigIndex
                     {
                         allTextures.Add(current.TexturePath);
                     }
+
+                    if (current.UndecodedTexturePath is not null)
+                    {
+                        allUndecodedTextures.Add(current.UndecodedTexturePath);
+                    }
                 }
+
+                exactTexturePaths.UnionWith(allUndecodedTextures);
 
                 string status = hasDecodeFailure
                     ? "model-copy-decode-failed"
@@ -655,12 +694,28 @@ internal static class LithTechModelTextureConfigIndex
                             ? "ambiguous"
                             : allTextures.Count == 1
                                 ? "candidate-texture-decodes"
+                                : allUndecodedTextures.Count > 1
+                                    ? allUndecodedTextures.All(IsTextureInModelDecodeScope)
+                                        ? "ambiguous-unresolved-candidates"
+                                        : "multiple-existing-candidates-not-resolved"
+                                    : allUndecodedTextures.Count == 1
+                                        ? IsTextureInModelDecodeScope(allUndecodedTextures.Single())
+                                            ? "candidate-resource-present-unresolved"
+                                            : "candidate-resource-present-unresolved-outside-model-texture-scope"
                                 : reference?.AmbiguousCandidate is not null
                                     ? "ambiguous-candidate-resource"
                                     : "no-exporter-candidate-match";
                 if (status == "candidate-texture-decodes")
                 {
                     exporterCandidateMappings++;
+                }
+                else if (status == "candidate-resource-present-unresolved" || status == "ambiguous-unresolved-candidates")
+                {
+                    unresolvedCandidateResourceRows++;
+                }
+                else if (status == "candidate-resource-present-unresolved-outside-model-texture-scope" || status == "multiple-existing-candidates-not-resolved")
+                {
+                    outOfScopeUnresolvedCandidateRows++;
                 }
 
                 string exportDetail = $"mesh_index={meshIndex.ToString(CultureInfo.InvariantCulture)};candidate_count={(reference?.CandidateCount ?? 0).ToString(CultureInfo.InvariantCulture)}";
@@ -672,15 +727,24 @@ internal static class LithTechModelTextureConfigIndex
                 {
                     exportDetail += $";ambiguous_candidate={reference.Value.AmbiguousCandidate}";
                 }
+                if (reference?.UndecodedCandidate is not null)
+                {
+                    string decodeScope = IsTextureInModelDecodeScope(reference.Value.UndecodedTexturePath!)
+                        ? "model-texture"
+                        : "outside-model-texture";
+                    exportDetail += $";unresolved_candidate={reference.Value.UndecodedCandidate};texture_resolver_invoked=true;resolver_result=unresolved;image_decode=unconfirmed;decode_scope={decodeScope}";
+                }
 
-                if (allTextures.Count == 0)
+                var exportOutputTextures = new HashSet<string>(allTextures, StringComparer.OrdinalIgnoreCase);
+                exportOutputTextures.UnionWith(allUndecodedTextures);
+                if (exportOutputTextures.Count == 0)
                 {
                     WriteAuditRow(group.Key, meshName, "mesh-export", string.Empty, null, string.Empty,
                         "exporter-first-existing-candidate", status, group.Count(), exportDetail);
                 }
                 else
                 {
-                    foreach (string texture in allTextures.Order(StringComparer.OrdinalIgnoreCase))
+                    foreach (string texture in exportOutputTextures.Order(StringComparer.OrdinalIgnoreCase))
                     {
                         WriteAuditRow(group.Key, meshName, "mesh-export", string.Empty, null, texture,
                             "exporter-first-existing-candidate", status, group.Count(), exportDetail);
@@ -704,16 +768,18 @@ internal static class LithTechModelTextureConfigIndex
                 }
 
                 string meshName = meshKey[(separator + 1)..];
-                (string? TexturePath, string? Candidate, int CandidateCount, string? AmbiguousCandidate)? reference = null;
+                (string? TexturePath, string? Candidate, int CandidateCount, string? AmbiguousCandidate, string? UndecodedTexturePath, string? UndecodedCandidate)? reference = null;
                 bool copiesAgree = !hasDecodeFailure && perCopySemanticMappings.Count == group.Count();
                 var allTextures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (Dictionary<string, (string? TexturePath, string? Candidate, int CandidateCount, string? AmbiguousCandidate)> copy in perCopySemanticMappings)
+                var allUndecodedTextures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (Dictionary<string, (string? TexturePath, string? Candidate, int CandidateCount, string? AmbiguousCandidate, string? UndecodedTexturePath, string? UndecodedCandidate)> copy in perCopySemanticMappings)
                 {
                     var current = copy.TryGetValue(meshKey, out var found)
                         ? found
-                        : (null, null, 0, null);
+                        : (null, null, 0, null, null, null);
                     reference ??= current;
-                    if (!string.Equals(reference.Value.TexturePath, current.TexturePath, StringComparison.OrdinalIgnoreCase))
+                    if (!string.Equals(reference.Value.TexturePath, current.TexturePath, StringComparison.OrdinalIgnoreCase) ||
+                        !string.Equals(reference.Value.UndecodedTexturePath, current.UndecodedTexturePath, StringComparison.OrdinalIgnoreCase))
                     {
                         copiesAgree = false;
                     }
@@ -722,7 +788,14 @@ internal static class LithTechModelTextureConfigIndex
                     {
                         allTextures.Add(current.TexturePath);
                     }
+
+                    if (current.UndecodedTexturePath is not null)
+                    {
+                        allUndecodedTextures.Add(current.UndecodedTexturePath);
+                    }
                 }
+
+                exactTexturePaths.UnionWith(allUndecodedTextures);
 
                 string status = hasDecodeFailure
                     ? "model-copy-decode-failed"
@@ -732,6 +805,14 @@ internal static class LithTechModelTextureConfigIndex
                             ? "ambiguous"
                             : allTextures.Count == 1
                                 ? "semantic-candidate-decodes"
+                                : allUndecodedTextures.Count > 1
+                                    ? allUndecodedTextures.All(IsTextureInModelDecodeScope)
+                                        ? "ambiguous-unresolved-candidates"
+                                        : "multiple-existing-candidates-not-resolved"
+                                    : allUndecodedTextures.Count == 1
+                                        ? IsTextureInModelDecodeScope(allUndecodedTextures.Single())
+                                            ? "candidate-resource-present-unresolved"
+                                            : "candidate-resource-present-unresolved-outside-model-texture-scope"
                                 : reference?.AmbiguousCandidate is not null
                                     ? "ambiguous-candidate-resource"
                                     : "no-semantic-candidate-match";
@@ -744,6 +825,14 @@ internal static class LithTechModelTextureConfigIndex
                 {
                     ambiguousMappings++;
                 }
+                else if (status == "candidate-resource-present-unresolved" || status == "ambiguous-unresolved-candidates")
+                {
+                    unresolvedCandidateResourceRows++;
+                }
+                else if (status == "candidate-resource-present-unresolved-outside-model-texture-scope" || status == "multiple-existing-candidates-not-resolved")
+                {
+                    outOfScopeUnresolvedCandidateRows++;
+                }
 
                 string semanticDetail = $"mesh_index={meshIndex.ToString(CultureInfo.InvariantCulture)};candidate_count={(reference?.CandidateCount ?? 0).ToString(CultureInfo.InvariantCulture)};global_config_fallback=disabled";
                 if (reference?.Candidate is not null)
@@ -754,15 +843,24 @@ internal static class LithTechModelTextureConfigIndex
                 {
                     semanticDetail += $";ambiguous_candidate={reference.Value.AmbiguousCandidate}";
                 }
+                if (reference?.UndecodedCandidate is not null)
+                {
+                    string decodeScope = IsTextureInModelDecodeScope(reference.Value.UndecodedTexturePath!)
+                        ? "model-texture"
+                        : "outside-model-texture";
+                    semanticDetail += $";unresolved_candidate={reference.Value.UndecodedCandidate};texture_resolver_invoked=true;resolver_result=unresolved;image_decode=unconfirmed;decode_scope={decodeScope}";
+                }
 
-                if (allTextures.Count == 0)
+                var semanticOutputTextures = new HashSet<string>(allTextures, StringComparer.OrdinalIgnoreCase);
+                semanticOutputTextures.UnionWith(allUndecodedTextures);
+                if (semanticOutputTextures.Count == 0)
                 {
                     WriteAuditRow(group.Key, meshName, "mesh-semantic", string.Empty, null, string.Empty,
                         "exporter-candidate-without-global-config", status, group.Count(), semanticDetail);
                 }
                 else
                 {
-                    foreach (string texture in allTextures.Order(StringComparer.OrdinalIgnoreCase))
+                    foreach (string texture in semanticOutputTextures.Order(StringComparer.OrdinalIgnoreCase))
                     {
                         WriteAuditRow(group.Key, meshName, "mesh-semantic", string.Empty, null, texture,
                             "exporter-candidate-without-global-config", status, group.Count(), semanticDetail);
@@ -814,6 +912,74 @@ internal static class LithTechModelTextureConfigIndex
             }
         }
 
+        var exactResourceItems = new Dictionary<string, List<ExplorerItem>>(StringComparer.OrdinalIgnoreCase);
+        foreach (ExplorerItem item in EnumerateFiles(root))
+        {
+            if (!TextureExtensions.Contains("." + item.FileExtension.TrimStart('.'), StringComparer.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            string itemOutputPath = NormalizeKey(item.OutputRelativePath);
+            string resourcePath = NormalizeKey(item.ArchiveFile?.FullPath ?? item.OutputRelativePath);
+            if (itemOutputPath.Length > 0 && exactTexturePaths.Contains(itemOutputPath))
+            {
+                AddExactResourceItem(itemOutputPath, item);
+            }
+
+            if (resourcePath.Length > 0 &&
+                !string.Equals(resourcePath, itemOutputPath, StringComparison.OrdinalIgnoreCase) &&
+                exactTexturePaths.Contains(resourcePath))
+            {
+                AddExactResourceItem(resourcePath, item);
+            }
+        }
+
+        int exactCandidateResourceDecodeAttempts = 0;
+        int exactCandidateResourcePathsDecoded = 0;
+        int exactCandidateResourcePathsFailed = 0;
+        int exactCandidateResourcePathsNotFound = 0;
+        foreach (string texturePath in exactTexturePaths.Order(StringComparer.OrdinalIgnoreCase))
+        {
+            if (!exactResourceItems.TryGetValue(texturePath, out List<ExplorerItem>? items) || items.Count == 0)
+            {
+                exactCandidateResourcePathsNotFound++;
+                WriteAuditRow(string.Empty, string.Empty, "texture-path-decode-probe", string.Empty, null, texturePath,
+                    "exact-resource-path", "exact-resource-path-not-found", null, "texture_resource_indexed=true;physical_items=0");
+                continue;
+            }
+
+            int decodableCopies = 0;
+            foreach (ExplorerItem item in items)
+            {
+                exactCandidateResourceDecodeAttempts++;
+                if (LithTechModelTextureLoader.TryDecodeTextureItem(item))
+                {
+                    decodableCopies++;
+                }
+            }
+
+            string probeStatus = decodableCopies == 0
+                ? "exact-resource-decode-failed-all-copies"
+                : decodableCopies == items.Count
+                    ? "exact-resource-decodes-all-copies"
+                    : "exact-resource-decodes-some-copies";
+            if (decodableCopies > 0)
+            {
+                exactCandidateResourcePathsDecoded++;
+            }
+            else
+            {
+                exactCandidateResourcePathsFailed++;
+            }
+
+            string copyDetails = string.Join('|', items.Select((item, index) =>
+                $"copy{index + 1}={NormalizeKey(item.OutputRelativePath)}#{item.ArchiveFile?.Md5 ?? "local"}"));
+            string detail = $"texture_resource_indexed=true;physical_items={items.Count.ToString(CultureInfo.InvariantCulture)};decode_attempts={items.Count.ToString(CultureInfo.InvariantCulture)};decodable_copies={decodableCopies.ToString(CultureInfo.InvariantCulture)};{copyDetails}";
+            WriteAuditRow(string.Empty, string.Empty, "texture-path-decode-probe", string.Empty, null, texturePath,
+                "exact-resource-path", probeStatus, items.Count, detail);
+        }
+
         return (
             rows,
             slotMappings,
@@ -822,10 +988,31 @@ internal static class LithTechModelTextureConfigIndex
             meshResolverMappings,
             exporterCandidateMappings,
             semanticCandidateMappings,
+            unresolvedCandidateResourceRows,
+            outOfScopeUnresolvedCandidateRows,
+            exactTexturePaths.Count,
+            exactCandidateResourceDecodeAttempts,
+            exactCandidateResourcePathsDecoded,
+            exactCandidateResourcePathsFailed,
+            exactCandidateResourcePathsNotFound,
             modelGroupsWithDecodeFailures,
             nonGeometryLtbResourceGroups,
             modelsWithEvidence,
             modelsWithoutEvidence);
+
+        void AddExactResourceItem(string path, ExplorerItem item)
+        {
+            if (!exactResourceItems.TryGetValue(path, out List<ExplorerItem>? items))
+            {
+                items = [];
+                exactResourceItems.Add(path, items);
+            }
+
+            if (!items.Contains(item))
+            {
+                items.Add(item);
+            }
+        }
 
         string? ResolveAuditTextureCandidate(TextureConfigIndex textureIndex, string candidate, out bool ambiguous)
         {
@@ -867,6 +1054,13 @@ internal static class LithTechModelTextureConfigIndex
             }
 
             return null;
+        }
+
+        static bool IsTextureInModelDecodeScope(string texturePath)
+        {
+            return LithTechResourceHeuristics.IsLikelyModelTexturePath(
+                texturePath,
+                Path.GetExtension(texturePath));
         }
 
         void WriteSlotDictionary(
@@ -924,6 +1118,11 @@ internal static class LithTechModelTextureConfigIndex
             if (!string.IsNullOrWhiteSpace(texturePath))
             {
                 resolvedTexturePath = ResolveAuditTextureCandidate(index, texturePath, out ambiguousTextureReference);
+                if (resolvedTexturePath is null &&
+                    TextureExtensions.Contains(Path.GetExtension(texturePath), StringComparer.OrdinalIgnoreCase))
+                {
+                    exactTexturePaths.Add(texturePath);
+                }
             }
 
             if (string.IsNullOrWhiteSpace(texturePath))

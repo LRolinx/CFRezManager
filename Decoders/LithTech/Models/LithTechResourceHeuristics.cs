@@ -67,7 +67,10 @@ internal static class LithTechResourceHeuristics
             return false;
         }
 
-        return normalized.Contains("/ModelTextures/", StringComparison.OrdinalIgnoreCase) ||
+        return normalized.StartsWith("ModelTextures/", StringComparison.OrdinalIgnoreCase) ||
+               normalized.Contains("/ModelTextures/", StringComparison.OrdinalIgnoreCase) ||
+               normalized.StartsWith("UCC/ModelAssets/UCC_Textures/", StringComparison.OrdinalIgnoreCase) ||
+               normalized.Contains("/UCC/ModelAssets/UCC_Textures/", StringComparison.OrdinalIgnoreCase) ||
                normalized.Contains("/Models/", StringComparison.OrdinalIgnoreCase) ||
                normalized.Contains("/RF017/", StringComparison.OrdinalIgnoreCase) ||
                normalized.Contains("/FX/", StringComparison.OrdinalIgnoreCase) ||

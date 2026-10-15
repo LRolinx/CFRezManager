@@ -674,6 +674,11 @@ internal static class LithTechModelTextureLoader
         return null;
     }
 
+    internal static bool TryDecodeTextureItem(ExplorerItem item)
+    {
+        return TryReadTextureItem(item) is not null;
+    }
+
     private static ImageSource? TryReadLocalTexture(string filePath)
     {
         try
