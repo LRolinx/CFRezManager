@@ -174,6 +174,7 @@ internal static class LithTechTextureMapAuditCommand
         }
 
         var physicalItems = new Dictionary<string, List<ExplorerItem>>(StringComparer.OrdinalIgnoreCase);
+        var availableTexturePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var pending = new Stack<ExplorerItem>();
         pending.Push(root);
         while (pending.Count > 0)
@@ -181,6 +182,8 @@ internal static class LithTechTextureMapAuditCommand
             ExplorerItem item = pending.Pop();
             if (item.IsFile && textureExtensions.Contains("." + item.FileExtension.TrimStart('.'), StringComparer.OrdinalIgnoreCase))
             {
+                availableTexturePaths.Add(LithTechResourceHeuristics.NormalizeResourcePath(
+                    item.ArchiveFile?.FullPath ?? item.OutputRelativePath));
                 AddPhysicalItem(item.OutputRelativePath, item);
                 AddPhysicalItem(item.ArchiveFile?.FullPath ?? item.OutputRelativePath, item);
             }
@@ -191,9 +194,26 @@ internal static class LithTechTextureMapAuditCommand
             }
         }
 
+        var texturePathsByInitial = new Dictionary<char, HashSet<string>>();
+        var texturePathsBySecond = new Dictionary<char, HashSet<string>>();
+        foreach (string texturePath in availableTexturePaths)
+        {
+            string stem = NormalizeTextureStem(Path.GetFileNameWithoutExtension(texturePath));
+            if (stem.Length == 0)
+            {
+                continue;
+            }
+
+            AddToIndex(texturePathsByInitial, stem[0], texturePath);
+            if (stem.Length > 1)
+            {
+                AddToIndex(texturePathsBySecond, stem[1], texturePath);
+            }
+        }
+
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
         using var writer = new StreamWriter(outputPath, false, new UTF8Encoding(true));
-        writer.WriteLine("texture_path\treference_rows\tphysical_copies\tdecode_attempts\tdecodable_copies\tstatus\tcopy_sources");
+        writer.WriteLine("texture_path\treference_rows\tphysical_copies\tdecode_attempts\tdecodable_copies\tstatus\tcopy_sources\tnear_name_candidates");
         int copiesTested = 0;
         int decodedPaths = 0;
         int partiallyDecodedPaths = 0;
@@ -206,7 +226,8 @@ internal static class LithTechTextureMapAuditCommand
             if (!physicalItems.TryGetValue(texturePath, out List<ExplorerItem>? items) || items.Count == 0)
             {
                 notFoundPaths++;
-                writer.WriteLine($"{texturePath}\t{referenceRows[texturePath].ToString(CultureInfo.InvariantCulture)}\t0\t0\t0\ttexture-path-not-found\t");
+                string nearNameCandidates = FindNearNameCandidates(texturePath);
+                writer.WriteLine($"{texturePath}\t{referenceRows[texturePath].ToString(CultureInfo.InvariantCulture)}\t0\t0\t0\ttexture-path-not-found\t\t{nearNameCandidates}");
                 continue;
             }
 
@@ -248,7 +269,7 @@ internal static class LithTechTextureMapAuditCommand
             }
 
             writer.WriteLine(
-                $"{texturePath}\t{referenceRows[texturePath].ToString(CultureInfo.InvariantCulture)}\t{items.Count.ToString(CultureInfo.InvariantCulture)}\t{items.Count.ToString(CultureInfo.InvariantCulture)}\t{decodableCopies.ToString(CultureInfo.InvariantCulture)}\t{status}\t{string.Join(" | ", copyDetails)}");
+                $"{texturePath}\t{referenceRows[texturePath].ToString(CultureInfo.InvariantCulture)}\t{items.Count.ToString(CultureInfo.InvariantCulture)}\t{items.Count.ToString(CultureInfo.InvariantCulture)}\t{decodableCopies.ToString(CultureInfo.InvariantCulture)}\t{status}\t{string.Join(" | ", copyDetails)}\t");
 
             if (pathIndex % 500 == 0)
             {
@@ -278,6 +299,108 @@ internal static class LithTechTextureMapAuditCommand
                 items.Add(item);
             }
         }
+
+        string FindNearNameCandidates(string missingPath)
+        {
+            string missingStem = NormalizeTextureStem(Path.GetFileNameWithoutExtension(missingPath));
+            if (missingStem.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (texturePathsByInitial.TryGetValue(missingStem[0], out HashSet<string>? initialMatches))
+            {
+                candidates.UnionWith(initialMatches);
+            }
+
+            if (missingStem.Length > 1 && texturePathsBySecond.TryGetValue(missingStem[1], out HashSet<string>? secondMatches))
+            {
+                candidates.UnionWith(secondMatches);
+            }
+
+            int maxDistance = Math.Max(2, Math.Min(6, (missingStem.Length + 4) / 5));
+            string extension = Path.GetExtension(missingPath);
+            return string.Join(" || ", candidates
+                .Where(candidate => string.Equals(Path.GetExtension(candidate), extension, StringComparison.OrdinalIgnoreCase))
+                .Select(candidate => (Path: candidate, Stem: NormalizeTextureStem(Path.GetFileNameWithoutExtension(candidate))))
+                .Select(candidate => (candidate.Path, candidate.Stem, Distance: GetEditDistance(missingStem, candidate.Stem)))
+                .Where(candidate => candidate.Distance <= maxDistance &&
+                    (candidate.Distance == 0 || GetLongestCommonSubstringLength(missingStem, candidate.Stem) >= 5))
+                .OrderBy(candidate => candidate.Distance)
+                .ThenBy(candidate => candidate.Path, StringComparer.OrdinalIgnoreCase)
+                .Take(8)
+                .Select(candidate => $"d{candidate.Distance}:{candidate.Path}"));
+        }
+
+        static void AddToIndex(Dictionary<char, HashSet<string>> index, char key, string path)
+        {
+            if (!index.TryGetValue(key, out HashSet<string>? paths))
+            {
+                paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                index.Add(key, paths);
+            }
+
+            paths.Add(path);
+        }
+    }
+
+    private static string NormalizeTextureStem(string value)
+    {
+        return new string(value.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+    }
+
+    private static int GetEditDistance(string left, string right)
+    {
+        if (left.Length > right.Length)
+        {
+            (left, right) = (right, left);
+        }
+
+        var previous = new int[left.Length + 1];
+        var current = new int[left.Length + 1];
+        for (int column = 0; column <= left.Length; column++)
+        {
+            previous[column] = column;
+        }
+
+        for (int row = 1; row <= right.Length; row++)
+        {
+            current[0] = row;
+            for (int column = 1; column <= left.Length; column++)
+            {
+                int substitutionCost = left[column - 1] == right[row - 1] ? 0 : 1;
+                current[column] = Math.Min(
+                    Math.Min(current[column - 1] + 1, previous[column] + 1),
+                    previous[column - 1] + substitutionCost);
+            }
+
+            (previous, current) = (current, previous);
+        }
+
+        return previous[left.Length];
+    }
+
+    private static int GetLongestCommonSubstringLength(string left, string right)
+    {
+        var previous = new int[right.Length + 1];
+        var current = new int[right.Length + 1];
+        int longest = 0;
+        for (int leftIndex = 1; leftIndex <= left.Length; leftIndex++)
+        {
+            current[0] = 0;
+            for (int rightIndex = 1; rightIndex <= right.Length; rightIndex++)
+            {
+                current[rightIndex] = left[leftIndex - 1] == right[rightIndex - 1]
+                    ? previous[rightIndex - 1] + 1
+                    : 0;
+                longest = Math.Max(longest, current[rightIndex]);
+            }
+
+            (previous, current) = (current, previous);
+        }
+
+        return longest;
     }
 
     private static bool TryReadOptionValue(string[] args, ref int index, string optionName, out string? value)
