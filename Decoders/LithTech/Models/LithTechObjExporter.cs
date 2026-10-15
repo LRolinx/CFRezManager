@@ -18,7 +18,9 @@ internal sealed record LithTechObjExportSource(
     Func<string, string, int, string, IReadOnlyList<string>>? MeshTextureResolver = null,
     string? TextureContext = null,
     Func<string, string, int, IReadOnlyList<string>>? TextureContextSlotResolver = null,
-    Func<string, bool>? ModelTextureSlotMappingPresenceResolver = null);
+    Func<string, bool>? ModelTextureSlotMappingPresenceResolver = null,
+    Func<string, int, IReadOnlyList<string>>? InferredTextureSlotResolver = null,
+    Func<string, string, int, IReadOnlyList<string>>? InferredTextureContextSlotResolver = null);
 
 internal sealed record LithTechObjExportResult(
     string ObjPath,
@@ -340,6 +342,20 @@ internal static class LithTechObjExporter
                 ? source.TextureContextSlotResolver!(modelReference, source.TextureContext!, skinSlotIndex)
                 : modelSlotResolver?.Invoke(modelReference, skinSlotIndex) ?? [];
             string resolverName = useContextBinding ? "context-slot" : modelSlotResolver is null ? "unmapped" : "model-slot";
+            if (references.Count == 0)
+            {
+                IReadOnlyList<string> inferredReferences = useContextBinding
+                    ? source.InferredTextureContextSlotResolver?.Invoke(
+                          modelReference,
+                          source.TextureContext!,
+                          skinSlotIndex) ?? []
+                    : source.InferredTextureSlotResolver?.Invoke(modelReference, skinSlotIndex) ?? [];
+                if (inferredReferences.Count > 0)
+                {
+                    references = inferredReferences;
+                    resolverName = "cft-body-face-derived";
+                }
+            }
 
             if (references.Count == 0)
             {
@@ -591,7 +607,19 @@ internal static class LithTechObjExporter
         {
             foreach (int slotIndex in (mesh.TextureSlotIndices ?? []).Distinct())
             {
-                foreach (string slotTexture in source.TextureContextSlotResolver(slotModelReference, source.TextureContext, slotIndex))
+                IReadOnlyList<string> slotTextures = source.TextureContextSlotResolver(
+                    slotModelReference,
+                    source.TextureContext,
+                    slotIndex);
+                if (slotTextures.Count == 0)
+                {
+                    slotTextures = source.InferredTextureContextSlotResolver?.Invoke(
+                        slotModelReference,
+                        source.TextureContext,
+                        slotIndex) ?? [];
+                }
+
+                foreach (string slotTexture in slotTextures)
                 {
                     if (yielded.Add(slotTexture))
                     {
@@ -612,7 +640,37 @@ internal static class LithTechObjExporter
         {
             foreach (int slotIndex in (mesh.TextureSlotIndices ?? []).Distinct())
             {
-                foreach (string slotTexture in source.TextureSlotResolver(slotModelReference, slotIndex))
+                IReadOnlyList<string> slotTextures = source.TextureSlotResolver(slotModelReference, slotIndex);
+                if (slotTextures.Count == 0)
+                {
+                    slotTextures = source.InferredTextureSlotResolver?.Invoke(slotModelReference, slotIndex) ?? [];
+                }
+
+                foreach (string slotTexture in slotTextures)
+                {
+                    if (yielded.Add(slotTexture))
+                    {
+                        yield return slotTexture;
+                    }
+
+                    foreach (string candidate in ExpandTextureNameCandidates(slotTexture))
+                    {
+                        if (yielded.Add(candidate))
+                        {
+                            yield return candidate;
+                        }
+                    }
+                }
+            }
+        }
+
+        if ((source.TextureContextSlotResolver is null || string.IsNullOrWhiteSpace(source.TextureContext)) &&
+            source.TextureSlotResolver is null &&
+            source.InferredTextureSlotResolver is not null)
+        {
+            foreach (int slotIndex in (mesh.TextureSlotIndices ?? []).Distinct())
+            {
+                foreach (string slotTexture in source.InferredTextureSlotResolver(slotModelReference, slotIndex))
                 {
                     if (yielded.Add(slotTexture))
                     {

@@ -204,11 +204,16 @@ internal static class LithTechObjExportCommand
         Func<string, ImageSource?>? globalTextureResolver = LithTechModelTextureLoader.CreateGlobalResolver(root);
         Func<IEnumerable<string>, IReadOnlyList<string>>? textureConfigResolver = LithTechModelTextureConfigIndex.CreateResolver(root);
         Func<string, int, IReadOnlyList<string>>? textureSlotResolver = LithTechModelTextureConfigIndex.CreateTextureSlotResolver(root);
+        Func<string, int, IReadOnlyList<string>>? inferredTextureSlotResolver =
+            LithTechModelTextureConfigIndex.CreateInferredTextureSlotResolver(root);
         Func<string, bool>? modelTextureSlotMappingPresenceResolver =
             LithTechModelTextureConfigIndex.CreateModelTextureSlotMappingPresenceResolver(root);
         Func<string, string, int, IReadOnlyList<string>>? textureContextSlotResolver = string.IsNullOrWhiteSpace(options.TextureContext)
             ? null
             : LithTechModelTextureConfigIndex.CreateTextureContextSlotResolver(root);
+        Func<string, string, int, IReadOnlyList<string>>? inferredTextureContextSlotResolver = string.IsNullOrWhiteSpace(options.TextureContext)
+            ? null
+            : LithTechModelTextureConfigIndex.CreateInferredTextureContextSlotResolver(root);
         Func<string, string, int, string, IReadOnlyList<string>>? meshTextureResolver = LithTechModelMeshTextureResolver.CreateResolver(root);
         Func<IEnumerable<string>, IReadOnlyList<string>>? datTextureReferenceResolver = LithTechDatTextureReferenceIndex.CreateResolver(root);
         Func<IEnumerable<string>, IReadOnlyList<string>>? textureReferenceResolver =
@@ -237,7 +242,9 @@ internal static class LithTechObjExportCommand
                     meshTextureResolver,
                     options.TextureContext,
                     textureContextSlotResolver,
-                    modelTextureSlotMappingPresenceResolver));
+                    modelTextureSlotMappingPresenceResolver,
+                    inferredTextureSlotResolver,
+                    inferredTextureContextSlotResolver));
             }
             else
             {

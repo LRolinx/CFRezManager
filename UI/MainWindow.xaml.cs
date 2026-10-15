@@ -993,6 +993,9 @@ public partial class MainWindow : Window
             Func<string, int, IReadOnlyList<string>>? textureSlotResolver = exportRoot is null
                 ? null
                 : await Task.Run(() => LithTechModelTextureConfigIndex.CreateTextureSlotResolver(exportRoot));
+            Func<string, int, IReadOnlyList<string>>? inferredTextureSlotResolver = exportRoot is null
+                ? null
+                : await Task.Run(() => LithTechModelTextureConfigIndex.CreateInferredTextureSlotResolver(exportRoot));
             Func<string, string, int, string, IReadOnlyList<string>>? meshTextureResolver = exportRoot is null
                 ? null
                 : await Task.Run(() => LithTechModelMeshTextureResolver.CreateResolver(exportRoot));
@@ -1020,6 +1023,7 @@ public partial class MainWindow : Window
                 globalTextureResolver,
                 textureReferenceResolver,
                 textureSlotResolver,
+                inferredTextureSlotResolver,
                 meshTextureResolver,
                 progress));
             SetStatus(
@@ -1051,6 +1055,7 @@ public partial class MainWindow : Window
         Func<string, ImageSource?>? globalTextureResolver,
         Func<IEnumerable<string>, IReadOnlyList<string>>? textureConfigResolver,
         Func<string, int, IReadOnlyList<string>>? textureSlotResolver,
+        Func<string, int, IReadOnlyList<string>>? inferredTextureSlotResolver,
         Func<string, string, int, string, IReadOnlyList<string>>? meshTextureResolver,
         IProgress<ModelObjExportProgress> progress)
     {
@@ -1070,7 +1075,8 @@ public partial class MainWindow : Window
                     CreateObjTextureResolver(job.Item, globalTextureResolver),
                     textureConfigResolver,
                     textureSlotResolver,
-                    meshTextureResolver));
+                    meshTextureResolver,
+                    InferredTextureSlotResolver: inferredTextureSlotResolver));
             }
             else
             {
