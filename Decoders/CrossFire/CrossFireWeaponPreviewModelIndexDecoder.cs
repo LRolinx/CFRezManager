@@ -139,10 +139,6 @@ internal static class CrossFireWeaponPreviewModelIndexDecoder
             .ToDictionary(
                 group => group.Key,
                 group => group.Select(model => model.ModelId).Distinct().ToArray());
-        var modelTableGroups = modelEntries
-            .Where(model => model.ModelGroupId > 0)
-            .Select(model => model.ModelGroupId)
-            .ToHashSet();
         var previewModelIdsByGroupAndItem = previewEntries
             .Where(preview => preview.ModelGroupId > 0 && preview.ItemId > 0 && preview.ModelId > 0)
             .GroupBy(preview => (preview.ModelGroupId, preview.ItemId))
@@ -203,8 +199,9 @@ internal static class CrossFireWeaponPreviewModelIndexDecoder
 
         foreach (CrossFireWeaponPreviewEntry preview in previewEntries)
         {
+            var key = (preview.ModelGroupId, preview.ItemId);
             if (preview.ItemId == 0 || preview.ModelGroupId == 0 ||
-                modelTableGroups.Contains(preview.ModelGroupId) ||
+                modelsByGroupAndItem.ContainsKey(key) ||
                 !ltcWeaponIndexIds.Contains(preview.ItemId))
             {
                 continue;
@@ -213,7 +210,7 @@ internal static class CrossFireWeaponPreviewModelIndexDecoder
             if (modelIdsByItem.TryGetValue(preview.ItemId, out uint[]? modelIds) &&
                 modelIds.Any(modelId =>
                     modelId != preview.ItemId &&
-                    (ltcWeaponIndexIds.Contains(modelId) || ltcWeaponLegacyMappingIndexIds.Contains(modelId))))
+                    ltcWeaponIndexIds.Contains(modelId)))
             {
                 continue;
             }
