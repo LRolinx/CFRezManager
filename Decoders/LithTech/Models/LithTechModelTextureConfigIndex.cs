@@ -264,6 +264,74 @@ internal static class LithTechModelTextureConfigIndex
         return (index.LtcItems.Count, documentGroups.Length, decodedDocuments, motionReferences);
     }
 
+    public static (int ResourceCopies, int UniqueDocuments, int DecodedDocuments, int ModelRows)
+        WriteLtcModelTextureReferenceAuditReport(ExplorerItem root, string outputPath)
+    {
+        TextureConfigIndex index = TextureConfigIndexCache.GetValue(root, BuildIndex);
+        IGrouping<string, ExplorerItem>[] documentGroups = index.LtcItems
+            .GroupBy(item => item.ArchiveFile?.Md5 is { Length: > 0 } md5
+                ? "md5:" + md5
+                : "path:" + NormalizeKey(item.OutputRelativePath), StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+        using var writer = new StreamWriter(outputPath, false, new UTF8Encoding(true));
+        writer.WriteLine("source_resources\trow_index\tlegacy_mapping_index\trow_type\tmodel_field\tmodel_reference\ttexture_fields\tauxiliary_texture_references\tidentity_aliases");
+        int decodedDocuments = 0;
+        int modelRows = 0;
+        foreach (IGrouping<string, ExplorerItem> group in documentGroups)
+        {
+            ExplorerItem item = group.First();
+            byte[]? data = TryReadItemBytes(item, MaxLtcBytes);
+            if (data is null ||
+                !CrossFireLtcDecoder.TryDecodeNativeText(
+                    data,
+                    out CrossFireLtcTextDocument? document,
+                    out _) ||
+                document is null)
+            {
+                continue;
+            }
+
+            decodedDocuments++;
+            IReadOnlyList<CrossFireLtcModelTextureMapping> mappings;
+            try
+            {
+                mappings = CrossFireLtcModelTextureMappingDecoder.Extract(document.Text);
+            }
+            catch (InvalidDataException)
+            {
+                continue;
+            }
+
+            string sources = string.Join(" || ", group.Select(source =>
+            {
+                string archive = source.Archive?.FilePath ?? "local";
+                string resource = source.ArchiveFile?.FullPath ?? source.OutputRelativePath;
+                string hash = source.ArchiveFile?.Md5 ?? "local";
+                return $"{archive}:{resource}#{hash}";
+            }).Order(StringComparer.OrdinalIgnoreCase));
+            foreach (CrossFireLtcModelTextureMapping mapping in mappings)
+            {
+                modelRows++;
+                string textures = string.Join(" || ", mapping.TextureFieldReferences
+                    .Select(texture => $"{texture.FieldName}:{texture.Path}"));
+                writer.WriteLine(string.Join("\t", [
+                    EscapeTsv(sources),
+                    mapping.RowIndex.ToString(CultureInfo.InvariantCulture),
+                    mapping.LegacyMappingIndex.ToString(CultureInfo.InvariantCulture),
+                    EscapeTsv(mapping.RowType),
+                    EscapeTsv(mapping.ModelField),
+                    EscapeTsv(mapping.ModelReference),
+                    EscapeTsv(textures),
+                    EscapeTsv(string.Join(" || ", mapping.AuxiliaryTextureReferences)),
+                    EscapeTsv(string.Join(" || ", mapping.IdentityAliases))
+                ]));
+            }
+        }
+
+        return (index.LtcItems.Count, documentGroups.Length, decodedDocuments, modelRows);
+    }
+
     public static (int ResourceCopies, int UniqueDocuments, int DecodedDocuments, int MotionLinks)
         WriteCftMotionReferenceAuditReport(ExplorerItem root, string outputPath)
     {
@@ -334,6 +402,81 @@ internal static class LithTechModelTextureConfigIndex
         }
 
         return (resourceCopies, documentGroups.Length, decodedDocuments, motionLinks);
+    }
+
+    public static (
+        int ResourceCopies,
+        int UniqueDocuments,
+        int DecodedDocuments,
+        int ModelRows,
+        int RelatedModelReferences)
+        WriteCftModelTextureReferenceAuditReport(ExplorerItem root, string outputPath)
+    {
+        TextureConfigIndex index = TextureConfigIndexCache.GetValue(root, BuildIndex);
+        IGrouping<string, TextureConfigItem>[] documentGroups = index.AllItems
+            .Where(item => string.Equals(Path.GetExtension(item.Path), ".cft", StringComparison.OrdinalIgnoreCase))
+            .GroupBy(item => item.Item.ArchiveFile?.Md5 is { Length: > 0 } md5
+                ? "md5:" + md5
+                : "path:" + NormalizeKey(item.Path), StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        int resourceCopies = documentGroups.Sum(group => group.Count());
+        Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+        using var writer = new StreamWriter(outputPath, false, new UTF8Encoding(true));
+        writer.WriteLine("source_resources\trow_index\trecord_id\tmodel_column\tmodel_reference\trelated_model_references\ttexture_fields\tidentity_aliases");
+        int decodedDocuments = 0;
+        int modelRows = 0;
+        int relatedModelReferences = 0;
+        foreach (IGrouping<string, TextureConfigItem> group in documentGroups)
+        {
+            TextureConfigItem configItem = group.First();
+            byte[]? data = TryReadItemBytes(configItem.Item, MaxCftBytes);
+            if (data is null)
+            {
+                continue;
+            }
+
+            decodedDocuments++;
+            IReadOnlyList<CftModelTextureMapping> mappings;
+            try
+            {
+                mappings = CftModelTextureMappingDecoder.Extract(data);
+            }
+            catch (InvalidDataException)
+            {
+                continue;
+            }
+
+            string sources = string.Join(" || ", group.Select(source =>
+            {
+                string archive = source.Item.Archive?.FilePath ?? "local";
+                string resource = source.Item.ArchiveFile?.FullPath ?? source.Item.OutputRelativePath;
+                string hash = source.Item.ArchiveFile?.Md5 ?? "local";
+                return $"{archive}:{resource}#{hash}";
+            }).Order(StringComparer.OrdinalIgnoreCase));
+            foreach (CftModelTextureMapping mapping in mappings.Where(mapping => mapping.HasTypedRowContext))
+            {
+                modelRows++;
+                string[] relatedModels = mapping.RelatedModelReferences?
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray() ?? [];
+                relatedModelReferences += relatedModels.Length;
+                string recordId = mapping.RecordId?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+                string textures = string.Join(" || ", mapping.TextureReferences
+                    .Select(texture => $"{texture.Column}:{texture.Path}"));
+                writer.WriteLine(string.Join("\t", [
+                    EscapeTsv(sources),
+                    mapping.RowIndex.ToString(CultureInfo.InvariantCulture),
+                    recordId,
+                    EscapeTsv(mapping.ModelColumn),
+                    EscapeTsv(mapping.ModelReference),
+                    EscapeTsv(string.Join(" || ", relatedModels)),
+                    EscapeTsv(textures),
+                    EscapeTsv(string.Join(" || ", mapping.IdentityAliases))
+                ]));
+            }
+        }
+
+        return (resourceCopies, documentGroups.Length, decodedDocuments, modelRows, relatedModelReferences);
     }
 
     public static (

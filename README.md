@@ -163,6 +163,8 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 - `--probe-texture-map-paths --audit <审计TSV>`：对已有审计中 `model`、`context` 和 `mesh-slot` 行里的所有唯一贴图路径逐个解码，并测试每个物理副本；输出单独的 TSV，区分全部副本成功、部分副本失败、全副本失败和精确路径不存在。缺失项另列文件名近似的资源路径作为排查线索，不会自动替换映射。需要同时传入 `--root` 与 `--output`。
 - `--inspect-ltc-motion-links`：扫描可解码的 LTC 内容，输出同一 LTC 行中动画模型字段、普通模型字段、贴图字段和身份字段的关联。主审计会把同一行的 `MotionFileName` 按 `SkinFileName` 绑定并保留身份上下文；诊断报告不会推断表外关联。
 - `--inspect-cft-motion-links`：输出 CFT 同一强类型记录中父模型、动作模型、贴图字段和身份字段的关系，帮助检查动作模型槽位继承是否有直接表记录支撑。
+- `--inspect-cft-model-texture-links`：输出所有强类型 CFT 行的模型字段、关联模型、贴图字段和身份别名，用于区分角色、动作、手臂和 Socket 等引用角色。
+- `--inspect-ltc-model-texture-links`：输出 LTC 强类型模型行、纹理字段、辅助贴图引用和身份别名，用于检查武器与玩家视角模型的对应关系。
 - CFT 动作引用即使未写扩展名，也只有在完整逻辑路径对应单一资源扩展名、父子模型均解码成功且实际槽位交集非空时才继承贴图。
 - 动作贴图只从同一强类型记录的主模型字段继承；Socket、手/臂、玩家视角、武器和弹体字段不传给动作模型。
 - 未编号 `SkinFileName` 只会在父子模型所有物理副本均解码并含槽 0，且贴图与父模型已有直接槽 0 映射完全一致时，传给动作模型槽 0；其余皮肤字段仍按明确编号匹配。
