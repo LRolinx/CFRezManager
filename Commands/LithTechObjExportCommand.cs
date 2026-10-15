@@ -44,6 +44,11 @@ internal static class LithTechObjExportCommand
                 Console.WriteLine($"Texture report: {result.TextureReportPath}");
             }
 
+            if (!string.IsNullOrWhiteSpace(result.TextureSlotReportPath))
+            {
+                Console.WriteLine($"Texture slot report: {result.TextureSlotReportPath}");
+            }
+
             if (!string.IsNullOrWhiteSpace(mappingReportPath))
             {
                 Console.WriteLine($"Mapping report: {mappingReportPath}");
@@ -363,6 +368,11 @@ internal static class LithTechObjExportCommand
         if (!string.IsNullOrWhiteSpace(result.TextureReportPath))
         {
             writer.WriteLine($"Texture report: {result.TextureReportPath}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(result.TextureSlotReportPath))
+        {
+            writer.WriteLine($"Texture slot report: {result.TextureSlotReportPath}");
         }
 
         if (!string.IsNullOrWhiteSpace(mappingReportPath))

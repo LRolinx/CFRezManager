@@ -32,7 +32,8 @@ internal sealed record LithTechObjExportResult(
     int TextureCount,
     int TextureReferenceCount,
     int MissingTextureCount,
-    string TextureReportPath);
+    string TextureReportPath,
+    string TextureSlotReportPath);
 
 internal static class LithTechObjExporter
 {
@@ -148,6 +149,7 @@ internal static class LithTechObjExporter
         var exportedTextureByCandidate = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         var exportedTextureByBitmap = new Dictionary<BitmapSource, string>(ReferenceEqualityComparer.Instance);
         var textureReports = new List<ObjTextureReport>();
+        var textureSlotReports = new List<ObjTextureSlotReport>();
         var invalidGeometryMeshes = new List<ObjInvalidMeshReport>();
         ExportTransform transform = CalculateExportTransform(sources);
 
@@ -167,6 +169,17 @@ internal static class LithTechObjExporter
         {
             foreach (LithTechMesh mesh in source.Document.Meshes)
             {
+                textureSlotReports.AddRange(ResolveTextureSlotReports(
+                    mesh,
+                    source,
+                    source.TextureResolver,
+                    outputDirectory,
+                    textureDirectory,
+                    textureDirectoryName,
+                    usedTextureNames,
+                    exportedTextureByCandidate,
+                    exportedTextureByBitmap));
+
                 if (mesh.Vertices.Count == 0 || mesh.TriangleIndices.Count < 3)
                 {
                     continue;
@@ -272,7 +285,9 @@ internal static class LithTechObjExporter
         WriteMaterialLibrary(mtlPath, materials);
         int missingTextureCount = textureReports.Count(report => string.IsNullOrWhiteSpace(report.ExportedRelativePath));
         string textureReportPath = Path.Combine(outputDirectory, $"{baseName}_texture_report.txt");
+        string textureSlotReportPath = Path.Combine(outputDirectory, $"{baseName}_texture_slots.tsv");
         WriteTextureReport(textureReportPath, sources, textureReports, invalidGeometryMeshes);
+        WriteTextureSlotReport(textureSlotReportPath, textureSlotReports);
 
         return new LithTechObjExportResult(
             fullObjPath,
@@ -283,10 +298,89 @@ internal static class LithTechObjExporter
             vertexCount,
             triangleCount,
             invalidGeometryMeshes.Count,
-            materials.Count(material => !string.IsNullOrWhiteSpace(material.TextureRelativePath)),
+            exportedTextureByCandidate.Values
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count(),
             textureReports.Count,
             missingTextureCount,
-            textureReportPath);
+            textureReportPath,
+            textureSlotReportPath);
+    }
+
+    private static IReadOnlyList<ObjTextureSlotReport> ResolveTextureSlotReports(
+        LithTechMesh mesh,
+        LithTechObjExportSource source,
+        Func<string, ImageSource?>? textureResolver,
+        string outputDirectory,
+        string textureDirectory,
+        string textureDirectoryName,
+        HashSet<string> usedTextureNames,
+        Dictionary<string, string?> exportedTextureByCandidate,
+        Dictionary<BitmapSource, string> exportedTextureByBitmap)
+    {
+        IReadOnlyList<int> textureSlots = mesh.TextureSlotIndices ?? [];
+        if (textureSlots.Count == 0)
+        {
+            return [];
+        }
+
+        string modelReference = string.IsNullOrWhiteSpace(source.ResourcePath)
+            ? source.Document.Name
+            : source.ResourcePath;
+        bool useContextBinding = source.TextureContextSlotResolver is not null &&
+                                 !string.IsNullOrWhiteSpace(source.TextureContext);
+        Func<string, int, IReadOnlyList<string>>? modelSlotResolver = source.TextureSlotResolver;
+        var reports = new List<ObjTextureSlotReport>();
+
+        for (int stageIndex = 0; stageIndex < textureSlots.Count; stageIndex++)
+        {
+            int skinSlotIndex = textureSlots[stageIndex];
+            IReadOnlyList<string> references = useContextBinding
+                ? source.TextureContextSlotResolver!(modelReference, source.TextureContext!, skinSlotIndex)
+                : modelSlotResolver?.Invoke(modelReference, skinSlotIndex) ?? [];
+            string resolverName = useContextBinding ? "context-slot" : modelSlotResolver is null ? "unmapped" : "model-slot";
+
+            if (references.Count == 0)
+            {
+                reports.Add(new ObjTextureSlotReport(
+                    source.ResourcePath,
+                    mesh.Name,
+                    source.TextureContext ?? string.Empty,
+                    stageIndex,
+                    skinSlotIndex,
+                    resolverName,
+                    string.Empty,
+                    string.Empty,
+                    mesh.HasTextureCoordinates));
+                continue;
+            }
+
+            foreach (string reference in references.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                string? exportedPath = TryExportTexture(
+                    reference,
+                    textureResolver,
+                    outputDirectory,
+                    textureDirectory,
+                    textureDirectoryName,
+                    usedTextureNames,
+                    exportedTextureByCandidate,
+                    exportedTextureByBitmap);
+                reports.Add(new ObjTextureSlotReport(
+                    source.ResourcePath,
+                    mesh.Name,
+                    source.TextureContext ?? string.Empty,
+                    stageIndex,
+                    skinSlotIndex,
+                    resolverName,
+                    reference,
+                    exportedPath ?? string.Empty,
+                    mesh.HasTextureCoordinates));
+            }
+        }
+
+        return reports;
     }
 
     private static ExportTransform CalculateExportTransform(IReadOnlyList<LithTechObjExportSource> sources)
@@ -2525,6 +2619,44 @@ internal static class LithTechObjExporter
         }
     }
 
+    private static void WriteTextureSlotReport(
+        string reportPath,
+        IReadOnlyList<ObjTextureSlotReport> reports)
+    {
+        using var writer = new StreamWriter(reportPath, false, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        writer.WriteLine("source_path\tmesh_name\ttexture_context\tlocal_stage_index\tglobal_skin_slot\tmapping_source\ttexture_reference\texported_texture_path\texport_status\thas_uv");
+        foreach (ObjTextureSlotReport report in reports)
+        {
+            writer.Write(EscapeTsv(report.SourcePath));
+            writer.Write('\t');
+            writer.Write(EscapeTsv(report.MeshName));
+            writer.Write('\t');
+            writer.Write(EscapeTsv(report.TextureContext));
+            writer.Write('\t');
+            writer.Write(report.LocalStageIndex.ToString(CultureInfo.InvariantCulture));
+            writer.Write('\t');
+            writer.Write(report.GlobalSkinSlot.ToString(CultureInfo.InvariantCulture));
+            writer.Write('\t');
+            writer.Write(EscapeTsv(report.MappingSource));
+            writer.Write('\t');
+            writer.Write(EscapeTsv(report.TextureReference));
+            writer.Write('\t');
+            writer.Write(EscapeTsv(report.ExportedTexturePath));
+            writer.Write('\t');
+            writer.Write(report.ExportStatus);
+            writer.Write('\t');
+            writer.WriteLine(report.HasUv ? "true" : "false");
+        }
+    }
+
+    private static string EscapeTsv(string value)
+    {
+        return value
+            .Replace("\t", "\\t", StringComparison.Ordinal)
+            .Replace("\r", "\\r", StringComparison.Ordinal)
+            .Replace("\n", "\\n", StringComparison.Ordinal);
+    }
+
     private static void WriteMaterialLibrary(string mtlPath, IReadOnlyList<ObjMaterial> materials)
     {
         using var writer = new StreamWriter(mtlPath, false, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
@@ -2668,6 +2800,24 @@ internal static class LithTechObjExporter
         IReadOnlyList<string> InferredCandidates,
         string? ResolvedReference,
         string? ExportedRelativePath);
+
+    private sealed record ObjTextureSlotReport(
+        string SourcePath,
+        string MeshName,
+        string TextureContext,
+        int LocalStageIndex,
+        int GlobalSkinSlot,
+        string MappingSource,
+        string TextureReference,
+        string ExportedTexturePath,
+        bool HasUv)
+    {
+        public string ExportStatus => string.IsNullOrWhiteSpace(TextureReference)
+            ? "unresolved"
+            : string.IsNullOrWhiteSpace(ExportedTexturePath)
+                ? "export-failed"
+                : "exported";
+    }
 
     private sealed record ObjInvalidMeshReport(
         string SourcePath,

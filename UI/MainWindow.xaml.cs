@@ -1098,6 +1098,11 @@ public partial class MainWindow : Window
             return mappingReportPath;
         }
 
+        if (!string.IsNullOrWhiteSpace(result.TextureSlotReportPath))
+        {
+            return result.TextureSlotReportPath;
+        }
+
         return string.IsNullOrWhiteSpace(result.TextureReportPath)
             ? T("NoDiagnosticsReport")
             : result.TextureReportPath;
