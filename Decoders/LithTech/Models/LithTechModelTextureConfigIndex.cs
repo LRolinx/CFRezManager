@@ -1551,6 +1551,8 @@ internal static class LithTechModelTextureConfigIndex
 
                 var rowSlotTextures = new Dictionary<int, string?>();
                 var explicitTextureSlots = new HashSet<int>();
+                bool hasImplicitCharacterBodyTexture = false;
+                string implicitCharacterBodySide = string.Empty;
                 foreach (CftTextureReference texture in mapping.TextureReferences)
                 {
                     if (CftModelTextureMappingDecoder.TryGetTextureSlotIndex(texture.Column, out int slotIndex))
@@ -1586,6 +1588,57 @@ internal static class LithTechModelTextureConfigIndex
                             {
                                 rowSlotTextures[slotIndex] = null;
                             }
+                        }
+                    }
+                    else if (TryGetCharacterCftBodySide(configItem.Path, mapping, texture, out string bodySide))
+                    {
+                        string? existingTexturePath = ResolveExistingTextureReference(
+                            texture.Path,
+                            resourcePaths,
+                            texturePathsByBaseName);
+                        if (existingTexturePath is null)
+                        {
+                            continue;
+                        }
+
+                        const int bodyTextureSlot = 0;
+                        if (modelItemsByPath.TryGetValue(
+                                GetLogicalModelResourcePath(modelResourcePath),
+                                out ExplorerItem[]? characterBodyItems) &&
+                            characterBodyItems is { Length: > 0 })
+                        {
+                            if (!TryGetConsistentLtcModelSlots(
+                                    characterBodyItems,
+                                    decodedModels,
+                                    out int[] characterBodySlots) ||
+                                !characterBodySlots.Contains(bodyTextureSlot))
+                            {
+                                continue;
+                            }
+
+                            AddModelTextureSlotMapping(byModelPath, modelPath, bodyTextureSlot, existingTexturePath);
+                            foreach (string contextKey in GetCftSideContextKeys(configItem.Path, mapping, bodySide))
+                            {
+                                AddModelTextureContextSlotMapping(
+                                    byModelContext,
+                                    modelPath,
+                                    contextKey,
+                                    bodyTextureSlot,
+                                    existingTexturePath);
+                            }
+                        }
+
+                        hasImplicitCharacterBodyTexture = true;
+                        implicitCharacterBodySide = bodySide;
+                        modelsWithSlotSpecificBindings.Add(modelPath);
+
+                        if (!rowSlotTextures.TryGetValue(bodyTextureSlot, out string? existingRowTexture))
+                        {
+                            rowSlotTextures.Add(bodyTextureSlot, existingTexturePath);
+                        }
+                        else if (!string.Equals(existingRowTexture, existingTexturePath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            rowSlotTextures[bodyTextureSlot] = null;
                         }
                     }
                 }
@@ -1688,10 +1741,15 @@ internal static class LithTechModelTextureConfigIndex
                     }
                 }
 
+                ExplorerItem[] baseModelItems = modelItemsByPath.TryGetValue(
+                    GetLogicalModelResourcePath(modelResourcePath),
+                    out ExplorerItem[]? foundBaseModelItems)
+                    ? foundBaseModelItems
+                    : [];
+                bool hasPhysicalParentModels = baseModelItems.Length > 0;
                 if (rowSlotTextures.Count == 0 ||
                     mapping.RelatedModelReferences is not { Count: > 0 } relatedModels ||
-                    !modelItemsByPath.TryGetValue(GetLogicalModelResourcePath(modelResourcePath), out ExplorerItem[]? baseModelItems) ||
-                    baseModelItems.Length == 0)
+                    !hasPhysicalParentModels && !hasImplicitCharacterBodyTexture)
                 {
                     continue;
                 }
@@ -1711,13 +1769,29 @@ internal static class LithTechModelTextureConfigIndex
                         continue;
                     }
 
+                    if (hasImplicitCharacterBodyTexture &&
+                        (!TryGetConsistentLtcModelSlots(relatedModelItems, decodedModels, out int[] relatedSlots) ||
+                         hasPhysicalParentModels && !relatedSlots.Contains(0) ||
+                         !hasPhysicalParentModels && !relatedSlots.SequenceEqual([0])))
+                    {
+                        // Character body fields imply slot 0. With a physical
+                        // parent, require that slot to exist on every decoded
+                        // motion copy; without one, only a single-slot child is
+                        // strong enough evidence for direct same-row binding.
+                        // Other slots on multi-slot motion models stay unmapped.
+                        continue;
+                    }
+
                     bool allRelatedCopiesValidated = relatedModelItems.Length > 0;
                     HashSet<int> validatedSlotSet = rowSlotTextures.Keys.ToHashSet();
                     var parentUsedSlots = new HashSet<int>();
                     var childUsedSlots = new HashSet<int>();
-                    foreach ((ExplorerItem mappedModelItem, string mappedModelPath, bool isChild) in
-                             baseModelItems.Select(item => (item, modelResourcePath, false))
-                                 .Concat(relatedModelItems.Select(item => (item, relatedResourcePath, true))))
+                    IEnumerable<(ExplorerItem Item, string Path, bool IsChild)> modelsToValidate =
+                        (hasPhysicalParentModels
+                            ? baseModelItems.Select(item => (item, modelResourcePath, false))
+                            : Enumerable.Empty<(ExplorerItem Item, string Path, bool IsChild)>())
+                        .Concat(relatedModelItems.Select(item => (item, relatedResourcePath, true)));
+                    foreach ((ExplorerItem mappedModelItem, string mappedModelPath, bool isChild) in modelsToValidate)
                     {
                         LithTechModelDocument? mappedDocument = TryDecodeSlotInheritanceModel(
                             mappedModelItem,
@@ -1741,7 +1815,10 @@ internal static class LithTechModelTextureConfigIndex
                         (isChild ? childUsedSlots : parentUsedSlots).UnionWith(modelSlotSet);
                     }
 
-                    validatedSlotSet.IntersectWith(parentUsedSlots);
+                    if (hasPhysicalParentModels)
+                    {
+                        validatedSlotSet.IntersectWith(parentUsedSlots);
+                    }
                     validatedSlotSet.IntersectWith(childUsedSlots);
                     if (!allRelatedCopiesValidated || validatedSlotSet.Count == 0)
                     {
@@ -1749,6 +1826,9 @@ internal static class LithTechModelTextureConfigIndex
                     }
 
                     string relatedModelPath = NormalizeExtensionlessModelReference(relatedResourcePath);
+                    string[] relatedContextKeys = hasImplicitCharacterBodyTexture
+                        ? GetCftSideContextKeys(configItem.Path, mapping, implicitCharacterBodySide)
+                        : contextKeys;
                     foreach (int slotIndex in validatedSlotSet)
                     {
                         string? texturePath = rowSlotTextures[slotIndex];
@@ -1756,7 +1836,7 @@ internal static class LithTechModelTextureConfigIndex
                         {
                             modelsWithSlotSpecificBindings.Add(relatedModelPath);
                             AddModelTextureSlotMapping(byModelPath, relatedModelPath, slotIndex, texturePath);
-                            foreach (string contextKey in contextKeys)
+                            foreach (string contextKey in relatedContextKeys)
                             {
                                 AddModelTextureContextSlotMapping(
                                     byModelContext,
@@ -1814,6 +1894,14 @@ internal static class LithTechModelTextureConfigIndex
 
         CrossFireWeaponPreviewItemAliasIndex itemAliases =
             BuildWeaponPreviewItemAliases(crossFireScriptItems, ltcWeaponIndexIds, ltcMappingCache.Values);
+        Dictionary<string, Dictionary<string, LtcPhysicalModelTextureBinding>> ltcPhysicalBindingAliases =
+            BuildLtcPhysicalBindingAliases(
+                ltcItems,
+                ltcMappingCache,
+                modelItemsByPath,
+                resourcePaths,
+                texturePathsByBaseName,
+                decodedModels);
         foreach (ExplorerItem ltcItem in ltcItems)
         {
             string cacheKey = ltcItem.ArchiveFile?.Md5 is { Length: > 0 } archiveHash
@@ -1947,46 +2035,11 @@ internal static class LithTechModelTextureConfigIndex
 
                 string logicalModelPath = GetLogicalModelResourcePath(NormalizeKey(mapping.ModelReference));
                 string modelPath = NormalizeExtensionlessModelReference(mapping.ModelReference);
-                if (logicalModelPath.Length == 0 || modelPath.Length == 0 ||
-                    !modelItemsByPath.TryGetValue(logicalModelPath, out ExplorerItem[]? modelItems) ||
-                    modelItems.Length == 0)
-                {
-                    continue;
-                }
-
-                int[]? mappedSlots = null;
-                foreach (ExplorerItem modelItem in modelItems)
-                {
-                    LithTechModelDocument? document = TryDecodeSlotInheritanceModel(
-                        modelItem,
-                        GetModelResourcePath(modelItem),
-                        decodedModels);
-                    if (document is null)
-                    {
-                        mappedSlots = null;
-                        break;
-                    }
-
-                    int[] currentSlots = document.Meshes
-                        .SelectMany(mesh => mesh.TextureSlotIndices ?? [])
-                        .Distinct()
-                        .Order()
-                        .ToArray();
-                    if (currentSlots.Length == 0 ||
-                        mappedSlots is not null && !mappedSlots.SequenceEqual(currentSlots))
-                    {
-                        mappedSlots = null;
-                        break;
-                    }
-
-                    mappedSlots ??= currentSlots;
-                }
-
                 CrossFireLtcTextureFieldReference[] textureReferences = mapping.TextureFieldReferences
                     .OrderBy(reference => GetLtcTextureFieldOrdinal(reference.FieldName))
                     .ThenBy(reference => reference.FieldName, StringComparer.OrdinalIgnoreCase)
                     .ToArray();
-                if (mappedSlots is null || mappedSlots.Length != textureReferences.Length)
+                if (logicalModelPath.Length == 0 || textureReferences.Length == 0)
                 {
                     continue;
                 }
@@ -1995,6 +2048,47 @@ internal static class LithTechModelTextureConfigIndex
                     .Concat(GetWeaponItemContextAliases(mapping, itemAliases))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToArray();
+                if (!modelItemsByPath.TryGetValue(logicalModelPath, out ExplorerItem[]? modelItems) ||
+                    modelItems.Length == 0)
+                {
+                    if (!TryResolveLtcPhysicalBindingAliases(
+                            mapping,
+                            textureReferences,
+                            ltcPhysicalBindingAliases,
+                            out LtcPhysicalModelTextureBinding[] aliasedBindings))
+                    {
+                        continue;
+                    }
+
+                    foreach (LtcPhysicalModelTextureBinding binding in aliasedBindings)
+                    {
+                        AddModelTextureSlotMapping(
+                            byModelPath,
+                            binding.ModelPath,
+                            binding.SlotIndex,
+                            binding.TexturePath);
+                        modelsWithSlotSpecificBindings.Add(binding.ModelPath);
+                        foreach (string contextKey in contextKeys)
+                        {
+                            AddModelTextureContextSlotMapping(
+                                byModelContext,
+                                binding.ModelPath,
+                                contextKey,
+                                binding.SlotIndex,
+                                binding.TexturePath);
+                        }
+                    }
+
+                    continue;
+                }
+
+                if (modelPath.Length == 0 ||
+                    !TryGetConsistentLtcModelSlots(modelItems, decodedModels, out int[] mappedSlots) ||
+                    mappedSlots.Length != textureReferences.Length)
+                {
+                    continue;
+                }
+
                 for (int index = 0; index < mappedSlots.Length; index++)
                 {
                     string? existingTexturePath = ResolveExistingTextureReference(
@@ -2051,12 +2145,69 @@ internal static class LithTechModelTextureConfigIndex
     {
         string recordIdentity = mapping.RecordId?.ToString(CultureInfo.InvariantCulture) ??
                                 mapping.RowIndex.ToString(CultureInfo.InvariantCulture);
+        string rowIdentity = mapping.RowIndex.ToString(CultureInfo.InvariantCulture);
         return mapping.IdentityAliases
             .Append($"{NormalizeKey(tablePath)}#{recordIdentity}")
             .Append($"record:{Path.GetFileName(tablePath)}:{recordIdentity}")
+            .Append($"{NormalizeKey(tablePath)}#{rowIdentity}")
+            .Append($"record:{Path.GetFileName(tablePath)}:{rowIdentity}")
             .Where(context => NormalizeLooseKey(context).Length > 0)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private static string[] GetCftSideContextKeys(
+        string tablePath,
+        CftModelTextureMapping mapping,
+        string side)
+    {
+        string[] contextKeys = GetCftContextKeys(tablePath, mapping);
+        return contextKeys
+            .Concat(contextKeys.Select(context => $"{context}:{side}"))
+            .Append($"record:{NormalizeKey(tablePath)}#{mapping.RowIndex.ToString(CultureInfo.InvariantCulture)}:{side}")
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static bool TryGetCharacterCftBodySide(
+        string tablePath,
+        CftModelTextureMapping mapping,
+        CftTextureReference texture,
+        out string side)
+    {
+        side = string.Empty;
+        if (!string.Equals(Path.GetFileName(tablePath), "CharacterType.CFT", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        string modelColumn = mapping.ModelColumn;
+        const string battleRoyalPrefix = "_BattleRoyal_";
+        if (modelColumn.StartsWith(battleRoyalPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            modelColumn = "_" + modelColumn[battleRoyalPrefix.Length..];
+        }
+
+        const string modelSuffix = "ModelFile";
+        int suffixIndex = modelColumn.LastIndexOf(modelSuffix, StringComparison.OrdinalIgnoreCase);
+        if (!modelColumn.StartsWith('_') || suffixIndex < 0 ||
+            modelColumn[(suffixIndex + modelSuffix.Length)..].Any(character => !char.IsAsciiDigit(character)))
+        {
+            return false;
+        }
+
+        string candidateSide = modelColumn[1..suffixIndex];
+        if (candidateSide is not ("GR" or "BL") ||
+            !string.Equals(texture.Column, $"_{candidateSide}TextureFile", StringComparison.OrdinalIgnoreCase) ||
+            !NormalizeModelResourcePath(mapping.ModelReference).StartsWith(
+                "Models/Character/",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        side = candidateSide;
+        return true;
     }
 
     private static string[] GetLtcContextKeys(
@@ -2091,6 +2242,242 @@ internal static class LithTechModelTextureConfigIndex
             out int ordinal) && ordinal > 0
             ? ordinal
             : int.MaxValue;
+    }
+
+    private static Dictionary<string, Dictionary<string, LtcPhysicalModelTextureBinding>> BuildLtcPhysicalBindingAliases(
+        IReadOnlyList<ExplorerItem> ltcItems,
+        IReadOnlyDictionary<string, IReadOnlyList<CrossFireLtcModelTextureMapping>> ltcMappingCache,
+        IReadOnlyDictionary<string, ExplorerItem[]> modelItemsByPath,
+        IReadOnlySet<string> resourcePaths,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> texturePathsByBaseName,
+        Dictionary<string, LithTechModelDocument?> decodedModels)
+    {
+        var aliases = new Dictionary<string, Dictionary<string, LtcPhysicalModelTextureBinding>>(
+            StringComparer.OrdinalIgnoreCase);
+        var unresolvedAliasKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (ExplorerItem ltcItem in ltcItems)
+        {
+            string cacheKey = ltcItem.ArchiveFile?.Md5 is { Length: > 0 } archiveHash
+                ? "md5:" + archiveHash
+                : NormalizeKey(ltcItem.OutputRelativePath);
+            if (!ltcMappingCache.TryGetValue(cacheKey, out IReadOnlyList<CrossFireLtcModelTextureMapping>? mappings))
+            {
+                continue;
+            }
+
+            foreach (CrossFireLtcModelTextureMapping mapping in mappings)
+            {
+                string logicalModelPath = GetLogicalModelResourcePath(NormalizeKey(mapping.ModelReference));
+                if (mapping.IdentityAliases.Count == 0 ||
+                    mapping.TextureFieldReferences.Count == 0 ||
+                    logicalModelPath.Length == 0 || modelItemsByPath.ContainsKey(logicalModelPath) ||
+                    mapping.TextureFieldReferences.Any(textureReference =>
+                        TryGetLtcPlayerViewTextureOrdinal(mapping.ModelField, textureReference.FieldName, out _)))
+                {
+                    continue;
+                }
+
+                CrossFireLtcTextureFieldReference[] textureReferences = mapping.TextureFieldReferences
+                    .OrderBy(reference => GetLtcTextureFieldOrdinal(reference.FieldName))
+                    .ThenBy(reference => reference.FieldName, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                foreach (CrossFireLtcTextureFieldReference textureReference in textureReferences)
+                {
+                    foreach (string identityAlias in mapping.IdentityAliases.Where(alias => !string.IsNullOrWhiteSpace(alias)))
+                    {
+                        unresolvedAliasKeys.Add(GetLtcPhysicalBindingAliasKey(mapping, textureReference, identityAlias));
+                    }
+                }
+            }
+        }
+
+        foreach (CrossFireLtcModelTextureMapping mapping in ltcMappingCache.Values
+                     .SelectMany(mappings => mappings)
+                     .DistinctBy(
+                         mapping => string.Join(
+                             '\u001f',
+                             mapping.LegacyDeduplicationKey,
+                             string.Join('\u001e', mapping.IdentityAliases)),
+                         StringComparer.OrdinalIgnoreCase))
+        {
+            if (mapping.IdentityAliases.Count == 0 ||
+                mapping.TextureFieldReferences.Count == 0 ||
+                mapping.TextureFieldReferences.Any(textureReference =>
+                    TryGetLtcPlayerViewTextureOrdinal(mapping.ModelField, textureReference.FieldName, out _)))
+            {
+                continue;
+            }
+
+            string logicalModelPath = GetLogicalModelResourcePath(NormalizeKey(mapping.ModelReference));
+            string modelPath = NormalizeExtensionlessModelReference(mapping.ModelReference);
+            if (logicalModelPath.Length == 0 || modelPath.Length == 0 ||
+                !modelItemsByPath.TryGetValue(logicalModelPath, out ExplorerItem[]? modelItems))
+            {
+                continue;
+            }
+
+            CrossFireLtcTextureFieldReference[] textureReferences = mapping.TextureFieldReferences
+                .OrderBy(reference => GetLtcTextureFieldOrdinal(reference.FieldName))
+                .ThenBy(reference => reference.FieldName, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (!mapping.IdentityAliases.Any(identityAlias => textureReferences.Any(textureReference =>
+                    unresolvedAliasKeys.Contains(GetLtcPhysicalBindingAliasKey(mapping, textureReference, identityAlias)))) ||
+                !TryGetConsistentLtcModelSlots(modelItems, decodedModels, out int[] mappedSlots) ||
+                mappedSlots.Length != textureReferences.Length)
+            {
+                continue;
+            }
+
+            for (int index = 0; index < mappedSlots.Length; index++)
+            {
+                CrossFireLtcTextureFieldReference textureReference = textureReferences[index];
+                string? existingTexturePath = ResolveExistingTextureReference(
+                    textureReference.Path,
+                    resourcePaths,
+                    texturePathsByBaseName);
+                if (existingTexturePath is null)
+                {
+                    continue;
+                }
+
+                var binding = new LtcPhysicalModelTextureBinding(
+                    modelPath,
+                    mappedSlots[index],
+                    existingTexturePath);
+                string bindingKey = GetLtcPhysicalBindingValueKey(binding);
+                foreach (string identityAlias in mapping.IdentityAliases)
+                {
+                    if (string.IsNullOrWhiteSpace(identityAlias))
+                    {
+                        continue;
+                    }
+
+                    string aliasKey = GetLtcPhysicalBindingAliasKey(mapping, textureReference, identityAlias);
+                    if (!unresolvedAliasKeys.Contains(aliasKey))
+                    {
+                        continue;
+                    }
+
+                    if (!aliases.TryGetValue(aliasKey, out Dictionary<string, LtcPhysicalModelTextureBinding>? candidates))
+                    {
+                        candidates = new Dictionary<string, LtcPhysicalModelTextureBinding>(StringComparer.OrdinalIgnoreCase);
+                        aliases.Add(aliasKey, candidates);
+                    }
+
+                    candidates[bindingKey] = binding;
+                }
+            }
+        }
+
+        return aliases;
+    }
+
+    private static bool TryGetConsistentLtcModelSlots(
+        IReadOnlyList<ExplorerItem> modelItems,
+        Dictionary<string, LithTechModelDocument?> decodedModels,
+        out int[] slots)
+    {
+        int[]? mappedSlots = null;
+        foreach (ExplorerItem modelItem in modelItems)
+        {
+            LithTechModelDocument? document = TryDecodeSlotInheritanceModel(
+                modelItem,
+                GetModelResourcePath(modelItem),
+                decodedModels);
+            if (document is null)
+            {
+                slots = [];
+                return false;
+            }
+
+            int[] currentSlots = document.Meshes
+                .SelectMany(mesh => mesh.TextureSlotIndices ?? [])
+                .Distinct()
+                .Order()
+                .ToArray();
+            if (currentSlots.Length == 0 ||
+                mappedSlots is not null && !mappedSlots.SequenceEqual(currentSlots))
+            {
+                slots = [];
+                return false;
+            }
+
+            mappedSlots ??= currentSlots;
+        }
+
+        slots = mappedSlots ?? [];
+        return slots.Length > 0;
+    }
+
+    private static bool TryResolveLtcPhysicalBindingAliases(
+        CrossFireLtcModelTextureMapping mapping,
+        IReadOnlyList<CrossFireLtcTextureFieldReference> textureReferences,
+        IReadOnlyDictionary<string, Dictionary<string, LtcPhysicalModelTextureBinding>> aliases,
+        out LtcPhysicalModelTextureBinding[] bindings)
+    {
+        var resolved = new List<LtcPhysicalModelTextureBinding>(textureReferences.Count);
+        foreach (CrossFireLtcTextureFieldReference textureReference in textureReferences)
+        {
+            var candidates = new Dictionary<string, LtcPhysicalModelTextureBinding>(StringComparer.OrdinalIgnoreCase);
+            foreach (string identityAlias in mapping.IdentityAliases)
+            {
+                string aliasKey = GetLtcPhysicalBindingAliasKey(mapping, textureReference, identityAlias);
+                if (aliases.TryGetValue(aliasKey, out Dictionary<string, LtcPhysicalModelTextureBinding>? matches))
+                {
+                    foreach ((string bindingKey, LtcPhysicalModelTextureBinding binding) in matches)
+                    {
+                        candidates[bindingKey] = binding;
+                    }
+                }
+            }
+
+            if (candidates.Count != 1)
+            {
+                bindings = [];
+                return false;
+            }
+
+            resolved.Add(candidates.Values.Single());
+        }
+
+        if (resolved.Count == 0 ||
+            resolved.Select(binding => binding.ModelPath).Distinct(StringComparer.OrdinalIgnoreCase).Count() != 1 ||
+            resolved.Select(binding => binding.SlotIndex).Distinct().Count() != resolved.Count)
+        {
+            bindings = [];
+            return false;
+        }
+
+        bindings = resolved.ToArray();
+        return true;
+    }
+
+    private static string GetLtcPhysicalBindingAliasKey(
+        CrossFireLtcModelTextureMapping mapping,
+        CrossFireLtcTextureFieldReference textureReference,
+        string identityAlias)
+    {
+        string modelStem = Path.GetFileNameWithoutExtension(NormalizeKey(mapping.ModelReference))
+            .Normalize(NormalizationForm.FormKC);
+        string textureStem = Path.GetFileNameWithoutExtension(NormalizeKey(textureReference.Path))
+            .Normalize(NormalizationForm.FormKC);
+        return string.Join(
+            '\u001f',
+            mapping.RowType.Trim(),
+            mapping.ModelField.Trim(),
+            modelStem,
+            identityAlias.Trim().Normalize(NormalizationForm.FormKC),
+            textureReference.FieldName.Trim(),
+            textureStem);
+    }
+
+    private static string GetLtcPhysicalBindingValueKey(LtcPhysicalModelTextureBinding binding)
+    {
+        return string.Join(
+            '\u001f',
+            NormalizeKey(binding.ModelPath),
+            binding.SlotIndex.ToString(CultureInfo.InvariantCulture),
+            NormalizeKey(binding.TexturePath));
     }
 
     private static IReadOnlyList<string> GetWeaponItemContextAliases(
@@ -3670,6 +4057,8 @@ internal static class LithTechModelTextureConfigIndex
     }
 
     private sealed record TextureConfigItem(string Path, string Name, ExplorerItem Item);
+
+    private sealed record LtcPhysicalModelTextureBinding(string ModelPath, int SlotIndex, string TexturePath);
 
     private sealed record ModelMaterialComponentTextureMapping(
         string ModelReference,
