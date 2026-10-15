@@ -194,6 +194,76 @@ internal static class LithTechModelTextureConfigIndex
         };
     }
 
+    public static (int ResourceCopies, int UniqueDocuments, int DecodedDocuments, int MotionReferences)
+        WriteLtcMotionReferenceAuditReport(ExplorerItem root, string outputPath)
+    {
+        TextureConfigIndex index = TextureConfigIndexCache.GetValue(root, BuildIndex);
+        var documentGroups = index.LtcItems
+            .GroupBy(item => item.ArchiveFile?.Md5 is { Length: > 0 } md5
+                ? "md5:" + md5
+                : "path:" + NormalizeKey(item.OutputRelativePath), StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+        using var writer = new StreamWriter(outputPath, false, new UTF8Encoding(true));
+        writer.WriteLine("source_resources\trow_index\trow_type\tmotion_field\tmotion_model\tpeer_models\ttexture_fields\tidentity_aliases");
+        int decodedDocuments = 0;
+        int motionReferences = 0;
+        foreach (IGrouping<string, ExplorerItem> group in documentGroups)
+        {
+            ExplorerItem item = group.First();
+            byte[]? data = TryReadItemBytes(item, MaxLtcBytes);
+            if (data is null ||
+                !CrossFireLtcDecoder.TryDecodeNativeText(
+                    data,
+                    out CrossFireLtcTextDocument? document,
+                    out _) ||
+                document is null)
+            {
+                continue;
+            }
+
+            decodedDocuments++;
+            IReadOnlyList<CrossFireLtcMotionModelReferenceDiagnostic> references;
+            try
+            {
+                references = CrossFireLtcModelTextureMappingDecoder.ExtractMotionModelReferences(document.Text);
+            }
+            catch (InvalidDataException)
+            {
+                continue;
+            }
+
+            if (references.Count == 0)
+            {
+                continue;
+            }
+
+            string sources = string.Join(" || ", group.Select(source =>
+            {
+                string archive = source.Archive?.FilePath ?? "local";
+                string resource = source.ArchiveFile?.FullPath ?? source.OutputRelativePath;
+                string hash = source.ArchiveFile?.Md5 ?? "local";
+                return $"{archive}:{resource}#{hash}";
+            }).Order(StringComparer.OrdinalIgnoreCase));
+            foreach (CrossFireLtcMotionModelReferenceDiagnostic reference in references)
+            {
+                motionReferences++;
+                writer.WriteLine(string.Join("\t", [
+                    EscapeTsv(sources),
+                    reference.RowIndex.ToString(CultureInfo.InvariantCulture),
+                    EscapeTsv(reference.RowType),
+                    EscapeTsv(reference.MotionField),
+                    EscapeTsv(reference.MotionModelReference),
+                    EscapeTsv(string.Join(" || ", reference.PeerModelReferences)),
+                    EscapeTsv(string.Join(" || ", reference.TextureReferences.Select(texture => $"{texture.FieldName}:{texture.Path}"))),
+                    EscapeTsv(string.Join(" || ", reference.IdentityAliases))
+                ]));
+            }
+        }
+
+        return (index.LtcItems.Count, documentGroups.Length, decodedDocuments, motionReferences);
+    }
+
     public static (
         int RowCount,
         int SlotMappings,

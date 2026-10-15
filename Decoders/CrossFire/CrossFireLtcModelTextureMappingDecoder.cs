@@ -18,6 +18,15 @@ internal sealed record CrossFireLtcModelTextureMapping(
 
 internal sealed record CrossFireLtcTextureFieldReference(string FieldName, string Path);
 
+internal sealed record CrossFireLtcMotionModelReferenceDiagnostic(
+    int RowIndex,
+    string RowType,
+    string MotionField,
+    string MotionModelReference,
+    IReadOnlyList<string> PeerModelReferences,
+    IReadOnlyList<CrossFireLtcTextureFieldReference> TextureReferences,
+    IReadOnlyList<string> IdentityAliases);
+
 /// <summary>
 /// Extracts only same-row LTC bindings whose model and texture fields have a
 /// known CrossFire role relationship. It deliberately does not cross-pair all
@@ -27,6 +36,86 @@ internal static class CrossFireLtcModelTextureMappingDecoder
 {
     private static readonly string[] ModelExtensions = [".ltb", ".lta", ".ltc", ".dat"];
     private static readonly string[] TextureExtensions = [".dtx", ".dds", ".tga", ".png", ".jpg", ".jpeg", ".bmp", ".bin"];
+
+    public static IReadOnlyList<CrossFireLtcMotionModelReferenceDiagnostic> ExtractMotionModelReferences(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return [];
+        }
+
+        var diagnostics = new List<CrossFireLtcMotionModelReferenceDiagnostic>();
+        int rowIndex = 0;
+        foreach (LtcList row in new LtcParser(text).ParseAll())
+        {
+            int currentRowIndex = rowIndex++;
+            string rowType = GetAtom(row.Items.FirstOrDefault()) ?? string.Empty;
+            if (rowType.Length == 0)
+            {
+                continue;
+            }
+
+            List<LtcField> fields = row.Items
+                .OfType<LtcList>()
+                .Select(TryReadField)
+                .Where(field => field is not null)
+                .Cast<LtcField>()
+                .ToList();
+            LtcField[] motionFields = fields
+                .Where(field => field.Name.Contains("Motion", StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (motionFields.Length == 0)
+            {
+                continue;
+            }
+
+            string[] peerModelReferences = fields
+                .Where(field => IsModelField(field.Name) &&
+                                !field.Name.StartsWith("MotionFileName", StringComparison.OrdinalIgnoreCase))
+                .SelectMany(field => field.Values
+                    .Select(NormalizeResourcePath)
+                    .Where(IsModelPath)
+                    .Select(path => $"{field.Name}:{path}"))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            CrossFireLtcTextureFieldReference[] textureReferences = fields
+                .SelectMany(field => field.Values
+                    .Select(NormalizeResourcePath)
+                    .Where(path => IsTexturePath(path) || IsAuxiliaryTexturePath(path))
+                    .Select(path => new CrossFireLtcTextureFieldReference(field.Name, path)))
+                .Distinct()
+                .ToArray();
+            string[] identityAliases = fields
+                .Where(field => IsIdentityField(field.Name) ||
+                                field.Name.Equals("WeaponIndex", StringComparison.OrdinalIgnoreCase))
+                .SelectMany(field => field.Name.Equals("WeaponIndex", StringComparison.OrdinalIgnoreCase)
+                    ? field.Values.Select(value => $"WeaponIndex:{value.Trim()}")
+                    : field.Values.Select(value => value.Trim()))
+                .Where(value => value.Length is > 0 and <= 256 && !value.Any(char.IsControl))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            foreach (LtcField motionField in motionFields)
+            {
+                foreach (string motionModelReference in motionField.Values
+                             .Select(NormalizeResourcePath)
+                             .Where(IsModelPath)
+                             .Distinct(StringComparer.OrdinalIgnoreCase))
+                {
+                    diagnostics.Add(new CrossFireLtcMotionModelReferenceDiagnostic(
+                        currentRowIndex,
+                        rowType,
+                        motionField.Name,
+                        motionModelReference,
+                        peerModelReferences,
+                        textureReferences,
+                        identityAliases));
+                }
+            }
+        }
+
+        return diagnostics;
+    }
 
     public static IReadOnlyList<CrossFireLtcModelTextureMapping> Extract(string text)
     {
@@ -213,6 +302,11 @@ internal static class CrossFireLtcModelTextureMappingDecoder
 
     private static string[] GetCompatibleTextureFields(string modelField, IReadOnlyList<LtcField> fields)
     {
+        if (modelField.StartsWith("MotionFileName", StringComparison.OrdinalIgnoreCase))
+        {
+            return GetVariantTextureFields(modelField, fields, "MotionFileName", "SkinFileName");
+        }
+
         if (modelField.StartsWith("GRModelFile", StringComparison.OrdinalIgnoreCase))
         {
             return GetVariantTextureFields(modelField, fields, "GRModelFile", "GRTextureFile");
@@ -368,10 +462,11 @@ internal static class CrossFireLtcModelTextureMappingDecoder
 
     private static bool IsModelField(string name)
     {
-        return name.Contains("Model", StringComparison.OrdinalIgnoreCase) &&
+        bool isMotionFileField = name.StartsWith("MotionFileName", StringComparison.OrdinalIgnoreCase);
+        return (name.Contains("Model", StringComparison.OrdinalIgnoreCase) || isMotionFileField) &&
                !name.Contains("RenderStyle", StringComparison.OrdinalIgnoreCase) &&
                !name.Contains("Child", StringComparison.OrdinalIgnoreCase) &&
-               !name.Contains("Motion", StringComparison.OrdinalIgnoreCase) &&
+               (isMotionFileField || !name.Contains("Motion", StringComparison.OrdinalIgnoreCase)) &&
                !name.Contains("Map", StringComparison.OrdinalIgnoreCase) &&
                !string.Equals(name, "ButePath", StringComparison.OrdinalIgnoreCase);
     }
