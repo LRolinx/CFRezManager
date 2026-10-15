@@ -5,10 +5,10 @@ using System.Text.RegularExpressions;
 namespace CFRezManager;
 
 /// <summary>
-/// Recovers mesh textures stored outside ModelTextures. It only accepts an
-/// exporter-generated candidate that exactly matches a DTX basename, a
-/// globally unique logical texture basename, and a shared non-generic token
-/// between the model reference and texture name.
+/// Resolves mesh-level texture candidates when native or table references are
+/// absent. General fallback candidates require an exact basename and unique
+/// logical texture path; first-person arm models use a role-aware resolver
+/// restricted to consistent DTX copies in the player-view texture tree.
 /// </summary>
 internal static class LithTechModelMeshTextureResolver
 {
@@ -22,6 +22,12 @@ internal static class LithTechModelMeshTextureResolver
         "_FEMALE_BL", "_FEMALE_GR", "_FEMALE_SP",
         "_CHANGEMODE", "_CHANGE_MODE", "_PREVIEW", "_REMOT",
         "_BL", "_GR", "_SP", "_F", "_M", "_W"
+    ];
+    private static readonly string[] PlayerViewArmModelVariantSuffixes =
+    [
+        "_WOMAN_BL", "_WOMAN_GR", "_WOMAN_SP",
+        "_FEMALE_BL", "_FEMALE_GR", "_FEMALE_SP",
+        "_BL", "_GR", "_SP"
     ];
     private static readonly HashSet<string> PvInkPlayerviewModelStems = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -106,6 +112,7 @@ internal static class LithTechModelMeshTextureResolver
     {
         MeshTextureIndex index = IndexCache.GetValue(root, BuildIndex);
         if (index.UniqueDtxByBaseName.Count == 0 &&
+            index.UniquePlayerViewDtxByBaseName.Count == 0 &&
             index.NumberedModelDtxByFamily.Count == 0 &&
             index.UniqueUccModelDtxByBaseName.Count == 0 &&
             index.UniqueUccObjectDtxByBaseName.Count == 0)
@@ -139,6 +146,7 @@ internal static class LithTechModelMeshTextureResolver
     private static MeshTextureIndex BuildIndex(ExplorerItem root)
     {
         var texturesByBaseName = new Dictionary<string, Dictionary<string, ExplorerItem>>(StringComparer.OrdinalIgnoreCase);
+        var texturePhysicalCopiesByLogicalPath = new Dictionary<string, List<ExplorerItem>>(StringComparer.OrdinalIgnoreCase);
         var modelItemsByPath = new Dictionary<string, List<ExplorerItem>>(StringComparer.OrdinalIgnoreCase);
         var pending = new Stack<ExplorerItem>();
         pending.Push(root);
@@ -166,6 +174,18 @@ internal static class LithTechModelMeshTextureResolver
                 string baseName = Path.GetFileNameWithoutExtension(logicalPath);
                 if (logicalPath.Length > 0 && baseName.Length > 0)
                 {
+                    if (logicalPath.StartsWith("ModelTextures/PLAYERVIEW/", StringComparison.OrdinalIgnoreCase) &&
+                        item.FileExtension.Equals("dtx", StringComparison.OrdinalIgnoreCase) &&
+                        !texturePhysicalCopiesByLogicalPath.TryGetValue(logicalPath, out _))
+                    {
+                        texturePhysicalCopiesByLogicalPath.Add(logicalPath, []);
+                    }
+
+                    if (texturePhysicalCopiesByLogicalPath.TryGetValue(logicalPath, out List<ExplorerItem>? physicalCopies))
+                    {
+                        physicalCopies.Add(item);
+                    }
+
                     if (!texturesByBaseName.TryGetValue(baseName, out Dictionary<string, ExplorerItem>? logicalVersions))
                     {
                         logicalVersions = new Dictionary<string, ExplorerItem>(StringComparer.OrdinalIgnoreCase);
@@ -180,6 +200,35 @@ internal static class LithTechModelMeshTextureResolver
             {
                 pending.Push(child);
             }
+        }
+
+        var uniquePlayerViewDtxByBaseName = new Dictionary<string, DtxCandidate>(StringComparer.OrdinalIgnoreCase);
+        foreach (var textureName in texturesByBaseName)
+        {
+            var playerViewVersions = textureName.Value
+                .Where(version =>
+                    version.Key.StartsWith("ModelTextures/PLAYERVIEW/", StringComparison.OrdinalIgnoreCase) &&
+                    version.Value.FileExtension.Equals("dtx", StringComparison.OrdinalIgnoreCase) &&
+                    texturePhysicalCopiesByLogicalPath.TryGetValue(version.Key, out List<ExplorerItem>? physicalCopies) &&
+                    HasConsistentTextureCopies(physicalCopies))
+                .ToArray();
+            if (playerViewVersions.Length != 1)
+            {
+                continue;
+            }
+
+            var playerViewVersion = playerViewVersions[0];
+            string outputPath = NormalizePath(playerViewVersion.Value.OutputRelativePath);
+            if (outputPath.Length == 0)
+            {
+                continue;
+            }
+
+            string textureBaseName = Path.GetFileNameWithoutExtension(playerViewVersion.Key);
+            uniquePlayerViewDtxByBaseName[textureName.Key] = new DtxCandidate(
+                outputPath,
+                playerViewVersion.Key,
+                GetContextTokens(textureBaseName));
         }
 
         var modelFolderTexturesByName = new Dictionary<string, Dictionary<string, ExplorerItem>>(StringComparer.OrdinalIgnoreCase);
@@ -418,6 +467,7 @@ internal static class LithTechModelMeshTextureResolver
 
         return new MeshTextureIndex(
             uniqueDtxByBaseName,
+            uniquePlayerViewDtxByBaseName,
             uniqueModelFolderDtxByNormalizedBaseName,
             uniqueUccModelDtxByBaseName,
             uniqueUccObjectDtxByBaseName,
@@ -459,6 +509,30 @@ internal static class LithTechModelMeshTextureResolver
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         return resourceKeys.Length == 1 ? resourceKeys[0] : null;
+    }
+
+    private static bool HasConsistentTextureCopies(IReadOnlyList<ExplorerItem> items)
+    {
+        if (items.Count == 0)
+        {
+            return false;
+        }
+
+        if (items.All(item => item.ArchiveFile is not null))
+        {
+            string[] hashes = items
+                .Select(item => item.ArchiveFile?.Md5)
+                .Where(hash => !string.IsNullOrWhiteSpace(hash))
+                .Select(hash => hash!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            return hashes.Length == 1 && items.All(item => !string.IsNullOrWhiteSpace(item.ArchiveFile?.Md5));
+        }
+
+        return items.All(item => item.ArchiveFile is null) &&
+               items.Select(item => Path.GetFullPath(item.SourcePath))
+                   .Distinct(StringComparer.OrdinalIgnoreCase)
+                   .Count() == 1;
     }
 
     private static Dictionary<string, string> BuildVerifiedMotionBaseStems(
@@ -737,6 +811,15 @@ internal static class LithTechModelMeshTextureResolver
             return uccModelMeshTexture;
         }
 
+        IReadOnlyList<string> playerViewArmTexture = ResolvePlayerViewArmModelTexture(
+            index,
+            modelPath,
+            meshName);
+        if (playerViewArmTexture.Count > 0)
+        {
+            return playerViewArmTexture;
+        }
+
         IReadOnlyList<string> pvDeAngelicBeastTexture = ResolvePvDeAngelicBeastTexture(index, modelPath, slotIndex);
         if (pvDeAngelicBeastTexture.Count > 0)
         {
@@ -873,6 +956,192 @@ internal static class LithTechModelMeshTextureResolver
         }
 
         return [candidate.OutputPath];
+    }
+
+    private static IReadOnlyList<string> ResolvePlayerViewArmModelTexture(
+        MeshTextureIndex index,
+        string modelPath,
+        string meshName)
+    {
+        string normalizedModelPath = NormalizePath(modelPath);
+        bool isArmModelPath = normalizedModelPath.StartsWith("ArmModel/Arm_", StringComparison.OrdinalIgnoreCase) ||
+                              normalizedModelPath.Contains("/ArmModel/Arm_", StringComparison.OrdinalIgnoreCase);
+        if (!isArmModelPath)
+        {
+            return [];
+        }
+
+        string modelStem = GetModelResourceStem(normalizedModelPath);
+        string variantSuffix = PlayerViewArmModelVariantSuffixes.FirstOrDefault(suffix =>
+            modelStem.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) ?? string.Empty;
+        string meshTextureBaseName = Path.GetFileNameWithoutExtension(meshName);
+        string modelFamily = modelStem.StartsWith("Arm_", StringComparison.OrdinalIgnoreCase)
+            ? modelStem["Arm_".Length..]
+            : modelStem;
+        string unvariantedModelFamily = variantSuffix.Length > 0 && modelFamily.EndsWith(variantSuffix, StringComparison.OrdinalIgnoreCase)
+            ? modelFamily[..^variantSuffix.Length]
+            : modelFamily;
+        string teamSuffix = variantSuffix.EndsWith("_BL", StringComparison.OrdinalIgnoreCase) ||
+                            variantSuffix.EndsWith("_GR", StringComparison.OrdinalIgnoreCase) ||
+                            variantSuffix.EndsWith("_SP", StringComparison.OrdinalIgnoreCase)
+            ? variantSuffix[^3..]
+            : string.Empty;
+
+        string meshFamily = GetPlayerViewArmMeshFamily(meshName);
+        string meshVariantSuffix = PlayerViewArmModelVariantSuffixes.FirstOrDefault(suffix =>
+            meshFamily.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) ?? string.Empty;
+        string unvariantedMeshFamily = meshVariantSuffix.Length > 0
+            ? meshFamily[..^meshVariantSuffix.Length]
+            : meshFamily;
+        string[] roles = GetPlayerViewArmMeshRoles(meshName);
+        if (roles.Length == 0)
+        {
+            return [];
+        }
+
+        var candidatePriorityGroups = new List<HashSet<string>>();
+        if (meshTextureBaseName.Length > 0)
+        {
+            bool meshAndModelVariantsConflict = meshVariantSuffix.Length > 0 &&
+                teamSuffix.Length > 0 &&
+                !meshVariantSuffix.EndsWith(teamSuffix, StringComparison.OrdinalIgnoreCase);
+            if (!meshAndModelVariantsConflict)
+            {
+                bool meshAlreadyHasTeamVariant = meshVariantSuffix.Length > 0 &&
+                    teamSuffix.Length > 0 &&
+                    meshVariantSuffix.EndsWith(teamSuffix, StringComparison.OrdinalIgnoreCase);
+                if (meshAlreadyHasTeamVariant || variantSuffix.Length == 0)
+                {
+                    candidatePriorityGroups.Add(new HashSet<string>([meshTextureBaseName], StringComparer.OrdinalIgnoreCase));
+                }
+                else
+                {
+                    candidatePriorityGroups.Add(new HashSet<string>([meshTextureBaseName + variantSuffix], StringComparer.OrdinalIgnoreCase));
+                    candidatePriorityGroups.Add(new HashSet<string>([meshTextureBaseName], StringComparer.OrdinalIgnoreCase));
+                }
+            }
+        }
+
+        if (meshTextureBaseName.Length > 0 && unvariantedModelFamily.Length > 0)
+        {
+            foreach (string suffix in new[] { variantSuffix, teamSuffix, string.Empty }.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                var meshSpecificFamilyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (string role in roles)
+                {
+                    meshSpecificFamilyNames.Add($"FVIEW_{role}_{unvariantedModelFamily}_{meshTextureBaseName}{suffix}");
+                }
+
+                candidatePriorityGroups.Add(meshSpecificFamilyNames);
+            }
+        }
+
+        string[] familyNames = new[] { unvariantedMeshFamily, unvariantedModelFamily, modelFamily }
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(name => name.Length)
+            .ToArray();
+        string[] variantSuffixes = [variantSuffix, teamSuffix, string.Empty];
+        foreach (string suffix in variantSuffixes.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            foreach (string familyName in familyNames)
+            {
+                var familyCandidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (string role in roles)
+                {
+                    string candidateFamily = suffix.Length > 0 && familyName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)
+                        ? familyName
+                        : familyName + suffix;
+                    familyCandidates.Add($"FVIEW_{role}_{candidateFamily}");
+                }
+
+                candidatePriorityGroups.Add(familyCandidates);
+            }
+        }
+
+        foreach (HashSet<string> candidateNames in candidatePriorityGroups)
+        {
+            string[] matches = candidateNames
+                .Where(textureBaseName => index.UniquePlayerViewDtxByBaseName.ContainsKey(textureBaseName))
+                .Select(textureBaseName => index.UniquePlayerViewDtxByBaseName[textureBaseName].OutputPath)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (matches.Length > 0)
+            {
+                return matches.Length == 1 ? matches : [];
+            }
+        }
+
+        return [];
+    }
+
+    private static string[] GetPlayerViewArmMeshRoles(string meshName)
+    {
+        string terminalName = Regex.Replace(meshName, @"\d+$", string.Empty, RegexOptions.CultureInvariant);
+        if (Regex.IsMatch(meshName, @"(?i)^FVIEW[\s_-]", RegexOptions.CultureInvariant))
+        {
+            string rolePrefix = Regex.Replace(meshName, @"(?i)^FVIEW[\s_-]*", string.Empty, RegexOptions.CultureInvariant);
+            if (Regex.IsMatch(rolePrefix, @"(?i)^HAND(?:$|[\s_-])", RegexOptions.CultureInvariant))
+            {
+                return ["HAND"];
+            }
+
+            if (Regex.IsMatch(rolePrefix, @"(?i)^ARM(?:$|[\s_-])", RegexOptions.CultureInvariant))
+            {
+                return ["ARM"];
+            }
+        }
+
+        if (Regex.IsMatch(terminalName, @"(?i)[\s_-]+HAND$", RegexOptions.CultureInvariant))
+        {
+            return ["HAND"];
+        }
+
+        if (Regex.IsMatch(terminalName, @"(?i)[\s_-]+ARM$", RegexOptions.CultureInvariant))
+        {
+            return ["ARM"];
+        }
+
+        bool isHandMesh = meshName.Contains("hand", StringComparison.OrdinalIgnoreCase);
+        bool isArmMesh = meshName.Contains("arm", StringComparison.OrdinalIgnoreCase);
+        if (isHandMesh && !isArmMesh)
+        {
+            return ["HAND"];
+        }
+
+        if (isArmMesh && !isHandMesh)
+        {
+            return ["ARM"];
+        }
+
+        if (isHandMesh && isArmMesh)
+        {
+            if (terminalName.EndsWith("hand", StringComparison.OrdinalIgnoreCase))
+            {
+                return ["HAND"];
+            }
+
+            if (terminalName.EndsWith("arm", StringComparison.OrdinalIgnoreCase))
+            {
+                return ["ARM"];
+            }
+
+            return [];
+        }
+
+        // Some arm-model meshes use names such as "Left" or "default".
+        // Let the exact candidate set disambiguate only when one role exists.
+        return ["ARM", "HAND"];
+    }
+
+    private static string GetPlayerViewArmMeshFamily(string meshName)
+    {
+        string family = Path.GetFileNameWithoutExtension(meshName).Trim();
+        family = Regex.Replace(family, @"\d+$", string.Empty, RegexOptions.CultureInvariant);
+        family = Regex.Replace(family, @"(?i)^FVIEW[\s_-]*", string.Empty, RegexOptions.CultureInvariant);
+        family = Regex.Replace(family, @"(?i)^(ARM|HAND)[\s_-]*", string.Empty, RegexOptions.CultureInvariant);
+        family = Regex.Replace(family, @"(?i)[\s_-]+(ARM|HAND)$", string.Empty, RegexOptions.CultureInvariant);
+        return family.Trim(' ', '_', '-');
     }
 
     private static IReadOnlyList<string> ResolveUccModelMeshTexture(
@@ -1765,6 +2034,7 @@ internal static class LithTechModelMeshTextureResolver
 
     private sealed record MeshTextureIndex(
         Dictionary<string, DtxCandidate> UniqueDtxByBaseName,
+        Dictionary<string, DtxCandidate> UniquePlayerViewDtxByBaseName,
         Dictionary<string, DtxCandidate> UniqueModelFolderDtxByNormalizedBaseName,
         Dictionary<string, DtxCandidate> UniqueUccModelDtxByBaseName,
         Dictionary<string, DtxCandidate> UniqueUccObjectDtxByBaseName,

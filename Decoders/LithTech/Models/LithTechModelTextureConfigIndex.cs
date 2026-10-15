@@ -479,6 +479,64 @@ internal static class LithTechModelTextureConfigIndex
         return (resourceCopies, documentGroups.Length, decodedDocuments, modelRows, relatedModelReferences);
     }
 
+    public static (int LogicalPaths, int PhysicalCopies) WriteTextureResourcePathAuditReport(
+        ExplorerItem root,
+        string pathFilter,
+        string outputPath)
+    {
+        var resourceCopies = new List<(string LogicalPath, ExplorerItem Item)>();
+        var pending = new Stack<ExplorerItem>();
+        pending.Push(root);
+        while (pending.Count > 0)
+        {
+            ExplorerItem item = pending.Pop();
+            if (item.IsFile && TextureExtensions.Contains(
+                    "." + item.FileExtension.TrimStart('.'),
+                    StringComparer.OrdinalIgnoreCase))
+            {
+                string logicalPath = item.ArchiveFile?.FullPath ?? item.OutputRelativePath;
+                if (logicalPath.Contains(pathFilter, StringComparison.OrdinalIgnoreCase))
+                {
+                    resourceCopies.Add((NormalizeKey(logicalPath), item));
+                }
+            }
+
+            foreach (ExplorerItem child in item.Children)
+            {
+                pending.Push(child);
+            }
+        }
+
+        IGrouping<string, (string LogicalPath, ExplorerItem Item)>[] matches = resourceCopies
+            .GroupBy(copy => copy.LogicalPath, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        int physicalCopyCount = matches.Sum(group => group.Count());
+        Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+        using var writer = new StreamWriter(outputPath, false, new UTF8Encoding(true));
+        writer.WriteLine("logical_resource_path\tarchive_path\tphysical_resource_path\tmd5\tstored_size");
+        foreach (IGrouping<string, (string LogicalPath, ExplorerItem Item)> group in matches)
+        {
+            foreach (var copy in group.OrderBy(copy => copy.Item.Archive?.FilePath, StringComparer.OrdinalIgnoreCase))
+            {
+                ExplorerItem item = copy.Item;
+                string archivePath = item.Archive?.FilePath ?? "local";
+                string physicalPath = item.ArchiveFile?.FullPath ?? item.OutputRelativePath;
+                string md5 = item.ArchiveFile?.Md5 ?? string.Empty;
+                string size = item.ArchiveFile?.Size.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+                writer.WriteLine(string.Join("\t", [
+                    EscapeTsv(group.Key),
+                    EscapeTsv(archivePath),
+                    EscapeTsv(physicalPath),
+                    EscapeTsv(md5),
+                    size
+                ]));
+            }
+        }
+
+        return (matches.Length, physicalCopyCount);
+    }
+
     public static (
         int RowCount,
         int SlotMappings,

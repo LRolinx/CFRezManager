@@ -357,6 +357,20 @@ internal static class LithTechObjExporter
                 }
             }
 
+            if (references.Count == 0 && source.MeshTextureResolver is not null)
+            {
+                IReadOnlyList<string> meshReferences = source.MeshTextureResolver(
+                    modelReference,
+                    mesh.Name,
+                    skinSlotIndex,
+                    string.Empty);
+                if (meshReferences.Count > 0)
+                {
+                    references = meshReferences;
+                    resolverName = "mesh-resolver";
+                }
+            }
+
             if (references.Count == 0)
             {
                 reports.Add(new ObjTextureSlotReport(

@@ -14,7 +14,9 @@ internal static class LithTechTextureMapAuditCommand
         bool InspectLtcMotionLinks,
         bool InspectCftMotionLinks,
         bool InspectCftModelTextureLinks,
-        bool InspectLtcModelTextureLinks);
+        bool InspectLtcModelTextureLinks,
+        bool InspectTextureResourcePaths,
+        string? TexturePathFilter);
 
     public static bool IsInvocation(string[] args)
     {
@@ -24,7 +26,8 @@ internal static class LithTechTextureMapAuditCommand
             string.Equals(arg, "--inspect-ltc-motion-links", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(arg, "--inspect-cft-motion-links", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(arg, "--inspect-cft-model-texture-links", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(arg, "--inspect-ltc-model-texture-links", StringComparison.OrdinalIgnoreCase));
+            string.Equals(arg, "--inspect-ltc-model-texture-links", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(arg, "--inspect-texture-resource-paths", StringComparison.OrdinalIgnoreCase));
     }
 
     public static int Run(string[] args)
@@ -77,6 +80,18 @@ internal static class LithTechTextureMapAuditCommand
                 Console.WriteLine($"Unique LTC contents: {ltcAudit.UniqueDocuments.ToString(CultureInfo.InvariantCulture)}");
                 Console.WriteLine($"LTC contents decoded: {ltcAudit.DecodedDocuments.ToString(CultureInfo.InvariantCulture)}");
                 Console.WriteLine($"Typed model rows: {ltcAudit.ModelRows.ToString(CultureInfo.InvariantCulture)}");
+                return 0;
+            }
+
+            if (options.InspectTextureResourcePaths)
+            {
+                var textureAudit = LithTechModelTextureConfigIndex.WriteTextureResourcePathAuditReport(
+                    root,
+                    options.TexturePathFilter!,
+                    options.OutputPath);
+                Console.WriteLine($"Texture resource path report: {Path.GetFullPath(options.OutputPath)}");
+                Console.WriteLine($"Matching logical texture paths: {textureAudit.LogicalPaths.ToString(CultureInfo.InvariantCulture)}");
+                Console.WriteLine($"Matching physical resource copies: {textureAudit.PhysicalCopies.ToString(CultureInfo.InvariantCulture)}");
                 return 0;
             }
 
@@ -133,6 +148,8 @@ internal static class LithTechTextureMapAuditCommand
         bool inspectCftMotionLinks = false;
         bool inspectCftModelTextureLinks = false;
         bool inspectLtcModelTextureLinks = false;
+        bool inspectTextureResourcePaths = false;
+        string? texturePathFilter = null;
         for (int index = 0; index < args.Length; index++)
         {
             string arg = args[index];
@@ -168,6 +185,18 @@ internal static class LithTechTextureMapAuditCommand
             if (string.Equals(arg, "--inspect-ltc-model-texture-links", StringComparison.OrdinalIgnoreCase))
             {
                 inspectLtcModelTextureLinks = true;
+                continue;
+            }
+
+            if (string.Equals(arg, "--inspect-texture-resource-paths", StringComparison.OrdinalIgnoreCase))
+            {
+                inspectTextureResourcePaths = true;
+                continue;
+            }
+
+            if (TryReadOptionValue(args, ref index, "--contains", out string? texturePathFilterValue))
+            {
+                texturePathFilter = texturePathFilterValue;
                 continue;
             }
 
@@ -218,14 +247,26 @@ internal static class LithTechTextureMapAuditCommand
                             ? "crossfire_cft_model_texture_reference_audit.tsv"
                             : inspectLtcModelTextureLinks
                                 ? "crossfire_ltc_model_texture_reference_audit.tsv"
-                                : probeMappedPaths
-                                    ? "crossfire_texture_path_decode_probe.tsv"
-                                    : "crossfire_texture_mapping_audit.tsv");
+                                : inspectTextureResourcePaths
+                                    ? "crossfire_texture_resource_paths.tsv"
+                                    : probeMappedPaths
+                                        ? "crossfire_texture_path_decode_probe.tsv"
+                                        : "crossfire_texture_mapping_audit.tsv");
         }
 
         if (probeMappedPaths && string.IsNullOrWhiteSpace(auditInputPath))
         {
             throw new InvalidOperationException("Missing --audit path for --probe-texture-map-paths.");
+        }
+
+        if (inspectTextureResourcePaths && string.IsNullOrWhiteSpace(texturePathFilter))
+        {
+            throw new InvalidOperationException("Missing --contains <path token> for --inspect-texture-resource-paths.");
+        }
+
+        if (!inspectTextureResourcePaths && !string.IsNullOrWhiteSpace(texturePathFilter))
+        {
+            throw new InvalidOperationException("--contains requires --inspect-texture-resource-paths.");
         }
 
         string fullOutputPath = Path.GetFullPath(outputPath);
@@ -244,7 +285,9 @@ internal static class LithTechTextureMapAuditCommand
             inspectLtcMotionLinks,
             inspectCftMotionLinks,
             inspectCftModelTextureLinks,
-            inspectLtcModelTextureLinks);
+            inspectLtcModelTextureLinks,
+            inspectTextureResourcePaths,
+            texturePathFilter);
     }
 
     private static (int Paths, int Copies, int Decoded, int Partial, int Failed, int NotFound) WriteMappedTextureDecodeReport(
