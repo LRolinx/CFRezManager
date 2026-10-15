@@ -11,14 +11,16 @@ internal static class LithTechTextureMapAuditCommand
         string OutputPath,
         string? AuditInputPath,
         bool ProbeMappedPaths,
-        bool InspectLtcMotionLinks);
+        bool InspectLtcMotionLinks,
+        bool InspectCftMotionLinks);
 
     public static bool IsInvocation(string[] args)
     {
         return args.Any(arg =>
             string.Equals(arg, "--audit-texture-map", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(arg, "--probe-texture-map-paths", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(arg, "--inspect-ltc-motion-links", StringComparison.OrdinalIgnoreCase));
+            string.Equals(arg, "--inspect-ltc-motion-links", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(arg, "--inspect-cft-motion-links", StringComparison.OrdinalIgnoreCase));
     }
 
     public static int Run(string[] args)
@@ -37,6 +39,17 @@ internal static class LithTechTextureMapAuditCommand
                 Console.WriteLine($"Unique LTC contents: {motionAudit.UniqueDocuments.ToString(CultureInfo.InvariantCulture)}");
                 Console.WriteLine($"LTC contents decoded: {motionAudit.DecodedDocuments.ToString(CultureInfo.InvariantCulture)}");
                 Console.WriteLine($"Motion-model references: {motionAudit.MotionReferences.ToString(CultureInfo.InvariantCulture)}");
+                return 0;
+            }
+
+            if (options.InspectCftMotionLinks)
+            {
+                var motionAudit = LithTechModelTextureConfigIndex.WriteCftMotionReferenceAuditReport(root, options.OutputPath);
+                Console.WriteLine($"CFT motion reference report: {Path.GetFullPath(options.OutputPath)}");
+                Console.WriteLine($"CFT physical resource copies: {motionAudit.ResourceCopies.ToString(CultureInfo.InvariantCulture)}");
+                Console.WriteLine($"Unique CFT contents: {motionAudit.UniqueDocuments.ToString(CultureInfo.InvariantCulture)}");
+                Console.WriteLine($"CFT contents decoded: {motionAudit.DecodedDocuments.ToString(CultureInfo.InvariantCulture)}");
+                Console.WriteLine($"Typed motion-model links: {motionAudit.MotionLinks.ToString(CultureInfo.InvariantCulture)}");
                 return 0;
             }
 
@@ -90,6 +103,7 @@ internal static class LithTechTextureMapAuditCommand
         string? auditInputPath = null;
         bool probeMappedPaths = false;
         bool inspectLtcMotionLinks = false;
+        bool inspectCftMotionLinks = false;
         for (int index = 0; index < args.Length; index++)
         {
             string arg = args[index];
@@ -107,6 +121,12 @@ internal static class LithTechTextureMapAuditCommand
             if (string.Equals(arg, "--inspect-ltc-motion-links", StringComparison.OrdinalIgnoreCase))
             {
                 inspectLtcMotionLinks = true;
+                continue;
+            }
+
+            if (string.Equals(arg, "--inspect-cft-motion-links", StringComparison.OrdinalIgnoreCase))
+            {
+                inspectCftMotionLinks = true;
                 continue;
             }
 
@@ -151,9 +171,11 @@ internal static class LithTechTextureMapAuditCommand
                 outputDirectory,
                 inspectLtcMotionLinks
                     ? "crossfire_ltc_motion_reference_audit.tsv"
-                    : probeMappedPaths
-                        ? "crossfire_texture_path_decode_probe.tsv"
-                        : "crossfire_texture_mapping_audit.tsv");
+                    : inspectCftMotionLinks
+                        ? "crossfire_cft_motion_reference_audit.tsv"
+                        : probeMappedPaths
+                            ? "crossfire_texture_path_decode_probe.tsv"
+                            : "crossfire_texture_mapping_audit.tsv");
         }
 
         if (probeMappedPaths && string.IsNullOrWhiteSpace(auditInputPath))
@@ -174,7 +196,8 @@ internal static class LithTechTextureMapAuditCommand
             fullOutputPath,
             fullAuditInputPath,
             probeMappedPaths,
-            inspectLtcMotionLinks);
+            inspectLtcMotionLinks,
+            inspectCftMotionLinks);
     }
 
     private static (int Paths, int Copies, int Decoded, int Partial, int Failed, int NotFound) WriteMappedTextureDecodeReport(

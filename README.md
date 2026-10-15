@@ -162,10 +162,14 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 - `--audit-texture-map`：遍历资源目录和 REZ，输出全局槽、上下文槽、推导槽、逐网格解析及 LTB 清单。`mesh-export` 记录按导出器顺序首个能由实际纹理解析器解码的候选；`mesh-semantic` 关闭全局配置兜底，只保留槽位、网格/路径语义候选。能解码不代表已证实为游戏最终皮肤。TSV 标出歧义、物理副本冲突、贴图缺失、模型解码失败和无解析证据项；物理副本冲突行会列出每份模型的归档、资源路径、MD5 和各自候选贴图。`candidate-resource-present-unresolved` 表示模型贴图路径范围内存在候选资源，但纹理解析器没有返回图像；`candidate-resource-present-unresolved-outside-model-texture-scope` 表示该资源不在模型贴图路径范围内，解析器同样没有返回图像。详情记录 `image_decode=unconfirmed`，不把路径未命中误报为图像解码失败；`texture-path-decode-probe` 会按精确路径逐个解码候选资源和未命中的直接槽位引用的所有物理副本，标记可解码副本数、全副本失败或精确路径不存在。根级 `ModelTextures/` 与 `UCC/ModelAssets/UCC_Textures/` 均纳入模型贴图路径识别。RenderStyle 等非几何 LTB 单独列为资源，不计入模型解码失败；无证据不等于已解析。
 - `--probe-texture-map-paths --audit <审计TSV>`：对已有审计中 `model`、`context` 和 `mesh-slot` 行里的所有唯一贴图路径逐个解码，并测试每个物理副本；输出单独的 TSV，区分全部副本成功、部分副本失败、全副本失败和精确路径不存在。缺失项另列文件名近似的资源路径作为排查线索，不会自动替换映射。需要同时传入 `--root` 与 `--output`。
 - `--inspect-ltc-motion-links`：扫描可解码的 LTC 内容，输出同一 LTC 行中动画模型字段、普通模型字段、贴图字段和身份字段的关联。主审计会把同一行的 `MotionFileName` 按 `SkinFileName` 绑定并保留身份上下文；诊断报告不会推断表外关联。
+- `--inspect-cft-motion-links`：输出 CFT 同一强类型记录中父模型、动作模型、贴图字段和身份字段的关系，帮助检查动作模型槽位继承是否有直接表记录支撑。
+- CFT 动作引用即使未写扩展名，也只有在完整逻辑路径对应单一资源扩展名、父子模型均解码成功且实际槽位交集非空时才继承贴图。
+- 动作贴图只从同一强类型记录的主模型字段继承；Socket、手/臂、玩家视角、武器和弹体字段不传给动作模型。
+- 未编号 `SkinFileName` 只会在父子模型所有物理副本均解码并含槽 0，且贴图与父模型已有直接槽 0 映射完全一致时，传给动作模型槽 0；其余皮肤字段仍按明确编号匹配。
 - `--inspect-ltb-header`：列出匹配 LTB 副本的原始/解压头部和文件类型；模型会重试几何解码，D3D RenderStyle 会调用对应解码器并报告 style/pass 数量。`--all-renderstyles` 可一次检查并解码全部已知路径/命名的 RenderStyle。
 - `--model` 可重复指定多个模型；它们会导出到同一 OBJ，并保留各网格与材质分组。
 - `--texture-context` 可指定角色或道具 ID/名称：角色手臂贴图取自 CFT，道具第一人称贴图取自 LTC，并按 LTB 实际材质槽分别映射。同组 `WeaponModel` 能唯一关联时，`item:<道具编号>` 会沿 `WeaponPreview` → `WeaponModel` 查找 LTC `WeaponIndex` 或按旧去重规则还原且无冲突的武器绑定序号；编号跨域冲突时，可用 `preview:<模型组号>:<道具编号>` 明确选择预览表关联，避免误用同号 LTC `WeaponIndex`。若该道具/分组没有可用的 `WeaponModel.ModelId`，可回退到同号 LTC `WeaponIndex`；仅当其他分组提供了直接命中的 LTC `WeaponIndex` 目标时才跳过回退。绑定按具体 LTC 模型和贴图字段分别保留；旧版 LTC 路径只有在行类型、角色字段、模型/贴图文件名和身份别名均匹配，且目标 LTB 副本槽位一致时，才回链到物理资源。世界模型等非玩家视角字段仅在所有物理模型副本的槽位集合一致、且槽数与贴图字段数相同时映射。`CharacterType.CFT` 的阵营身体贴图字段绑定身体槽 0；若所有模型副本均成功解码且布局一致、槽 1 的使用网格全部命名为头/脸，且同目录 `BODY`→`FACE` DTX 确切存在，导出器会额外生成 `cft-body-face-derived` 推导绑定。缺少任一证据或候选冲突时保持未映射。动作模型所有副本都必须解码且槽位集合一致；父模型存在时只继承双方共有的槽 0，动作模型其他槽保持未映射，父模型缺失时仅允许单槽 0 动作模型。共享动作模型可用带阵营后缀的上下文选择皮肤，例如 `A0097:BL`；同一模型的不同皮肤仍按身份上下文隔离。手/臂模型按各自角色解析，编号贴图字段在模型只有一个可用材质槽时绑定该唯一槽，多槽模型仍按序号匹配。也可直接指定 `weaponindex:<编号>`。存在槽位证据但未匹配的网格不会套用猜测贴图。
-- 角色别名有冲突时，可用 `record:rez\RF100\Table\CharacterType.CFT#701:BL` 按 CFT 表行和阵营精确选择皮肤。
+- 角色别名有冲突时，可用 `row:rez\RF100\Table\CharacterType.CFT#701:BL` 按零基 CFT 行和阵营精确选择皮肤；表内存在有效 `RecordId` 时可用 `recordid:rez\RF100\Table\CharacterType.CFT#<编号>`，两种编号域互不混用。
 - `--scan-cfg`：扫描 CFG，提取贴图引用，输出 TXT/CSV 报告。
 - `--decode-cfg`：重试失败 CFG，导出可还原文本或二进制预览图，并分类高熵配置。
 

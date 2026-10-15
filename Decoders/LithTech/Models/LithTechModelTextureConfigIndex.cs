@@ -264,6 +264,78 @@ internal static class LithTechModelTextureConfigIndex
         return (index.LtcItems.Count, documentGroups.Length, decodedDocuments, motionReferences);
     }
 
+    public static (int ResourceCopies, int UniqueDocuments, int DecodedDocuments, int MotionLinks)
+        WriteCftMotionReferenceAuditReport(ExplorerItem root, string outputPath)
+    {
+        TextureConfigIndex index = TextureConfigIndexCache.GetValue(root, BuildIndex);
+        IGrouping<string, TextureConfigItem>[] documentGroups = index.AllItems
+            .Where(item => string.Equals(Path.GetExtension(item.Path), ".cft", StringComparison.OrdinalIgnoreCase))
+            .GroupBy(item => item.Item.ArchiveFile?.Md5 is { Length: > 0 } md5
+                ? "md5:" + md5
+                : "path:" + NormalizeKey(item.Path), StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        int resourceCopies = documentGroups.Sum(group => group.Count());
+        Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+        using var writer = new StreamWriter(outputPath, false, new UTF8Encoding(true));
+        writer.WriteLine("source_resources\trow_index\trecord_id\tmodel_column\tparent_model\tmotion_model\ttexture_fields\tidentity_aliases");
+        int decodedDocuments = 0;
+        int motionLinks = 0;
+        foreach (IGrouping<string, TextureConfigItem> group in documentGroups)
+        {
+            TextureConfigItem configItem = group.First();
+            byte[]? data = TryReadItemBytes(configItem.Item, MaxCftBytes);
+            if (data is null)
+            {
+                continue;
+            }
+
+            decodedDocuments++;
+            IReadOnlyList<CftModelTextureMapping> mappings;
+            try
+            {
+                mappings = CftModelTextureMappingDecoder.Extract(data);
+            }
+            catch (InvalidDataException)
+            {
+                continue;
+            }
+
+            string sources = string.Join(" || ", group.Select(source =>
+            {
+                string archive = source.Item.Archive?.FilePath ?? "local";
+                string resource = source.Item.ArchiveFile?.FullPath ?? source.Item.OutputRelativePath;
+                string hash = source.Item.ArchiveFile?.Md5 ?? "local";
+                return $"{archive}:{resource}#{hash}";
+            }).Order(StringComparer.OrdinalIgnoreCase));
+            foreach (CftModelTextureMapping mapping in mappings.Where(mapping =>
+                         mapping.HasTypedRowContext && mapping.RelatedModelReferences is { Count: > 0 }))
+            {
+                foreach (string motionModel in mapping.RelatedModelReferences!
+                             .Where(reference => Path.GetFileNameWithoutExtension(reference)
+                                 .Contains("motion", StringComparison.OrdinalIgnoreCase))
+                             .Distinct(StringComparer.OrdinalIgnoreCase))
+                {
+                    motionLinks++;
+                    string recordId = mapping.RecordId?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+                    string textures = string.Join(" || ", mapping.TextureReferences
+                        .Select(texture => $"{texture.Column}:{texture.Path}"));
+                    writer.WriteLine(string.Join("\t", [
+                        EscapeTsv(sources),
+                        mapping.RowIndex.ToString(CultureInfo.InvariantCulture),
+                        recordId,
+                        EscapeTsv(mapping.ModelColumn),
+                        EscapeTsv(mapping.ModelReference),
+                        EscapeTsv(motionModel),
+                        EscapeTsv(textures),
+                        EscapeTsv(string.Join(" || ", mapping.IdentityAliases))
+                    ]));
+                }
+            }
+        }
+
+        return (resourceCopies, documentGroups.Length, decodedDocuments, motionLinks);
+    }
+
     public static (
         int RowCount,
         int SlotMappings,
@@ -2679,12 +2751,33 @@ internal static class LithTechModelTextureConfigIndex
         var inferredByModelPath = new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase);
         var inferredByModelContext = new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase);
         var modelsWithSlotSpecificBindings = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var deferredCftMotionSkinBindings = new List<DeferredCftMotionSkinBinding>();
         var modelItemsByPath = modelResourceItems
             .Where(item => string.Equals(item.FileExtension, "ltb", StringComparison.OrdinalIgnoreCase))
             .Select(item => (Item: item, ResourcePath: GetModelResourcePath(item)))
             .Select(pair => (pair.Item, pair.ResourcePath, LogicalPath: GetLogicalModelResourcePath(pair.ResourcePath)))
             .Where(pair => pair.LogicalPath.Length > 0)
             .GroupBy(pair => pair.LogicalPath, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(pair => pair.Item).ToArray(),
+                StringComparer.OrdinalIgnoreCase);
+        var modelItemsByExtensionlessPath = modelResourceItems
+            .Select(item => (Item: item, ResourcePath: GetModelResourcePath(item)))
+            .Select(pair => (
+                pair.Item,
+                LogicalPath: GetLogicalModelResourcePath(pair.ResourcePath),
+                Extension: Path.GetExtension(pair.ResourcePath)))
+            .Where(pair => pair.LogicalPath.Length > 0 &&
+                           ModelExtensions.Contains(pair.Extension, StringComparer.OrdinalIgnoreCase))
+            .GroupBy(
+                pair => NormalizeExtensionlessModelReference(pair.LogicalPath),
+                StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Key.Length > 0 &&
+                            group.Select(pair => pair.Extension)
+                                .Distinct(StringComparer.OrdinalIgnoreCase)
+                                .Count() == 1 &&
+                            string.Equals(group.First().Extension, ".ltb", StringComparison.OrdinalIgnoreCase))
             .ToDictionary(
                 group => group.Key,
                 group => group.Select(pair => pair.Item).ToArray(),
@@ -2766,6 +2859,31 @@ internal static class LithTechModelTextureConfigIndex
                             {
                                 rowSlotTextures[slotIndex] = null;
                             }
+                        }
+                    }
+                    else if (IsPrimaryCftMotionSourceColumn(mapping.ModelColumn) &&
+                             IsUnindexedCftSkinFileName(texture.Column) &&
+                             mapping.RelatedModelReferences is { Count: > 0 } relatedModelReferences)
+                    {
+                        string? existingTexturePath = ResolveExistingTextureReference(
+                            texture.Path,
+                            resourcePaths,
+                            texturePathsByBaseName);
+                        if (existingTexturePath is null)
+                        {
+                            continue;
+                        }
+
+                        foreach (string relatedModelReference in relatedModelReferences
+                                     .Where(reference => Path.GetFileNameWithoutExtension(reference)
+                                         .Contains("motion", StringComparison.OrdinalIgnoreCase))
+                                     .Distinct(StringComparer.OrdinalIgnoreCase))
+                        {
+                            deferredCftMotionSkinBindings.Add(new DeferredCftMotionSkinBinding(
+                                modelResourcePath,
+                                relatedModelReference,
+                                existingTexturePath,
+                                contextKeys));
                         }
                     }
                     else if (TryGetCharacterCftBodySide(configItem.Path, mapping, texture, out string bodySide))
@@ -2951,7 +3069,8 @@ internal static class LithTechModelTextureConfigIndex
                     ? foundBaseModelItems
                     : [];
                 bool hasPhysicalParentModels = baseModelItems.Length > 0;
-                if (rowSlotTextures.Count == 0 ||
+                if (!IsPrimaryCftMotionSourceColumn(mapping.ModelColumn) ||
+                    rowSlotTextures.Count == 0 ||
                     mapping.RelatedModelReferences is not { Count: > 0 } relatedModels ||
                     !hasPhysicalParentModels && !hasImplicitCharacterBodyTexture)
                 {
@@ -2967,8 +3086,15 @@ internal static class LithTechModelTextureConfigIndex
                     }
 
                     string relatedResourcePath = NormalizeKey(relatedModelReference);
-                    if (!Path.HasExtension(relatedResourcePath) ||
-                        !modelItemsByPath.TryGetValue(GetLogicalModelResourcePath(relatedResourcePath), out ExplorerItem[]? relatedModelItems))
+                    ExplorerItem[]? relatedModelItems;
+                    bool hasRelatedModel = Path.HasExtension(relatedResourcePath)
+                        ? modelItemsByPath.TryGetValue(
+                            GetLogicalModelResourcePath(relatedResourcePath),
+                            out relatedModelItems)
+                        : modelItemsByExtensionlessPath.TryGetValue(
+                            NormalizeExtensionlessModelReference(relatedResourcePath),
+                            out relatedModelItems);
+                    if (!hasRelatedModel || relatedModelItems is null)
                     {
                         continue;
                     }
@@ -3342,6 +3468,62 @@ internal static class LithTechModelTextureConfigIndex
             modelsWithSlotSpecificBindings.Add(modelPath);
         }
 
+        foreach (DeferredCftMotionSkinBinding binding in deferredCftMotionSkinBindings)
+        {
+            string parentResourcePath = NormalizeKey(binding.ParentModelPath);
+            ExplorerItem[]? parentModelItems;
+            bool hasParentModel = Path.HasExtension(parentResourcePath)
+                ? modelItemsByPath.TryGetValue(
+                    GetLogicalModelResourcePath(parentResourcePath),
+                    out parentModelItems)
+                : modelItemsByExtensionlessPath.TryGetValue(
+                    NormalizeExtensionlessModelReference(parentResourcePath),
+                    out parentModelItems);
+            string parentModelPath = NormalizeExtensionlessModelReference(parentResourcePath);
+            if (!hasParentModel || parentModelItems is null || parentModelItems.Length == 0 ||
+                !TryGetConsistentLtcModelSlots(parentModelItems, decodedModels, out int[] parentSlots) ||
+                !parentSlots.Contains(0) ||
+                !HasMatchingModelTextureSlotMapping(
+                    byModelPath,
+                    byModelContext,
+                    parentModelPath,
+                    0,
+                    binding.TexturePath))
+            {
+                continue;
+            }
+
+            string relatedResourcePath = NormalizeKey(binding.MotionModelReference);
+            ExplorerItem[]? relatedModelItems;
+            bool hasRelatedModel = Path.HasExtension(relatedResourcePath)
+                ? modelItemsByPath.TryGetValue(
+                    GetLogicalModelResourcePath(relatedResourcePath),
+                    out relatedModelItems)
+                : modelItemsByExtensionlessPath.TryGetValue(
+                    NormalizeExtensionlessModelReference(relatedResourcePath),
+                    out relatedModelItems);
+            if (!hasRelatedModel || relatedModelItems is null || relatedModelItems.Length == 0 ||
+                !TryGetConsistentLtcModelSlots(relatedModelItems, decodedModels, out int[] relatedSlots) ||
+                !relatedSlots.Contains(0))
+            {
+                continue;
+            }
+
+            string relatedModelPath = NormalizeExtensionlessModelReference(relatedResourcePath);
+            AddModelTextureSlotMapping(byModelPath, relatedModelPath, 0, binding.TexturePath);
+            foreach (string contextKey in binding.ContextKeys)
+            {
+                AddModelTextureContextSlotMapping(
+                    byModelContext,
+                    relatedModelPath,
+                    contextKey,
+                    0,
+                    binding.TexturePath);
+            }
+
+            modelsWithSlotSpecificBindings.Add(relatedModelPath);
+        }
+
         return new ModelTextureSlotDictionary(
             byModelPath,
             byModelContext,
@@ -3352,14 +3534,26 @@ internal static class LithTechModelTextureConfigIndex
 
     private static string[] GetCftContextKeys(string tablePath, CftModelTextureMapping mapping)
     {
-        string recordIdentity = mapping.RecordId?.ToString(CultureInfo.InvariantCulture) ??
-                                mapping.RowIndex.ToString(CultureInfo.InvariantCulture);
         string rowIdentity = mapping.RowIndex.ToString(CultureInfo.InvariantCulture);
-        return mapping.IdentityAliases
-            .Append($"{NormalizeKey(tablePath)}#{recordIdentity}")
-            .Append($"record:{Path.GetFileName(tablePath)}:{recordIdentity}")
-            .Append($"{NormalizeKey(tablePath)}#{rowIdentity}")
-            .Append($"record:{Path.GetFileName(tablePath)}:{rowIdentity}")
+        string normalizedTablePath = NormalizeKey(tablePath);
+        string tableFileName = Path.GetFileName(tablePath);
+        var contexts = new List<string>(mapping.IdentityAliases)
+        {
+            $"{normalizedTablePath}#{rowIdentity}",
+            $"row:{normalizedTablePath}#{rowIdentity}",
+            $"row:{tableFileName}#{rowIdentity}",
+            // Keep the old basename-plus-row selector, but never reuse its
+            // `record:` namespace for RecordId; those number domains overlap.
+            $"record:{tableFileName}:{rowIdentity}"
+        };
+        if (mapping.RecordId is int recordId && recordId > 0)
+        {
+            string recordIdentity = recordId.ToString(CultureInfo.InvariantCulture);
+            contexts.Add($"recordid:{normalizedTablePath}#{recordIdentity}");
+            contexts.Add($"recordid:{tableFileName}#{recordIdentity}");
+        }
+
+        return contexts
             .Where(context => NormalizeLooseKey(context).Length > 0)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -4056,6 +4250,49 @@ internal static class LithTechModelTextureConfigIndex
             $"{modelPath}\0{normalizedContext}",
             slotIndex,
             texturePath);
+    }
+
+    private static bool IsUnindexedCftSkinFileName(string columnName)
+    {
+        return string.Equals(
+            columnName.TrimStart('_'),
+            "SkinFileName",
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsPrimaryCftMotionSourceColumn(string columnName)
+    {
+        string normalized = columnName.TrimStart('_');
+        return normalized.Contains("model", StringComparison.OrdinalIgnoreCase) &&
+               !normalized.Contains("motion", StringComparison.OrdinalIgnoreCase) &&
+               !normalized.Contains("socket", StringComparison.OrdinalIgnoreCase) &&
+               !normalized.Contains("arm", StringComparison.OrdinalIgnoreCase) &&
+               !normalized.Contains("hand", StringComparison.OrdinalIgnoreCase) &&
+               !normalized.Contains("pview", StringComparison.OrdinalIgnoreCase) &&
+               !normalized.Contains("playerview", StringComparison.OrdinalIgnoreCase) &&
+               !normalized.Contains("weapon", StringComparison.OrdinalIgnoreCase) &&
+               !normalized.Contains("projectile", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool HasMatchingModelTextureSlotMapping(
+        IReadOnlyDictionary<string, Dictionary<int, string?>> byModelPath,
+        IReadOnlyDictionary<string, Dictionary<int, string?>> byModelContext,
+        string modelPath,
+        int slotIndex,
+        string texturePath)
+    {
+        if (byModelPath.TryGetValue(modelPath, out Dictionary<int, string?>? modelSlots) &&
+            modelSlots.TryGetValue(slotIndex, out string? modelTexture) &&
+            string.Equals(modelTexture, texturePath, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        string contextPrefix = modelPath + "\0";
+        return byModelContext.Any(pair =>
+            pair.Key.StartsWith(contextPrefix, StringComparison.OrdinalIgnoreCase) &&
+            pair.Value.TryGetValue(slotIndex, out string? contextTexture) &&
+            string.Equals(contextTexture, texturePath, StringComparison.OrdinalIgnoreCase));
     }
 
     private static string GetLogicalModelResourcePath(string resourcePath)
@@ -5493,6 +5730,12 @@ internal static class LithTechModelTextureConfigIndex
         string ModelReference,
         int TextureSlotIndex,
         string TextureReference);
+
+    private sealed record DeferredCftMotionSkinBinding(
+        string ParentModelPath,
+        string MotionModelReference,
+        string TexturePath,
+        IReadOnlyList<string> ContextKeys);
 
     private sealed record ModelTextureDictionary(
         IReadOnlyDictionary<string, IReadOnlyList<string>> ByName,
