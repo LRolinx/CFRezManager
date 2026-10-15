@@ -661,11 +661,14 @@ internal static class LithTechModelTextureConfigIndex
                 bool copiesAgree = !hasDecodeFailure && perCopyExporterMappings.Count == group.Count();
                 var allTextures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var allUndecodedTextures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (Dictionary<string, (string? TexturePath, string? Candidate, int CandidateCount, string? AmbiguousCandidate, string? UndecodedTexturePath, string? UndecodedCandidate)> copy in perCopyExporterMappings)
+                var perCopyDetails = new List<string>(perCopyExporterMappings.Count);
+                for (int copyIndex = 0; copyIndex < perCopyExporterMappings.Count; copyIndex++)
                 {
+                    Dictionary<string, (string? TexturePath, string? Candidate, int CandidateCount, string? AmbiguousCandidate, string? UndecodedTexturePath, string? UndecodedCandidate)> copy = perCopyExporterMappings[copyIndex];
                     var current = copy.TryGetValue(meshKey, out var found)
                         ? found
                         : (null, null, 0, null, null, null);
+                    ExplorerItem physicalCopy = groupItems[copyIndex];
                     reference ??= current;
                     if (!string.Equals(reference.Value.TexturePath, current.TexturePath, StringComparison.OrdinalIgnoreCase) ||
                         !string.Equals(reference.Value.UndecodedTexturePath, current.UndecodedTexturePath, StringComparison.OrdinalIgnoreCase))
@@ -682,6 +685,12 @@ internal static class LithTechModelTextureConfigIndex
                     {
                         allUndecodedTextures.Add(current.UndecodedTexturePath);
                     }
+
+                    string archivePath = physicalCopy.Archive?.FilePath ?? "local";
+                    string modelResourcePath = physicalCopy.ArchiveFile?.FullPath ?? physicalCopy.OutputRelativePath;
+                    string modelMd5 = physicalCopy.ArchiveFile?.Md5 ?? "local";
+                    perCopyDetails.Add(
+                        $"copy{(copyIndex + 1).ToString(CultureInfo.InvariantCulture)}={{archive={archivePath};model={modelResourcePath}#{modelMd5};candidate_count={current.CandidateCount.ToString(CultureInfo.InvariantCulture)};texture={current.TexturePath ?? "<none>"};candidate={current.Candidate ?? "<none>"};unresolved_texture={current.UndecodedTexturePath ?? "<none>"};unresolved_candidate={current.UndecodedCandidate ?? "<none>"}}}");
                 }
 
                 exactTexturePaths.UnionWith(allUndecodedTextures);
@@ -734,6 +743,10 @@ internal static class LithTechModelTextureConfigIndex
                         : "outside-model-texture";
                     exportDetail += $";unresolved_candidate={reference.Value.UndecodedCandidate};texture_resolver_invoked=true;resolver_result=unresolved;image_decode=unconfirmed;decode_scope={decodeScope}";
                 }
+                if (status == "physical-copy-conflict")
+                {
+                    exportDetail += $";physical_copy_details={string.Join("||", perCopyDetails)}";
+                }
 
                 var exportOutputTextures = new HashSet<string>(allTextures, StringComparer.OrdinalIgnoreCase);
                 exportOutputTextures.UnionWith(allUndecodedTextures);
@@ -772,11 +785,14 @@ internal static class LithTechModelTextureConfigIndex
                 bool copiesAgree = !hasDecodeFailure && perCopySemanticMappings.Count == group.Count();
                 var allTextures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var allUndecodedTextures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (Dictionary<string, (string? TexturePath, string? Candidate, int CandidateCount, string? AmbiguousCandidate, string? UndecodedTexturePath, string? UndecodedCandidate)> copy in perCopySemanticMappings)
+                var perCopyDetails = new List<string>(perCopySemanticMappings.Count);
+                for (int copyIndex = 0; copyIndex < perCopySemanticMappings.Count; copyIndex++)
                 {
+                    Dictionary<string, (string? TexturePath, string? Candidate, int CandidateCount, string? AmbiguousCandidate, string? UndecodedTexturePath, string? UndecodedCandidate)> copy = perCopySemanticMappings[copyIndex];
                     var current = copy.TryGetValue(meshKey, out var found)
                         ? found
                         : (null, null, 0, null, null, null);
+                    ExplorerItem physicalCopy = groupItems[copyIndex];
                     reference ??= current;
                     if (!string.Equals(reference.Value.TexturePath, current.TexturePath, StringComparison.OrdinalIgnoreCase) ||
                         !string.Equals(reference.Value.UndecodedTexturePath, current.UndecodedTexturePath, StringComparison.OrdinalIgnoreCase))
@@ -793,6 +809,12 @@ internal static class LithTechModelTextureConfigIndex
                     {
                         allUndecodedTextures.Add(current.UndecodedTexturePath);
                     }
+
+                    string archivePath = physicalCopy.Archive?.FilePath ?? "local";
+                    string modelResourcePath = physicalCopy.ArchiveFile?.FullPath ?? physicalCopy.OutputRelativePath;
+                    string modelMd5 = physicalCopy.ArchiveFile?.Md5 ?? "local";
+                    perCopyDetails.Add(
+                        $"copy{(copyIndex + 1).ToString(CultureInfo.InvariantCulture)}={{archive={archivePath};model={modelResourcePath}#{modelMd5};candidate_count={current.CandidateCount.ToString(CultureInfo.InvariantCulture)};texture={current.TexturePath ?? "<none>"};candidate={current.Candidate ?? "<none>"};unresolved_texture={current.UndecodedTexturePath ?? "<none>"};unresolved_candidate={current.UndecodedCandidate ?? "<none>"}}}");
                 }
 
                 exactTexturePaths.UnionWith(allUndecodedTextures);
@@ -849,6 +871,10 @@ internal static class LithTechModelTextureConfigIndex
                         ? "model-texture"
                         : "outside-model-texture";
                     semanticDetail += $";unresolved_candidate={reference.Value.UndecodedCandidate};texture_resolver_invoked=true;resolver_result=unresolved;image_decode=unconfirmed;decode_scope={decodeScope}";
+                }
+                if (status == "physical-copy-conflict")
+                {
+                    semanticDetail += $";physical_copy_details={string.Join("||", perCopyDetails)}";
                 }
 
                 var semanticOutputTextures = new HashSet<string>(allTextures, StringComparer.OrdinalIgnoreCase);
