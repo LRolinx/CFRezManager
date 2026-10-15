@@ -1926,6 +1926,102 @@ internal static class LithTechModelTextureConfigIndex
             }
         }
 
+        foreach (ExplorerItem ltcItem in ltcItems)
+        {
+            string cacheKey = ltcItem.ArchiveFile?.Md5 is { Length: > 0 } archiveHash
+                ? "md5:" + archiveHash
+                : NormalizeKey(ltcItem.OutputRelativePath);
+            if (!ltcMappingCache.TryGetValue(cacheKey, out IReadOnlyList<CrossFireLtcModelTextureMapping>? mappings))
+            {
+                continue;
+            }
+
+            foreach (CrossFireLtcModelTextureMapping mapping in mappings)
+            {
+                if (mapping.TextureFieldReferences.Count == 0 ||
+                    mapping.TextureFieldReferences.Any(textureReference =>
+                        TryGetLtcPlayerViewTextureOrdinal(mapping.ModelField, textureReference.FieldName, out _)))
+                {
+                    continue;
+                }
+
+                string logicalModelPath = GetLogicalModelResourcePath(NormalizeKey(mapping.ModelReference));
+                string modelPath = NormalizeExtensionlessModelReference(mapping.ModelReference);
+                if (logicalModelPath.Length == 0 || modelPath.Length == 0 ||
+                    !modelItemsByPath.TryGetValue(logicalModelPath, out ExplorerItem[]? modelItems) ||
+                    modelItems.Length == 0)
+                {
+                    continue;
+                }
+
+                int[]? mappedSlots = null;
+                foreach (ExplorerItem modelItem in modelItems)
+                {
+                    LithTechModelDocument? document = TryDecodeSlotInheritanceModel(
+                        modelItem,
+                        GetModelResourcePath(modelItem),
+                        decodedModels);
+                    if (document is null)
+                    {
+                        mappedSlots = null;
+                        break;
+                    }
+
+                    int[] currentSlots = document.Meshes
+                        .SelectMany(mesh => mesh.TextureSlotIndices ?? [])
+                        .Distinct()
+                        .Order()
+                        .ToArray();
+                    if (currentSlots.Length == 0 ||
+                        mappedSlots is not null && !mappedSlots.SequenceEqual(currentSlots))
+                    {
+                        mappedSlots = null;
+                        break;
+                    }
+
+                    mappedSlots ??= currentSlots;
+                }
+
+                CrossFireLtcTextureFieldReference[] textureReferences = mapping.TextureFieldReferences
+                    .OrderBy(reference => GetLtcTextureFieldOrdinal(reference.FieldName))
+                    .ThenBy(reference => reference.FieldName, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                if (mappedSlots is null || mappedSlots.Length != textureReferences.Length)
+                {
+                    continue;
+                }
+
+                string[] contextKeys = GetLtcContextKeys(ltcItem, mapping)
+                    .Concat(GetWeaponItemContextAliases(mapping, itemAliases))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                for (int index = 0; index < mappedSlots.Length; index++)
+                {
+                    string? existingTexturePath = ResolveExistingTextureReference(
+                        textureReferences[index].Path,
+                        resourcePaths,
+                        texturePathsByBaseName);
+                    if (existingTexturePath is null)
+                    {
+                        continue;
+                    }
+
+                    int slotIndex = mappedSlots[index];
+                    AddModelTextureSlotMapping(byModelPath, modelPath, slotIndex, existingTexturePath);
+                    modelsWithSlotSpecificBindings.Add(modelPath);
+                    foreach (string contextKey in contextKeys)
+                    {
+                        AddModelTextureContextSlotMapping(
+                            byModelContext,
+                            modelPath,
+                            contextKey,
+                            slotIndex,
+                            existingTexturePath);
+                    }
+                }
+            }
+        }
+
         foreach (ModelMaterialComponentTextureMapping mapping in GetModelMaterialComponentTextureMappings(
                      modelResourceItems,
                      resourcePaths,
@@ -1973,6 +2069,28 @@ internal static class LithTechModelTextureConfigIndex
             .Where(context => NormalizeLooseKey(context).Length > 0)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private static int GetLtcTextureFieldOrdinal(string fieldName)
+    {
+        int suffixStart = fieldName.Length;
+        while (suffixStart > 0 && char.IsAsciiDigit(fieldName[suffixStart - 1]))
+        {
+            suffixStart--;
+        }
+
+        if (suffixStart == fieldName.Length)
+        {
+            return 1;
+        }
+
+        return int.TryParse(
+            fieldName[suffixStart..],
+            NumberStyles.None,
+            CultureInfo.InvariantCulture,
+            out int ordinal) && ordinal > 0
+            ? ordinal
+            : int.MaxValue;
     }
 
     private static IReadOnlyList<string> GetWeaponItemContextAliases(
@@ -2167,12 +2285,17 @@ internal static class LithTechModelTextureConfigIndex
             }
 
             int[] eligibleSlots = modelSlots.Except(handArmSlots).Order().ToArray();
-            if (textureOrdinal < 0 || textureOrdinal >= eligibleSlots.Length)
+            // Numbered LTC player-view fields can describe the same skin on a
+            // standalone hand model or the sole weapon slot of a full preview
+            // model. In that case, the only eligible LTB slot is unambiguous;
+            // keep ordinal selection strict when multiple slots are available.
+            int resolvedOrdinal = eligibleSlots.Length == 1 ? 0 : textureOrdinal;
+            if (resolvedOrdinal < 0 || resolvedOrdinal >= eligibleSlots.Length)
             {
                 return [];
             }
 
-            int[] currentSlots = [eligibleSlots[textureOrdinal]];
+            int[] currentSlots = [eligibleSlots[resolvedOrdinal]];
             if (resolvedSlots is null)
             {
                 resolvedSlots = currentSlots;
