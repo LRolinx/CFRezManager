@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Globalization;
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
 using System.Text;
 using System.Windows.Media;
 
@@ -193,6 +194,8 @@ internal static class LithTechModelTextureConfigIndex
                     slots.Count > 0 ||
                     dictionary.EquivalentArmByModelPath.ContainsKey(modelPath) ||
                     dictionary.EquivalentArmByModelContext.Keys.Any(key =>
+                        key.StartsWith(modelPath + "\0", StringComparison.OrdinalIgnoreCase)) ||
+                    dictionary.WeaponPreviewVariantByModelContext.Keys.Any(key =>
                         key.StartsWith(modelPath + "\0", StringComparison.OrdinalIgnoreCase)));
         };
     }
@@ -219,6 +222,25 @@ internal static class LithTechModelTextureConfigIndex
             return dictionary.EquivalentArmByModelPath.TryGetValue(modelPath, out Dictionary<int, string?>? pathSlots) &&
                    pathSlots.TryGetValue(slotIndex, out string? pathTexture) && !string.IsNullOrWhiteSpace(pathTexture)
                 ? [pathTexture] : [];
+        };
+    }
+
+    public static Func<string, string, int, IReadOnlyList<string>>? CreateWeaponPreviewVariantTextureContextSlotResolver(ExplorerItem root)
+    {
+        TextureConfigIndex index = TextureConfigIndexCache.GetValue(root, BuildIndex);
+        if (index.IsEmpty) return null;
+        return (modelReference, context, slotIndex) =>
+        {
+            string modelPath = NormalizeModelResourcePath(modelReference);
+            string contextKey = NormalizeLooseKey(context);
+            if (modelPath.Length == 0 || contextKey.Length == 0 || slotIndex is < 0 or > MaxTextureSlotIndex) return [];
+            ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index);
+            string key = $"{modelPath}\0{contextKey}";
+            if (dictionary.ByModelContext.TryGetValue(key, out Dictionary<int, string?>? directSlots) && directSlots.ContainsKey(slotIndex))
+                return [];
+            return dictionary.WeaponPreviewVariantByModelContext.TryGetValue(key, out Dictionary<int, string?>? slots) &&
+                   slots.TryGetValue(slotIndex, out string? texture) && !string.IsNullOrWhiteSpace(texture)
+                ? [texture] : [];
         };
     }
 
@@ -633,7 +655,9 @@ internal static class LithTechModelTextureConfigIndex
             modelsWithSlotEvidence.Add(modelPath);
         }
 
-        foreach (string contextKey in dictionary.InferredByModelContext.Keys.Concat(dictionary.EquivalentArmByModelContext.Keys))
+        foreach (string contextKey in dictionary.InferredByModelContext.Keys
+                     .Concat(dictionary.EquivalentArmByModelContext.Keys)
+                     .Concat(dictionary.WeaponPreviewVariantByModelContext.Keys))
         {
             int separator = contextKey.IndexOf('\0');
             if (separator > 0)
@@ -658,6 +682,7 @@ internal static class LithTechModelTextureConfigIndex
         WriteSlotDictionary(dictionary.InferredByModelPath, "model", string.Empty, "cft-body-face-derived", isInferred: true);
         WriteContextDictionary(dictionary.InferredByModelContext, "context", "cft-body-face-derived", isInferred: true);
         WriteContextDictionary(dictionary.EquivalentArmByModelContext, "context", "cft-equivalent-arm-derived", isInferred: true);
+        WriteContextDictionary(dictionary.WeaponPreviewVariantByModelContext, "context", "weapon-preview-variant-derived", isInferred: true);
 
         var physicalModelGroups = index.ModelResourceItems
             .Where(item => string.Equals(item.FileExtension, "ltb", StringComparison.OrdinalIgnoreCase))
@@ -1640,6 +1665,7 @@ internal static class LithTechModelTextureConfigIndex
         var byName = new Dictionary<string, List<TextureConfigItem>>(StringComparer.OrdinalIgnoreCase);
         var byLooseName = new Dictionary<string, List<TextureConfigItem>?>(StringComparer.OrdinalIgnoreCase);
         var allItems = new List<TextureConfigItem>();
+        var resourceItems = new List<ExplorerItem>();
         var modelResourceItems = new List<ExplorerItem>();
         var uccMapItems = new List<ExplorerItem>();
         var objectLtoItems = new List<ExplorerItem>();
@@ -1654,6 +1680,7 @@ internal static class LithTechModelTextureConfigIndex
 
         foreach (ExplorerItem item in EnumerateFiles(root))
         {
+            resourceItems.Add(item);
             string outputPath = NormalizeKey(item.OutputRelativePath);
             if (!string.IsNullOrWhiteSpace(outputPath))
             {
@@ -1719,7 +1746,7 @@ internal static class LithTechModelTextureConfigIndex
                 ltcItems.Add(item);
             }
 
-            if (CrossFireScriptBinDecoder.IsCandidate(item.Name, item.FileExtension))
+            if (CrossFireScriptBinDecoder.IsCandidate(item.ArchiveFile?.FullPath ?? item.OutputRelativePath, item.FileExtension))
             {
                 crossFireScriptItems.Add(item);
             }
@@ -1751,6 +1778,7 @@ internal static class LithTechModelTextureConfigIndex
             byName,
             byLooseName,
             allItems,
+            resourceItems,
             modelResourceItems,
             uccMapItems,
             objectLtoItems,
@@ -2977,6 +3005,7 @@ internal static class LithTechModelTextureConfigIndex
 
     private static ModelTextureSlotDictionary BuildModelTextureSlotDictionary(
         IReadOnlyList<TextureConfigItem> configItems,
+        IReadOnlyList<ExplorerItem> resourceItems,
         IReadOnlyList<ExplorerItem> ltcItems,
         IReadOnlyList<ExplorerItem> crossFireScriptItems,
         IReadOnlyList<ExplorerItem> modelResourceItems,
@@ -2988,6 +3017,7 @@ internal static class LithTechModelTextureConfigIndex
         var byModelContext = new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase);
         var inferredByModelPath = new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase);
         var inferredByModelContext = new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase);
+        var weaponPreviewVariantByModelContext = new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase);
         var modelsWithSlotSpecificBindings = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var deferredCftMotionSkinBindings = new List<DeferredCftMotionSkinBinding>();
         var directPlayerViewModels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -3475,7 +3505,7 @@ internal static class LithTechModelTextureConfigIndex
             }
         }
 
-        CrossFireWeaponPreviewItemAliasIndex itemAliases =
+        (CrossFireWeaponPreviewItemAliasIndex itemAliases, IReadOnlyList<WeaponPreviewSkinAsset> weaponPreviewSkinAssets) =
             BuildWeaponPreviewItemAliases(crossFireScriptItems, ltcWeaponIndexIds, ltcMappingCache.Values);
         Dictionary<string, Dictionary<string, LtcPhysicalModelTextureBinding>> ltcPhysicalBindingAliases =
             BuildLtcPhysicalBindingAliases(
@@ -3777,11 +3807,24 @@ internal static class LithTechModelTextureConfigIndex
             modelsWithSlotSpecificBindings.Add(relatedModelPath);
         }
 
+        AddWeaponPreviewVariantTextureContextBindings(
+            weaponPreviewSkinAssets,
+            resourceItems,
+            modelItemsByPath,
+            decodedModels,
+            byModelPath,
+            byModelContext,
+            weaponPreviewVariantByModelContext,
+            modelsWithSlotSpecificBindings,
+            resourcePaths,
+            texturePathsByBaseName);
+
         return new ModelTextureSlotDictionary(
             byModelPath,
             byModelContext,
             inferredByModelPath,
             inferredByModelContext,
+            weaponPreviewVariantByModelContext,
             modelsWithSlotSpecificBindings,
             equivalentArmByModelContext,
             equivalentArmByModelPath);
@@ -4555,13 +4598,14 @@ internal static class LithTechModelTextureConfigIndex
         return aliases.Order(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
-    private static CrossFireWeaponPreviewItemAliasIndex BuildWeaponPreviewItemAliases(
+    private static (CrossFireWeaponPreviewItemAliasIndex Aliases, IReadOnlyList<WeaponPreviewSkinAsset> SkinAssets) BuildWeaponPreviewItemAliases(
         IReadOnlyList<ExplorerItem> scriptItems,
         IReadOnlySet<uint> ltcWeaponIndexIds,
         IEnumerable<IReadOnlyList<CrossFireLtcModelTextureMapping>> ltcTables)
     {
         var previews = new List<CrossFireWeaponPreviewEntry>();
         var models = new List<CrossFireWeaponModelEntry>();
+        var skinAssets = new List<WeaponPreviewSkinAsset>();
         foreach (ExplorerItem item in scriptItems)
         {
             byte[]? data = TryReadItemBytes(item, 8 * 1024 * 1024);
@@ -4575,6 +4619,17 @@ internal static class LithTechModelTextureConfigIndex
                 preview is not null)
             {
                 previews.Add(preview);
+                string normalizedResourcePath = resourcePath.Replace('\\', '/');
+                if (normalizedResourcePath.Contains("/WeaponPreview/Skin/", StringComparison.OrdinalIgnoreCase) &&
+                    preview.ItemId > 0 && preview.ModelGroupId > 0)
+                {
+                    skinAssets.Add(new WeaponPreviewSkinAsset(
+                        Path.GetFileNameWithoutExtension(normalizedResourcePath),
+                        preview.ItemId,
+                        preview.ModelGroupId,
+                        preview.PreviewSlot,
+                        preview.ModelId));
+                }
                 continue;
             }
 
@@ -4590,7 +4645,253 @@ internal static class LithTechModelTextureConfigIndex
             models,
             ltcWeaponIndexIds,
             ltcWeaponLegacyMappingIndexIds);
-        return aliases;
+        return (aliases, skinAssets);
+    }
+
+    private static void AddWeaponPreviewVariantTextureContextBindings(
+        IReadOnlyList<WeaponPreviewSkinAsset> skinAssets,
+        IReadOnlyList<ExplorerItem> resourceItems,
+        IReadOnlyDictionary<string, ExplorerItem[]> modelItemsByPath,
+        Dictionary<string, LithTechModelDocument?> decodedModels,
+        IReadOnlyDictionary<string, Dictionary<int, string?>> directByModelPath,
+        IReadOnlyDictionary<string, Dictionary<int, string?>> directByModelContext,
+        Dictionary<string, Dictionary<int, string?>> variantByModelContext,
+        HashSet<string> modelsWithSlotSpecificBindings,
+        IReadOnlySet<string> resourcePaths,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> texturePathsByBaseName)
+    {
+        var signatureCache = new Dictionary<(string ModelPath, int Slot, string MeshName), string?>();
+        foreach (IGrouping<string, WeaponPreviewSkinAsset> group in skinAssets
+                     .Where(asset => asset.ItemId > 0 && asset.ModelGroupId > 0 && asset.ModelStem.Length > 0)
+                     .GroupBy(asset => NormalizeLooseKey(asset.ModelStem), StringComparer.OrdinalIgnoreCase))
+        {
+            WeaponPreviewSkinAsset[] matchingAssets = group
+                .DistinctBy(asset => (asset.ItemId, asset.ModelGroupId, asset.PreviewSlot, asset.ModelId))
+                .ToArray();
+            if (matchingAssets.Length != 1)
+            {
+                continue;
+            }
+
+            WeaponPreviewSkinAsset asset = matchingAssets[0];
+            string previewContext = NormalizeLooseKey("preview:" + asset.ModelGroupId.ToString(CultureInfo.InvariantCulture) + ":" +
+                                                       asset.ItemId.ToString(CultureInfo.InvariantCulture));
+            string targetModelReference = $"Models/PLAYERVIEW/PV-{asset.ModelStem}.ltb";
+            string targetModelPath = NormalizeExtensionlessModelReference(targetModelReference);
+            string targetLogicalPath = GetLogicalModelResourcePath(targetModelReference);
+            if (targetModelPath.Length == 0 || targetLogicalPath.Length == 0 ||
+                !modelItemsByPath.TryGetValue(targetLogicalPath, out ExplorerItem[]? targetCopies) || targetCopies.Length == 0)
+            {
+                continue;
+            }
+
+            string variantTextureReference = $"ModelTextures/PLAYERVIEW/PV-{asset.ModelStem}.dtx";
+            string? variantTexturePath = ResolveExistingTextureReference(
+                variantTextureReference,
+                resourcePaths,
+                texturePathsByBaseName);
+            string variantTextureKey = GetTextureBaseNameKey(
+                Path.GetFileNameWithoutExtension(variantTextureReference),
+                Path.GetExtension(variantTextureReference));
+            if (variantTexturePath is null ||
+                !string.Equals(variantTexturePath, NormalizeKey(variantTextureReference), StringComparison.OrdinalIgnoreCase) ||
+                !texturePathsByBaseName.TryGetValue(variantTextureKey, out IReadOnlyList<string>? texturePaths) ||
+                texturePaths.Count != 1 ||
+                !string.Equals(texturePaths[0], variantTexturePath, StringComparison.OrdinalIgnoreCase) ||
+                !HasConsistentPhysicalResourceCopies(resourceItems, variantTexturePath))
+            {
+                continue;
+            }
+
+            var candidatesBySlot = new Dictionary<int, HashSet<string>>();
+            string[] sourceModelPaths = directByModelContext.Keys
+                .Select(key =>
+                {
+                    int separator = key.IndexOf('\0');
+                    return separator > 0 ? key[..separator] : string.Empty;
+                })
+                .Where(sourcePath => sourcePath.StartsWith("Models/PLAYERVIEW/PV-", StringComparison.OrdinalIgnoreCase) &&
+                                     targetModelPath.StartsWith(sourcePath + "_", StringComparison.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            foreach (string sourceModelPath in sourceModelPaths)
+            {
+                string sourceModelName = Path.GetFileName(sourceModelPath);
+                if (sourceModelName.Length <= 3)
+                {
+                    continue;
+                }
+
+                string weaponMeshName = sourceModelName[3..];
+                string sourceLogicalPath = GetLogicalModelResourcePath(sourceModelPath + ".ltb");
+                if (!modelItemsByPath.TryGetValue(sourceLogicalPath, out ExplorerItem[]? sourceCopies) || sourceCopies.Length == 0)
+                {
+                    continue;
+                }
+
+                int[] sourceSlots = directByModelContext
+                    .Where(binding => binding.Key.StartsWith(sourceModelPath + "\0", StringComparison.OrdinalIgnoreCase))
+                    .SelectMany(binding => binding.Value
+                        .Where(slotBinding => !string.IsNullOrWhiteSpace(slotBinding.Value))
+                        .Select(slotBinding => slotBinding.Key))
+                    .Distinct()
+                    .ToArray();
+                foreach (int slot in sourceSlots)
+                {
+                    if (slot is < 0 or > MaxTextureSlotIndex ||
+                        directByModelPath.TryGetValue(targetModelPath, out Dictionary<int, string?>? targetPathSlots) && targetPathSlots.ContainsKey(slot) ||
+                        HasContextSlot(directByModelContext, targetModelPath, previewContext, slot))
+                    {
+                        continue;
+                    }
+
+                    string? sourceSignature = GetWeaponMeshTextureSlotSignature(
+                        sourceCopies,
+                        decodedModels,
+                        slot,
+                        weaponMeshName,
+                        signatureCache,
+                        sourceModelPath);
+                    string? targetSignature = GetWeaponMeshTextureSlotSignature(
+                        targetCopies,
+                        decodedModels,
+                        slot,
+                        weaponMeshName,
+                        signatureCache,
+                        targetModelPath);
+                    if (sourceSignature is null || targetSignature is null ||
+                        !string.Equals(sourceSignature, targetSignature, StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    if (!candidatesBySlot.TryGetValue(slot, out HashSet<string>? sourcePaths))
+                    {
+                        sourcePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        candidatesBySlot.Add(slot, sourcePaths);
+                    }
+
+                    sourcePaths.Add(sourceModelPath);
+                }
+            }
+
+            foreach (KeyValuePair<int, HashSet<string>> candidate in candidatesBySlot)
+            {
+                if (candidate.Value.Count != 1 ||
+                    directByModelPath.TryGetValue(targetModelPath, out Dictionary<int, string?>? targetPathSlots) && targetPathSlots.ContainsKey(candidate.Key) ||
+                    HasContextSlot(directByModelContext, targetModelPath, previewContext, candidate.Key))
+                {
+                    continue;
+                }
+
+                AddModelTextureContextSlotMapping(
+                    variantByModelContext,
+                    targetModelPath,
+                    "preview:" + asset.ModelGroupId.ToString(CultureInfo.InvariantCulture) + ":" +
+                    asset.ItemId.ToString(CultureInfo.InvariantCulture),
+                    candidate.Key,
+                    variantTexturePath);
+                modelsWithSlotSpecificBindings.Add(targetModelPath);
+            }
+        }
+
+        static bool HasContextSlot(
+            IReadOnlyDictionary<string, Dictionary<int, string?>> contexts,
+            string modelPath,
+            string contextKey,
+            int slot)
+        {
+            return contexts.TryGetValue(modelPath + "\0" + contextKey, out Dictionary<int, string?>? slots) &&
+                   slots.ContainsKey(slot);
+        }
+    }
+
+    private static string? GetWeaponMeshTextureSlotSignature(
+        IReadOnlyList<ExplorerItem> modelCopies,
+        Dictionary<string, LithTechModelDocument?> decodedModels,
+        int slotIndex,
+        string expectedMeshName,
+        Dictionary<(string ModelPath, int Slot, string MeshName), string?> signatureCache,
+        string modelPath)
+    {
+        var cacheKey = (modelPath, slotIndex, expectedMeshName);
+        if (signatureCache.TryGetValue(cacheKey, out string? cached))
+        {
+            return cached;
+        }
+
+        string? signature = null;
+        foreach (ExplorerItem copy in modelCopies)
+        {
+            LithTechModelDocument? document = TryDecodeSlotInheritanceModel(
+                copy,
+                GetModelResourcePath(copy),
+                decodedModels);
+            if (document is null)
+            {
+                return signatureCache[cacheKey] = null;
+            }
+
+            LithTechMesh[] slotMeshes = document.Meshes
+                .Where(mesh => (mesh.TextureSlotIndices ?? []).Contains(slotIndex))
+                .ToArray();
+            if (slotMeshes.Length != 1 ||
+                !string.Equals(slotMeshes[0].Name, expectedMeshName, StringComparison.OrdinalIgnoreCase) ||
+                slotMeshes[0].TextureSlotIndices is not { Count: 1 })
+            {
+                return signatureCache[cacheKey] = null;
+            }
+
+            IReadOnlyDictionary<int, string>? signatures = CftPlayerViewArmEquivalence
+                .GetConsistentTextureSlotGeometryUvSignatures([document]);
+            if (signatures is null || !signatures.TryGetValue(slotIndex, out string? current) ||
+                signature is not null && !string.Equals(signature, current, StringComparison.Ordinal))
+            {
+                return signatureCache[cacheKey] = null;
+            }
+
+            signature = current;
+        }
+
+        return signatureCache[cacheKey] = signature;
+    }
+
+    private static bool HasConsistentPhysicalResourceCopies(
+        IReadOnlyList<ExplorerItem> resourceItems,
+        string resourcePath)
+    {
+        string normalizedPath = NormalizeKey(resourcePath);
+        ExplorerItem[] copies = resourceItems
+            .Where(item => string.Equals(
+                NormalizeKey(item.ArchiveFile?.FullPath ?? item.OutputRelativePath),
+                normalizedPath,
+                StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (copies.Length == 0)
+        {
+            return false;
+        }
+
+        string? expectedHash = null;
+        foreach (ExplorerItem copy in copies)
+        {
+            byte[]? bytes = TryReadItemBytes(copy, 64 * 1024 * 1024);
+            if (bytes is null)
+            {
+                return false;
+            }
+
+            string hash = Convert.ToHexString(MD5.HashData(bytes));
+
+            if (expectedHash is not null && !string.Equals(expectedHash, hash, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            expectedHash = hash;
+        }
+
+        return expectedHash is not null;
     }
 
     private static IReadOnlySet<uint> GetUnambiguousWeaponLtcLegacyMappingIndices(
@@ -4972,6 +5273,7 @@ internal static class LithTechModelTextureConfigIndex
 
             index.ModelTextureSlotDictionary = BuildModelTextureSlotDictionary(
                 index.AllItems,
+                index.ResourceItems,
                 index.LtcItems,
                 index.CrossFireScriptItems,
                 index.ModelResourceItems,
@@ -6202,6 +6504,7 @@ internal static class LithTechModelTextureConfigIndex
         Dictionary<string, List<TextureConfigItem>> ByName,
         Dictionary<string, List<TextureConfigItem>?> ByLooseName,
         IReadOnlyList<TextureConfigItem> AllItems,
+        IReadOnlyList<ExplorerItem> ResourceItems,
         IReadOnlyList<ExplorerItem> ModelResourceItems,
         IReadOnlyList<ExplorerItem> UccMapItems,
         IReadOnlyList<ExplorerItem> ObjectLtoItems,
@@ -6223,6 +6526,7 @@ internal static class LithTechModelTextureConfigIndex
         public bool IsEmpty => ByName.Count == 0 &&
                                ByLooseName.Count == 0 &&
                                AllItems.Count == 0 &&
+                               ResourceItems.Count == 0 &&
                                ModelResourceItems.Count == 0 &&
                                UccMapItems.Count == 0 &&
                                ObjectLtoItems.Count == 0 &&
@@ -6237,6 +6541,13 @@ internal static class LithTechModelTextureConfigIndex
     }
 
     private sealed record TextureConfigItem(string Path, string Name, ExplorerItem Item);
+
+    private sealed record WeaponPreviewSkinAsset(
+        string ModelStem,
+        uint ItemId,
+        uint ModelGroupId,
+        uint PreviewSlot,
+        uint ModelId);
 
     private sealed record LtcPhysicalModelTextureBinding(string ModelPath, int SlotIndex, string TexturePath);
 
@@ -6269,11 +6580,13 @@ internal static class LithTechModelTextureConfigIndex
         IReadOnlyDictionary<string, Dictionary<int, string?>> ByModelContext,
         IReadOnlyDictionary<string, Dictionary<int, string?>> InferredByModelPath,
         IReadOnlyDictionary<string, Dictionary<int, string?>> InferredByModelContext,
+        IReadOnlyDictionary<string, Dictionary<int, string?>> WeaponPreviewVariantByModelContext,
         IReadOnlySet<string> ModelsWithSlotSpecificBindings,
         IReadOnlyDictionary<string, Dictionary<int, string?>> EquivalentArmByModelContext,
         IReadOnlyDictionary<string, Dictionary<int, string?>> EquivalentArmByModelPath)
     {
         public static ModelTextureSlotDictionary Empty { get; } = new(
+            new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase),
