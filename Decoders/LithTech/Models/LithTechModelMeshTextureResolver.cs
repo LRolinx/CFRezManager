@@ -29,6 +29,12 @@ internal static class LithTechModelMeshTextureResolver
         "_FEMALE_BL", "_FEMALE_GR", "_FEMALE_SP",
         "_BL", "_GR", "_SP"
     ];
+    // CharacterType.CFT row A0017 names the SWAT-ELITE hand/arm textures;
+    // Renewal meshes use the same role/side names under this legacy family label.
+    private static readonly Dictionary<string, string> VerifiedPlayerViewArmMeshTextureFamilyAliases = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["SwatEliteRenewal"] = "SWAT-ELITE"
+    };
     private static readonly HashSet<string> PvInkPlayerviewModelStems = new(StringComparer.OrdinalIgnoreCase)
     {
         "PV-INK", "PV-INK_BL", "PV-INK_UP", "PV-INK_UP_BL",
@@ -1024,6 +1030,18 @@ internal static class LithTechModelMeshTextureResolver
                     candidatePriorityGroups.Add(new HashSet<string>([meshTextureBaseName], StringComparer.OrdinalIgnoreCase));
                 }
             }
+        }
+
+        // This CFT-backed alias lets a role/side-specific Renewal mesh name
+        // bind the matching SWAT-ELITE texture even when the model's side
+        // differs from that mesh's explicit suffix.
+        if ((meshVariantSuffix.Equals("_BL", StringComparison.OrdinalIgnoreCase) ||
+             meshVariantSuffix.Equals("_GR", StringComparison.OrdinalIgnoreCase)) &&
+            VerifiedPlayerViewArmMeshTextureFamilyAliases.TryGetValue(unvariantedMeshFamily, out string? canonicalTextureFamily))
+        {
+            candidatePriorityGroups.Add(roles
+                .Select(role => $"FVIEW_{role}_{canonicalTextureFamily}{meshVariantSuffix}")
+                .ToHashSet(StringComparer.OrdinalIgnoreCase));
         }
 
         if (meshTextureBaseName.Length > 0 && unvariantedModelFamily.Length > 0)
