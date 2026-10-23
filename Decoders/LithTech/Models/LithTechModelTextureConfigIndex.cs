@@ -5115,6 +5115,8 @@ internal static class LithTechModelTextureConfigIndex
             ReplaceIgnoreCase(baseName, "Venus_CAB_BL", "Venus_HAIR_BL"),
             ReplaceIgnoreCase(baseName, "Venus_Ribon_GR", "Venus_HAIR_GR"),
             ReplaceIgnoreCase(baseName, "PV-SixEyed_Sword_Gold", "PV-SixEyedSword_Gold"),
+            // The LTC player-view texture is missing; this model's geometry and UVs match the full-layout PV-QBZ95_Volcano_BR model.
+            ReplaceIgnoreCase(baseName, "PV-QBZ95_Silencer_Volcano", "PV-QBZ95_Volcano"),
             // WeaponAttachItemDoll pairs these QV shells with PV Baihu; their PV/QV layouts match and QV Baihu is the unique physical counterpart.
             ReplaceIgnoreCase(baseName, "QV-ACC_Interaction_Joy", "QV-ACC_Baihu"),
             ReplaceIgnoreCase(baseName, "QV-ACC_Interaction_PartyDoggy", "QV-ACC_Baihu"),
