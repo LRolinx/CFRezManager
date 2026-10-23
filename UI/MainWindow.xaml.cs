@@ -996,6 +996,9 @@ public partial class MainWindow : Window
             Func<string, int, IReadOnlyList<string>>? inferredTextureSlotResolver = exportRoot is null
                 ? null
                 : await Task.Run(() => LithTechModelTextureConfigIndex.CreateInferredTextureSlotResolver(exportRoot));
+            Func<string, int, IReadOnlyList<string>>? weaponPreviewVariantTextureSlotResolver = exportRoot is null
+                ? null
+                : await Task.Run(() => LithTechModelTextureConfigIndex.CreateWeaponPreviewVariantTextureSlotResolver(exportRoot));
             Func<string, string, int, string, IReadOnlyList<string>>? meshTextureResolver = exportRoot is null
                 ? null
                 : await Task.Run(() => LithTechModelMeshTextureResolver.CreateResolver(exportRoot));
@@ -1024,6 +1027,7 @@ public partial class MainWindow : Window
                 textureReferenceResolver,
                 textureSlotResolver,
                 inferredTextureSlotResolver,
+                weaponPreviewVariantTextureSlotResolver,
                 meshTextureResolver,
                 progress));
             SetStatus(
@@ -1056,6 +1060,7 @@ public partial class MainWindow : Window
         Func<IEnumerable<string>, IReadOnlyList<string>>? textureConfigResolver,
         Func<string, int, IReadOnlyList<string>>? textureSlotResolver,
         Func<string, int, IReadOnlyList<string>>? inferredTextureSlotResolver,
+        Func<string, int, IReadOnlyList<string>>? weaponPreviewVariantTextureSlotResolver,
         Func<string, string, int, string, IReadOnlyList<string>>? meshTextureResolver,
         IProgress<ModelObjExportProgress> progress)
     {
@@ -1076,7 +1081,8 @@ public partial class MainWindow : Window
                     textureConfigResolver,
                     textureSlotResolver,
                     meshTextureResolver,
-                    InferredTextureSlotResolver: inferredTextureSlotResolver));
+                    InferredTextureSlotResolver: inferredTextureSlotResolver,
+                    WeaponPreviewVariantTextureSlotResolver: weaponPreviewVariantTextureSlotResolver));
             }
             else
             {

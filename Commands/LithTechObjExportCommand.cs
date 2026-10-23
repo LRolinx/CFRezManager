@@ -221,6 +221,8 @@ internal static class LithTechObjExportCommand
         Func<string, string, int, IReadOnlyList<string>>? weaponPreviewVariantTextureContextSlotResolver = string.IsNullOrWhiteSpace(options.TextureContext)
             ? null
             : LithTechModelTextureConfigIndex.CreateWeaponPreviewVariantTextureContextSlotResolver(root);
+        Func<string, int, IReadOnlyList<string>>? weaponPreviewVariantTextureSlotResolver =
+            LithTechModelTextureConfigIndex.CreateWeaponPreviewVariantTextureSlotResolver(root);
         Func<IEnumerable<string>, IReadOnlyList<string>>? datTextureReferenceResolver = LithTechDatTextureReferenceIndex.CreateResolver(root);
         Func<IEnumerable<string>, IReadOnlyList<string>>? textureReferenceResolver =
             TextureReferenceResolver.Combine(textureConfigResolver, datTextureReferenceResolver);
@@ -252,7 +254,8 @@ internal static class LithTechObjExportCommand
                     inferredTextureSlotResolver,
                     inferredTextureContextSlotResolver,
                     equivalentArmTextureContextSlotResolver,
-                    weaponPreviewVariantTextureContextSlotResolver));
+                    weaponPreviewVariantTextureContextSlotResolver,
+                    weaponPreviewVariantTextureSlotResolver));
             }
             else
             {

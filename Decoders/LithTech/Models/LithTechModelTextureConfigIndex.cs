@@ -244,6 +244,21 @@ internal static class LithTechModelTextureConfigIndex
         };
     }
 
+    public static Func<string, int, IReadOnlyList<string>>? CreateWeaponPreviewVariantTextureSlotResolver(ExplorerItem root)
+    {
+        TextureConfigIndex index = TextureConfigIndexCache.GetValue(root, BuildIndex);
+        if (index.IsEmpty) return null;
+        return (modelReference, slotIndex) =>
+        {
+            string modelPath = NormalizeModelResourcePath(modelReference);
+            if (modelPath.Length == 0 || slotIndex is < 0 or > MaxTextureSlotIndex) return [];
+            ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index);
+            return dictionary.WeaponPreviewVariantByModelPath.TryGetValue(modelPath, out Dictionary<int, string?>? slots) &&
+                   slots.TryGetValue(slotIndex, out string? texture) && !string.IsNullOrWhiteSpace(texture)
+                ? [texture] : [];
+        };
+    }
+
     public static (int ResourceCopies, int UniqueDocuments, int DecodedDocuments, int MotionReferences)
         WriteLtcMotionReferenceAuditReport(ExplorerItem root, string outputPath)
     {
@@ -828,7 +843,8 @@ internal static class LithTechModelTextureConfigIndex
                     null,
                     null,
                     slotMappingPresenceResolver,
-                    inferredTextureSlotResolver);
+                    inferredTextureSlotResolver,
+                    WeaponPreviewVariantTextureSlotResolver: CreateWeaponPreviewVariantTextureSlotResolver(root));
                 LithTechObjExportSource semanticSource = exportSource with { TextureConfigResolver = null };
                 for (int meshIndex = 0; meshIndex < document.Meshes.Count; meshIndex++)
                 {
@@ -3819,12 +3835,19 @@ internal static class LithTechModelTextureConfigIndex
             resourcePaths,
             texturePathsByBaseName);
 
+        Dictionary<string, Dictionary<int, string?>> weaponPreviewVariantByModelPath =
+            BuildWeaponPreviewVariantTexturePathBindings(
+                weaponPreviewVariantByModelContext,
+                byModelPath,
+                byModelContext);
+
         return new ModelTextureSlotDictionary(
             byModelPath,
             byModelContext,
             inferredByModelPath,
             inferredByModelContext,
             weaponPreviewVariantByModelContext,
+            weaponPreviewVariantByModelPath,
             modelsWithSlotSpecificBindings,
             equivalentArmByModelContext,
             equivalentArmByModelPath);
@@ -4804,6 +4827,65 @@ internal static class LithTechModelTextureConfigIndex
             return contexts.TryGetValue(modelPath + "\0" + contextKey, out Dictionary<int, string?>? slots) &&
                    slots.ContainsKey(slot);
         }
+    }
+
+    private static Dictionary<string, Dictionary<int, string?>> BuildWeaponPreviewVariantTexturePathBindings(
+        IReadOnlyDictionary<string, Dictionary<int, string?>> variantByModelContext,
+        IReadOnlyDictionary<string, Dictionary<int, string?>> directByModelPath,
+        IReadOnlyDictionary<string, Dictionary<int, string?>> directByModelContext)
+    {
+        var candidatesByModelSlot = new Dictionary<string, List<(string ModelPath, int Slot, string? Texture)>>(
+            StringComparer.OrdinalIgnoreCase);
+        foreach (KeyValuePair<string, Dictionary<int, string?>> modelContext in variantByModelContext)
+        {
+            int separator = modelContext.Key.IndexOf('\0');
+            if (separator <= 0)
+            {
+                continue;
+            }
+
+            string modelPath = modelContext.Key[..separator];
+            foreach (KeyValuePair<int, string?> slot in modelContext.Value)
+            {
+                string key = modelPath + "\0" + slot.Key.ToString(CultureInfo.InvariantCulture);
+                if (!candidatesByModelSlot.TryGetValue(key, out List<(string ModelPath, int Slot, string? Texture)>? candidates))
+                {
+                    candidates = [];
+                    candidatesByModelSlot.Add(key, candidates);
+                }
+
+                candidates.Add((modelPath, slot.Key, slot.Value));
+            }
+        }
+
+        var result = new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase);
+        foreach (List<(string ModelPath, int Slot, string? Texture)> candidates in candidatesByModelSlot.Values)
+        {
+            if (candidates.Count != 1)
+            {
+                continue;
+            }
+
+            (string modelPath, int slot, string? texture) = candidates[0];
+            if (string.IsNullOrWhiteSpace(texture) ||
+                directByModelPath.TryGetValue(modelPath, out Dictionary<int, string?>? directPathSlots) && directPathSlots.ContainsKey(slot) ||
+                directByModelContext.Any(binding =>
+                    binding.Key.StartsWith(modelPath + "\0", StringComparison.OrdinalIgnoreCase) &&
+                    binding.Value.ContainsKey(slot)))
+            {
+                continue;
+            }
+
+            if (!result.TryGetValue(modelPath, out Dictionary<int, string?>? pathSlots))
+            {
+                pathSlots = [];
+                result.Add(modelPath, pathSlots);
+            }
+
+            pathSlots[slot] = texture;
+        }
+
+        return result;
     }
 
     private static string? GetWeaponMeshTextureSlotSignature(
@@ -6581,11 +6663,13 @@ internal static class LithTechModelTextureConfigIndex
         IReadOnlyDictionary<string, Dictionary<int, string?>> InferredByModelPath,
         IReadOnlyDictionary<string, Dictionary<int, string?>> InferredByModelContext,
         IReadOnlyDictionary<string, Dictionary<int, string?>> WeaponPreviewVariantByModelContext,
+        IReadOnlyDictionary<string, Dictionary<int, string?>> WeaponPreviewVariantByModelPath,
         IReadOnlySet<string> ModelsWithSlotSpecificBindings,
         IReadOnlyDictionary<string, Dictionary<int, string?>> EquivalentArmByModelContext,
         IReadOnlyDictionary<string, Dictionary<int, string?>> EquivalentArmByModelPath)
     {
         public static ModelTextureSlotDictionary Empty { get; } = new(
+            new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase),

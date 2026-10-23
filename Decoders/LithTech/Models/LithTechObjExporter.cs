@@ -22,7 +22,8 @@ internal sealed record LithTechObjExportSource(
     Func<string, int, IReadOnlyList<string>>? InferredTextureSlotResolver = null,
     Func<string, string, int, IReadOnlyList<string>>? InferredTextureContextSlotResolver = null,
     Func<string, string, int, IReadOnlyList<string>>? EquivalentArmTextureContextSlotResolver = null,
-    Func<string, string, int, IReadOnlyList<string>>? WeaponPreviewVariantTextureContextSlotResolver = null);
+    Func<string, string, int, IReadOnlyList<string>>? WeaponPreviewVariantTextureContextSlotResolver = null,
+    Func<string, int, IReadOnlyList<string>>? WeaponPreviewVariantTextureSlotResolver = null);
 
 internal sealed record LithTechObjExportResult(
     string ObjPath,
@@ -354,6 +355,11 @@ internal static class LithTechObjExporter
                 references = source.EquivalentArmTextureContextSlotResolver?.Invoke(modelReference, source.TextureContext!, skinSlotIndex) ?? [];
                 if (references.Count > 0) resolverName = "cft-equivalent-arm-derived";
             }
+            if (references.Count == 0 && !useContextBinding)
+            {
+                references = source.WeaponPreviewVariantTextureSlotResolver?.Invoke(modelReference, skinSlotIndex) ?? [];
+                if (references.Count > 0) resolverName = "weapon-preview-variant-derived";
+            }
             if (references.Count == 0)
             {
                 IReadOnlyList<string> inferredReferences = useContextBinding
@@ -677,11 +683,15 @@ internal static class LithTechObjExporter
                 }
             }
         }
-        else if (source.TextureSlotResolver is not null)
+        else if (source.TextureSlotResolver is not null || source.WeaponPreviewVariantTextureSlotResolver is not null)
         {
             foreach (int slotIndex in (mesh.TextureSlotIndices ?? []).Distinct())
             {
-                IReadOnlyList<string> slotTextures = source.TextureSlotResolver(slotModelReference, slotIndex);
+                IReadOnlyList<string> slotTextures = source.TextureSlotResolver?.Invoke(slotModelReference, slotIndex) ?? [];
+                if (slotTextures.Count == 0)
+                {
+                    slotTextures = source.WeaponPreviewVariantTextureSlotResolver?.Invoke(slotModelReference, slotIndex) ?? [];
+                }
                 if (slotTextures.Count == 0)
                 {
                     slotTextures = source.InferredTextureSlotResolver?.Invoke(slotModelReference, slotIndex) ?? [];
@@ -707,6 +717,7 @@ internal static class LithTechObjExporter
 
         if ((source.TextureContextSlotResolver is null || string.IsNullOrWhiteSpace(source.TextureContext)) &&
             source.TextureSlotResolver is null &&
+            source.WeaponPreviewVariantTextureSlotResolver is null &&
             source.InferredTextureSlotResolver is not null)
         {
             foreach (int slotIndex in (mesh.TextureSlotIndices ?? []).Distinct())
