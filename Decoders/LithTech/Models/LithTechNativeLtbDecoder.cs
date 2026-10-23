@@ -200,7 +200,8 @@ internal static class LithTechNativeLtbDecoder
                     position += sizeof(int);
                 }
 
-                if (!TrySkip(data, ref position, sizeof(int) + sizeof(byte)) ||
+                if (!TryReadInt32(data, position, out int renderStyleIndex) ||
+                    !TrySkip(data, ref position, sizeof(int) + sizeof(byte)) ||
                     !TryReadUInt32(data, position, out uint renderObjectType))
                 {
                     errorMessage = $"Native LTB piece '{pieceName}' has an incomplete render-object header.";
@@ -233,7 +234,11 @@ internal static class LithTechNativeLtbDecoder
                     if (parsedMesh &&
                         mesh is not null)
                     {
-                        meshes.Add(mesh);
+                        meshes.Add(mesh with
+                        {
+                            RenderStyleIndex = renderStyleIndex,
+                            HasAuthoritativeTextureBindings = true
+                        });
                     }
                     else
                     {

@@ -215,6 +215,9 @@ internal static class LithTechObjExportCommand
             ? null
             : LithTechModelTextureConfigIndex.CreateInferredTextureContextSlotResolver(root);
         Func<string, string, int, string, IReadOnlyList<string>>? meshTextureResolver = LithTechModelMeshTextureResolver.CreateResolver(root);
+        Func<string, string, int, IReadOnlyList<string>>? equivalentArmTextureContextSlotResolver = string.IsNullOrWhiteSpace(options.TextureContext)
+            ? null
+            : LithTechModelTextureConfigIndex.CreateEquivalentArmTextureContextSlotResolver(root);
         Func<IEnumerable<string>, IReadOnlyList<string>>? datTextureReferenceResolver = LithTechDatTextureReferenceIndex.CreateResolver(root);
         Func<IEnumerable<string>, IReadOnlyList<string>>? textureReferenceResolver =
             TextureReferenceResolver.Combine(textureConfigResolver, datTextureReferenceResolver);
@@ -244,7 +247,8 @@ internal static class LithTechObjExportCommand
                     textureContextSlotResolver,
                     modelTextureSlotMappingPresenceResolver,
                     inferredTextureSlotResolver,
-                    inferredTextureContextSlotResolver));
+                    inferredTextureContextSlotResolver,
+                    equivalentArmTextureContextSlotResolver));
             }
             else
             {

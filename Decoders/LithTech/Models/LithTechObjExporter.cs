@@ -20,7 +20,8 @@ internal sealed record LithTechObjExportSource(
     Func<string, string, int, IReadOnlyList<string>>? TextureContextSlotResolver = null,
     Func<string, bool>? ModelTextureSlotMappingPresenceResolver = null,
     Func<string, int, IReadOnlyList<string>>? InferredTextureSlotResolver = null,
-    Func<string, string, int, IReadOnlyList<string>>? InferredTextureContextSlotResolver = null);
+    Func<string, string, int, IReadOnlyList<string>>? InferredTextureContextSlotResolver = null,
+    Func<string, string, int, IReadOnlyList<string>>? EquivalentArmTextureContextSlotResolver = null);
 
 internal sealed record LithTechObjExportResult(
     string ObjPath,
@@ -342,6 +343,11 @@ internal static class LithTechObjExporter
                 ? source.TextureContextSlotResolver!(modelReference, source.TextureContext!, skinSlotIndex)
                 : modelSlotResolver?.Invoke(modelReference, skinSlotIndex) ?? [];
             string resolverName = useContextBinding ? "context-slot" : modelSlotResolver is null ? "unmapped" : "model-slot";
+            if (references.Count == 0 && useContextBinding)
+            {
+                references = source.EquivalentArmTextureContextSlotResolver?.Invoke(modelReference, source.TextureContext!, skinSlotIndex) ?? [];
+                if (references.Count > 0) resolverName = "cft-equivalent-arm-derived";
+            }
             if (references.Count == 0)
             {
                 IReadOnlyList<string> inferredReferences = useContextBinding
@@ -630,6 +636,11 @@ internal static class LithTechObjExporter
                     slotModelReference,
                     source.TextureContext,
                     slotIndex);
+                if (slotTextures.Count == 0)
+                {
+                    slotTextures = source.EquivalentArmTextureContextSlotResolver?.Invoke(
+                        slotModelReference, source.TextureContext, slotIndex) ?? [];
+                }
                 if (slotTextures.Count == 0)
                 {
                     slotTextures = source.InferredTextureContextSlotResolver?.Invoke(
