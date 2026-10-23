@@ -190,7 +190,10 @@ internal static class LithTechModelTextureConfigIndex
             return modelPath.Length > 0 &&
                    (dictionary.ModelsWithSlotSpecificBindings.Contains(modelPath) ||
                     dictionary.ByModelPath.TryGetValue(modelPath, out Dictionary<int, string?>? slots) &&
-                    slots.Count > 0);
+                    slots.Count > 0 ||
+                    dictionary.EquivalentArmByModelPath.ContainsKey(modelPath) ||
+                    dictionary.EquivalentArmByModelContext.Keys.Any(key =>
+                        key.StartsWith(modelPath + "\0", StringComparison.OrdinalIgnoreCase)));
         };
     }
 
@@ -207,9 +210,15 @@ internal static class LithTechModelTextureConfigIndex
             string key = $"{modelPath}\0{contextKey}";
             if (dictionary.ByModelContext.TryGetValue(key, out Dictionary<int, string?>? directSlots) && directSlots.ContainsKey(slotIndex))
                 return [];
-            return dictionary.EquivalentArmByModelContext.TryGetValue(key, out Dictionary<int, string?>? slots) &&
-                   slots.TryGetValue(slotIndex, out string? texture) && !string.IsNullOrWhiteSpace(texture)
-                ? [texture] : [];
+            if (dictionary.EquivalentArmByModelContext.TryGetValue(key, out Dictionary<int, string?>? slots) &&
+                slots.TryGetValue(slotIndex, out string? texture))
+            {
+                return !string.IsNullOrWhiteSpace(texture) ? [texture] : [];
+            }
+
+            return dictionary.EquivalentArmByModelPath.TryGetValue(modelPath, out Dictionary<int, string?>? pathSlots) &&
+                   pathSlots.TryGetValue(slotIndex, out string? pathTexture) && !string.IsNullOrWhiteSpace(pathTexture)
+                ? [pathTexture] : [];
         };
     }
 
@@ -3412,8 +3421,18 @@ internal static class LithTechModelTextureConfigIndex
             }
         }
 
-        Dictionary<string, Dictionary<int, string?>> equivalentArmByModelContext = BuildEquivalentArmContextBindings(
-            directPlayerViewModels, modelItemsByPlayerViewRolePath, byModelContext);
+        (Dictionary<string, Dictionary<int, string?>> equivalentArmByModelContext,
+            Dictionary<string, Dictionary<int, string?>> equivalentArmByModelPath) = BuildEquivalentArmContextBindings(
+            directPlayerViewModels, modelItemsByPlayerViewRolePath, byModelContext, byModelPath);
+        modelsWithSlotSpecificBindings.UnionWith(equivalentArmByModelPath.Keys);
+        foreach (string contextBindingKey in equivalentArmByModelContext.Keys)
+        {
+            int contextSeparator = contextBindingKey.IndexOf('\0');
+            if (contextSeparator > 0)
+            {
+                modelsWithSlotSpecificBindings.Add(contextBindingKey[..contextSeparator]);
+            }
+        }
 
         var ltcMappingCache = new Dictionary<string, IReadOnlyList<CrossFireLtcModelTextureMapping>>(StringComparer.OrdinalIgnoreCase);
         foreach (ExplorerItem ltcItem in ltcItems)
@@ -3764,41 +3783,170 @@ internal static class LithTechModelTextureConfigIndex
             inferredByModelPath,
             inferredByModelContext,
             modelsWithSlotSpecificBindings,
-            equivalentArmByModelContext);
+            equivalentArmByModelContext,
+            equivalentArmByModelPath);
     }
 
-    private static Dictionary<string, Dictionary<int, string?>> BuildEquivalentArmContextBindings(
+    private static (Dictionary<string, Dictionary<int, string?>> ByContext,
+        Dictionary<string, Dictionary<int, string?>> ByPath) BuildEquivalentArmContextBindings(
         IReadOnlySet<string> directModels,
         IReadOnlyDictionary<string, ExplorerItem[]> modelItems,
-        IReadOnlyDictionary<string, Dictionary<int, string?>> directContexts)
+        IReadOnlyDictionary<string, Dictionary<int, string?>> directContexts,
+        IReadOnlyDictionary<string, Dictionary<int, string?>> directPaths)
     {
         var result = new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase);
+        var pathTextureCandidates = new Dictionary<string, Dictionary<int, HashSet<string>>>(StringComparer.OrdinalIgnoreCase);
+        var compatibleSourcePaths = new Dictionary<string, Dictionary<int, HashSet<string>>>(StringComparer.OrdinalIgnoreCase);
         var signatures = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        var textureSlotSignatures = new Dictionary<string, IReadOnlyDictionary<int, string>?>(StringComparer.OrdinalIgnoreCase);
+        var contextsBySourceModel = new Dictionary<string, List<KeyValuePair<string, Dictionary<int, string?>>>>(StringComparer.OrdinalIgnoreCase);
+        foreach (KeyValuePair<string, Dictionary<int, string?>> binding in directContexts)
+        {
+            int separator = binding.Key.IndexOf('\0');
+            if (separator <= 0) continue;
+            string sourcePath = binding.Key[..separator];
+            if (!contextsBySourceModel.TryGetValue(sourcePath, out List<KeyValuePair<string, Dictionary<int, string?>>>? modelBindings))
+                contextsBySourceModel[sourcePath] = modelBindings = [];
+            modelBindings.Add(binding);
+        }
+
+        var armDonorsBySlotSignature = new Dictionary<(int Slot, string Signature), List<string>>();
+        foreach (string sourcePath in directModels.Where(CftPlayerViewArmEquivalence.IsPlayerViewArmModel))
+        {
+            if (!contextsBySourceModel.ContainsKey(sourcePath)) continue;
+            IReadOnlyDictionary<int, string>? sourceSlots = GetTextureSlotSignatures(sourcePath);
+            if (sourceSlots is null) continue;
+            foreach ((int slot, string signature) in sourceSlots)
+            {
+                var key = (slot, signature);
+                if (!armDonorsBySlotSignature.TryGetValue(key, out List<string>? paths))
+                    armDonorsBySlotSignature[key] = paths = [];
+                paths.Add(sourcePath);
+            }
+        }
+
         foreach ((string targetPath, ExplorerItem[] _) in modelItems)
         {
             if (directModels.Contains(targetPath)) continue;
+            if (CftPlayerViewArmEquivalence.IsEmbeddedPreviewModel(targetPath))
+            {
+                IReadOnlyDictionary<int, string>? targetSlots = GetTextureSlotSignatures(targetPath);
+                if (targetSlots is null) continue;
+                foreach ((int slot, string signature) in targetSlots)
+                {
+                    if (!armDonorsBySlotSignature.TryGetValue((slot, signature), out List<string>? sourcePaths)) continue;
+                    foreach (string sourcePath in sourcePaths)
+                    {
+                        AddCompatibleSourcePath(targetPath, slot, sourcePath);
+                        if (!contextsBySourceModel.TryGetValue(sourcePath, out List<KeyValuePair<string, Dictionary<int, string?>>>? sourceBindings))
+                            continue;
+                        foreach (KeyValuePair<string, Dictionary<int, string?>> sourceBinding in sourceBindings)
+                        {
+                            if (!sourceBinding.Value.TryGetValue(slot, out string? texture)) continue;
+                            AddContextBinding(targetPath, sourcePath, sourceBinding, slot, texture);
+                            if (!string.IsNullOrWhiteSpace(texture)) AddPathTextureCandidate(targetPath, slot, texture);
+                        }
+                    }
+                }
+
+                continue;
+            }
+
             foreach (string sourcePath in directModels)
             {
-                if (!CftPlayerViewArmEquivalence.IsFamilyVariantOf(targetPath, sourcePath)) continue;
-                string? targetSignature = GetSignature(targetPath);
-                if (targetSignature is null || targetSignature != GetSignature(sourcePath)) continue;
-                string prefix = sourcePath + "\0";
-                foreach ((string key, Dictionary<int, string?> slots) in directContexts.Where(pair =>
-                             pair.Key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+                if (!CftPlayerViewArmEquivalence.IsFamilyVariantOf(targetPath, sourcePath) ||
+                    !string.Equals(GetSignature(targetPath), GetSignature(sourcePath), StringComparison.Ordinal))
+                    continue;
+                if (!contextsBySourceModel.TryGetValue(sourcePath, out List<KeyValuePair<string, Dictionary<int, string?>>>? sourceBindings))
+                    continue;
+                foreach (KeyValuePair<string, Dictionary<int, string?>> sourceBinding in sourceBindings)
                 {
-                    foreach ((int slot, string? texture) in slots)
+                    foreach ((int slot, string? texture) in sourceBinding.Value)
                     {
-                        // Preserve conflicts, including those already found in a donor context.
-                        string targetKey = targetPath + "\0" + key[prefix.Length..];
-                        if (!result.TryGetValue(targetKey, out Dictionary<int, string?>? targetSlots))
-                            result[targetKey] = targetSlots = [];
-                        if (!targetSlots.TryGetValue(slot, out string? previous)) targetSlots[slot] = texture;
-                        else if (!string.Equals(previous, texture, StringComparison.OrdinalIgnoreCase)) targetSlots[slot] = null;
+                        AddContextBinding(targetPath, sourcePath, sourceBinding, slot, texture);
                     }
                 }
             }
         }
-        return result;
+
+        var byPath = new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase);
+        foreach ((string targetPath, Dictionary<int, HashSet<string>> candidateSlots) in pathTextureCandidates)
+        {
+            foreach ((int slot, HashSet<string> candidates) in candidateSlots)
+            {
+                if (!byPath.TryGetValue(targetPath, out Dictionary<int, string?>? targetSlots))
+                    byPath[targetPath] = targetSlots = [];
+
+                // Context dictionaries include only resolvable DTX files. The model-path map also
+                // retains missing and conflicting CFT references, so validate every donor there.
+                bool isUniqueAcrossEveryDonor = candidates.Count == 1;
+                HashSet<string>? donorPaths = null;
+                if (isUniqueAcrossEveryDonor &&
+                    (!compatibleSourcePaths.TryGetValue(targetPath, out Dictionary<int, HashSet<string>>? donorSlots) ||
+                     !donorSlots.TryGetValue(slot, out donorPaths) ||
+                     donorPaths.Count == 0))
+                {
+                    isUniqueAcrossEveryDonor = false;
+                }
+
+                if (isUniqueAcrossEveryDonor)
+                {
+                    string candidate = candidates.Single();
+                    foreach (string donorPath in donorPaths!)
+                    {
+                        if (!directPaths.TryGetValue(donorPath, out Dictionary<int, string?>? donorTextureSlots) ||
+                            !donorTextureSlots.TryGetValue(slot, out string? donorTexture) ||
+                            string.IsNullOrWhiteSpace(donorTexture) ||
+                            !string.Equals(donorTexture, candidate, StringComparison.OrdinalIgnoreCase))
+                        {
+                            isUniqueAcrossEveryDonor = false;
+                            break;
+                        }
+                    }
+
+                    if (isUniqueAcrossEveryDonor) targetSlots[slot] = candidate;
+                    else targetSlots[slot] = null;
+                }
+                else
+                {
+                    targetSlots[slot] = null;
+                }
+            }
+        }
+
+        return (result, byPath);
+
+        void AddContextBinding(
+            string targetPath,
+            string sourcePath,
+            KeyValuePair<string, Dictionary<int, string?>> sourceBinding,
+            int slot,
+            string? texture)
+        {
+            string targetKey = targetPath + "\0" + sourceBinding.Key[(sourcePath.Length + 1)..];
+            if (!result.TryGetValue(targetKey, out Dictionary<int, string?>? targetSlots))
+                result[targetKey] = targetSlots = [];
+            if (!targetSlots.TryGetValue(slot, out string? previous)) targetSlots[slot] = texture;
+            else if (!string.Equals(previous, texture, StringComparison.OrdinalIgnoreCase)) targetSlots[slot] = null;
+        }
+
+        void AddPathTextureCandidate(string targetPath, int slot, string texture)
+        {
+            if (!pathTextureCandidates.TryGetValue(targetPath, out Dictionary<int, HashSet<string>>? candidateSlots))
+                pathTextureCandidates[targetPath] = candidateSlots = [];
+            if (!candidateSlots.TryGetValue(slot, out HashSet<string>? candidates))
+                candidateSlots[slot] = candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            candidates.Add(texture);
+        }
+
+        void AddCompatibleSourcePath(string targetPath, int slot, string sourcePath)
+        {
+            if (!compatibleSourcePaths.TryGetValue(targetPath, out Dictionary<int, HashSet<string>>? donorSlots))
+                compatibleSourcePaths[targetPath] = donorSlots = [];
+            if (!donorSlots.TryGetValue(slot, out HashSet<string>? donorPaths))
+                donorSlots[slot] = donorPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            donorPaths.Add(sourcePath);
+        }
 
         string? GetSignature(string path)
         {
@@ -3817,6 +3965,26 @@ internal static class LithTechModelTextureConfigIndex
                 }
             }
             return signatures[path] = CftPlayerViewArmEquivalence.GetConsistentLayoutSignature(documents);
+        }
+
+        IReadOnlyDictionary<int, string>? GetTextureSlotSignatures(string path)
+        {
+            if (textureSlotSignatures.TryGetValue(path, out IReadOnlyDictionary<int, string>? cached)) return cached;
+            var documents = new List<LithTechModelDocument>();
+            if (modelItems.TryGetValue(path, out ExplorerItem[]? copies))
+            {
+                foreach (ExplorerItem copy in copies)
+                {
+                    // Validate each physical copy; archive metadata alone is not enough.
+                    byte[]? data = TryReadItemBytes(copy, 64 * 1024 * 1024);
+                    if (data is null || !LithTechModelDecoder.TryDecode(data, GetModelResourcePath(copy), "ltb",
+                            out LithTechModelDocument? document, out _) || document is null)
+                        return textureSlotSignatures[path] = null;
+                    documents.Add(document);
+                }
+            }
+
+            return textureSlotSignatures[path] = CftPlayerViewArmEquivalence.GetConsistentTextureSlotLayoutSignatures(documents);
         }
     }
 
@@ -6050,7 +6218,8 @@ internal static class LithTechModelTextureConfigIndex
         IReadOnlyDictionary<string, Dictionary<int, string?>> InferredByModelPath,
         IReadOnlyDictionary<string, Dictionary<int, string?>> InferredByModelContext,
         IReadOnlySet<string> ModelsWithSlotSpecificBindings,
-        IReadOnlyDictionary<string, Dictionary<int, string?>> EquivalentArmByModelContext)
+        IReadOnlyDictionary<string, Dictionary<int, string?>> EquivalentArmByModelContext,
+        IReadOnlyDictionary<string, Dictionary<int, string?>> EquivalentArmByModelPath)
     {
         public static ModelTextureSlotDictionary Empty { get; } = new(
             new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase),
@@ -6058,6 +6227,7 @@ internal static class LithTechModelTextureConfigIndex
             new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase),
             new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase));
     }
 
