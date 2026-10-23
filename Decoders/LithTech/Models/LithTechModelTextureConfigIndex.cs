@@ -5115,6 +5115,8 @@ internal static class LithTechModelTextureConfigIndex
             ReplaceIgnoreCase(baseName, "Venus_CAB_BL", "Venus_HAIR_BL"),
             ReplaceIgnoreCase(baseName, "Venus_Ribon_GR", "Venus_HAIR_GR"),
             ReplaceIgnoreCase(baseName, "PV-SixEyed_Sword_Gold", "PV-SixEyedSword_Gold"),
+            // WeaponAttachItemDoll pairs this shared QV shell with PV Baihu; its PV/QV layouts match and QV Baihu is the unique physical counterpart.
+            ReplaceIgnoreCase(baseName, "QV-ACC_Interaction_Joy", "QV-ACC_Baihu"),
             CollapseDuplicatedLeadingPrefix(baseName) ?? baseName,
             baseName.StartsWith("GSG9_BODY_", StringComparison.OrdinalIgnoreCase)
                 ? "GSG9_CH_Body_" + baseName["GSG9_BODY_".Length..]
