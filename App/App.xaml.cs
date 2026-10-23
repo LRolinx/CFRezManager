@@ -7,6 +7,14 @@ public partial class App : System.Windows.Application
         base.OnStartup(e);
 
         ShutdownMode = System.Windows.ShutdownMode.OnMainWindowClose;
+        if (TableDecodeAuditCommand.IsInvocation(e.Args))
+        {
+            ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
+            int exitCode = TableDecodeAuditCommand.Run(e.Args);
+            Shutdown(exitCode);
+            return;
+        }
+
         if (LithTechLtbHeaderInspectCommand.IsInvocation(e.Args))
         {
             ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;

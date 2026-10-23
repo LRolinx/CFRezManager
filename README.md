@@ -152,6 +152,7 @@ CFRezManager/
 ```powershell
 dotnet run --project .\CFRezManager.csproj -- --export-obj --root "F:\Game\CrossFire" --model "PV-AK47_Balance" --output ".\out\PV-AK47_Balance.obj"
 dotnet run --project .\CFRezManager.csproj -- --audit-texture-map --root "F:\Game\CrossFire" --output ".\out\crossfire_texture_mapping_audit.tsv"
+dotnet run --project .\CFRezManager.csproj -- --audit-table-decode --root "F:\Game\CrossFire" --output ".\out\table_decode.tsv"
 dotnet run --project .\CFRezManager.csproj -- --inspect-ltb-header --root "F:\Game\CrossFire" --model "Models/CHARACTER/NINJATRANSLUCENT"
 dotnet run --project .\CFRezManager.csproj -- --inspect-ltb-header --root "F:\Game\CrossFire" --all-renderstyles
 dotnet run --project .\CFRezManager.csproj -- --scan-cfg --root "C:\Extracted\cfg"
@@ -163,7 +164,10 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 - `--probe-texture-map-paths --audit <审计TSV>`：对已有审计中 `model`、`context` 和 `mesh-slot` 行里的所有唯一贴图路径逐个解码，并测试每个物理副本；输出单独的 TSV，区分全部副本成功、部分副本失败、全副本失败和精确路径不存在。缺失项另列文件名近似的资源路径作为排查线索，不会自动替换映射。需要同时传入 `--root` 与 `--output`。
 - `--inspect-ltc-motion-links`：扫描可解码的 LTC 内容，输出同一 LTC 行中动画模型字段、普通模型字段、贴图字段和身份字段的关联。主审计会把同一行的 `MotionFileName` 按 `SkinFileName` 绑定并保留身份上下文；诊断报告不会推断表外关联。
 - `--inspect-cft-motion-links`：输出 CFT 同一强类型记录中父模型、动作模型、贴图字段和身份字段的关系，帮助检查动作模型槽位继承是否有直接表记录支撑。
+- `--audit-table-decode`：逐份读取目录及所有 REZ（含根目录 `engine.rez`）中的 CFT/LTC，不按归档 MD5 跳过物理副本。TSV 记录实际内容 SHA-256、解压字节数、CFT 行列数、已消费字节和未解释尾部；读取失败、大小限制和目录/归档扫描失败分别记录。CFT 的 `typed-decoded` 表示声明行及已识别的 ASCII `END` 尾标全部消费完毕；`typed-decoded-with-trailing-bytes` 表示还有未解释数据。LTC 的 `native-text-decoded` 表示内置解码路径已还原文本，配置类 LTC 不要求包含模型几何。另写 `_summary.txt` 汇总物理副本及唯一内容数。成功解码不表示模型—贴图映射已确认。
 - `--inspect-cft-model-texture-links`：输出所有强类型 CFT 行的模型字段、关联模型、贴图字段和身份别名，用于区分角色、动作、手臂和 Socket 等引用角色。
+- 两个 CFT 引用诊断命令的“已解码内容数”只统计成功读取全部声明行的表；部分表中已提取的行仍保留在引用报告中。逐文件失败和尾部情况用 `--audit-table-decode` 检查。
+- 完整读取声明行且紧接标准 `END` 尾标时，CFT 的路径候选扫描在尾标前结束，防止旧数据残留混入其他模型的贴图候选；尾标后的内容仍由解码审计列为未解释数据。没有完整行/尾标证据的表保留原有部分解析路径。
 - `--inspect-ltc-model-texture-links`：输出 LTC 强类型模型行、纹理字段、辅助贴图引用和身份别名，用于检查武器与玩家视角模型的对应关系。
 - `--inspect-texture-resource-paths --contains <文本>`：列出路径包含指定文本的贴图逻辑路径、物理副本和 MD5，用于核对同名 DTX 是否存在冲突。
 - CFT 动作引用即使未写扩展名，也只有在完整逻辑路径对应单一资源扩展名、父子模型均解码成功且实际槽位交集非空时才继承贴图。

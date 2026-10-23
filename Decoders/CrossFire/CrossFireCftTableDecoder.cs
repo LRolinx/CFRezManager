@@ -26,15 +26,33 @@ internal static class CrossFireCftTableDecoder
 
     public static bool TryDecode(byte[] data, out CrossFireCftTable? table)
     {
+        return TryDecodeWithDiagnostics(data, out table, out _, out _, out _);
+    }
+
+    public static bool TryDecodeWithDiagnostics(
+        byte[] data,
+        out CrossFireCftTable? table,
+        out int decodedBytes,
+        out int consumedBytes,
+        out string? errorMessage)
+    {
         table = null;
+        decodedBytes = 0;
+        consumedBytes = 0;
+        errorMessage = null;
         if (data.Length == 0)
         {
+            errorMessage = "Empty CFT resource.";
             return false;
         }
 
         byte[]? prepared = LzmaAloneDecoder.TryPrepareData(data, MaximumDecodedBytes);
+        decodedBytes = prepared?.Length ?? 0;
         if (prepared is null || prepared.Length < HeaderSize)
         {
+            errorMessage = prepared is null
+                ? "CFT outer compression could not be decoded."
+                : $"Incomplete CFT header: {prepared.Length} of {HeaderSize} bytes.";
             return false;
         }
 
@@ -50,6 +68,7 @@ internal static class CrossFireCftTableDecoder
 
         if (!HasSignature(decoded))
         {
+            errorMessage = "CFT signature is invalid after plain/XOR decoding.";
             return false;
         }
 
@@ -57,6 +76,7 @@ internal static class CrossFireCftTableDecoder
         int rowCount = BinaryPrimitives.ReadInt32LittleEndian(decoded.AsSpan(10, sizeof(int)));
         if (columnCount is <= 0 or > ColumnCapacity || rowCount is < 0 or > MaximumRows)
         {
+            errorMessage = $"Invalid CFT dimensions: columns={columnCount}, rows={rowCount}.";
             return false;
         }
 
@@ -76,18 +96,52 @@ internal static class CrossFireCftTableDecoder
             columnTypes[column] = BinaryPrimitives.ReadInt32LittleEndian(decoded.AsSpan(typeOffset, sizeof(int)));
             if (columnTypes[column] is < 0 or > 5)
             {
+                errorMessage = $"Unsupported CFT column type {columnTypes[column]} at column {column}.";
                 return false;
             }
         }
 
         bool hasCharacterTypeRowIndex = IsCharacterTypeTable(columns, columnTypes, columnCount);
-        if (!TryReadRows(decoded, columns, columnTypes, rowCount, hasCharacterTypeRowIndex, out IReadOnlyList<CrossFireCftRow> rows))
+        if (!TryReadRows(decoded, columns, columnTypes, rowCount, hasCharacterTypeRowIndex,
+                out IReadOnlyList<CrossFireCftRow> rows, out consumedBytes, out errorMessage))
         {
             return false;
         }
 
+        ConsumeEndMarker(decoded, ref consumedBytes);
         table = new CrossFireCftTable(columns, columnTypes, rows);
         return true;
+    }
+
+    private static void ConsumeEndMarker(byte[] data, ref int position)
+    {
+        // The table writer appends a 64-byte ASCII END field padded with spaces,
+        // normally followed by a NUL. Other bytes beyond it remain unaudited.
+        const int markerBytes = 64;
+        if (data.Length - position < markerBytes ||
+            data[position] != (byte)'E' || data[position + 1] != (byte)'N' || data[position + 2] != (byte)'D')
+        {
+            return;
+        }
+
+        for (int index = 3; index < markerBytes; index++)
+        {
+            if (data[position + index] != (byte)' ') return;
+        }
+
+        position += markerBytes;
+        if (position < data.Length && data[position] == 0) position++;
+    }
+
+    internal static bool TryGetEndMarkerStart(byte[] data, int consumedBytes, out int markerStart)
+    {
+        // Diagnostics include an optional NUL in the consumed byte count.
+        markerStart = consumedBytes - 64;
+        if (consumedBytes > 0 && data[consumedBytes - 1] == 0) markerStart--;
+        if (markerStart < 0) return false;
+        int end = markerStart;
+        ConsumeEndMarker(data, ref end);
+        return end == consumedBytes && end > markerStart;
     }
 
     private static bool TryReadRows(
@@ -96,15 +150,21 @@ internal static class CrossFireCftTableDecoder
         IReadOnlyList<int> columnTypes,
         int rowCount,
         bool hasCharacterTypeRowIndex,
-        out IReadOnlyList<CrossFireCftRow> rows)
+        out IReadOnlyList<CrossFireCftRow> rows,
+        out int consumedBytes,
+        out string? errorMessage)
     {
         rows = [];
+        consumedBytes = HeaderSize;
+        errorMessage = null;
         int position = HeaderSize;
         var decodedRows = new List<CrossFireCftRow>(Math.Min(rowCount, 100_000));
         for (int rowIndex = 0; rowIndex < rowCount; rowIndex++)
         {
             if (!TryReadInt32(data, ref position, out int recordId))
             {
+                consumedBytes = position;
+                errorMessage = $"Incomplete CFT record ID at row {rowIndex}, byte {position}.";
                 return false;
             }
 
@@ -119,6 +179,8 @@ internal static class CrossFireCftTableDecoder
                     case 1:
                         if (!TryReadString(data, ref position, out string stringValue))
                         {
+                            consumedBytes = position;
+                            errorMessage = $"Incomplete CFT string at row {rowIndex}, column {column} ({columns[column]}), byte {position}.";
                             return false;
                         }
 
@@ -127,6 +189,8 @@ internal static class CrossFireCftTableDecoder
                     default:
                         if (!TryReadInt32(data, ref position, out int integerValue))
                         {
+                            consumedBytes = position;
+                            errorMessage = $"Incomplete CFT value at row {rowIndex}, column {column} ({columns[column]}), byte {position}.";
                             return false;
                         }
 
@@ -136,6 +200,8 @@ internal static class CrossFireCftTableDecoder
                             if (!TryReadInt32(data, ref position, out int serializedRowIndex) ||
                                 serializedRowIndex != integerValue - 1)
                             {
+                                consumedBytes = position;
+                                errorMessage = $"Invalid CharacterType row index at row {rowIndex}, byte {position}.";
                                 return false;
                             }
                         }
@@ -153,6 +219,7 @@ internal static class CrossFireCftTableDecoder
         }
 
         rows = decodedRows;
+        consumedBytes = position;
         return true;
     }
 

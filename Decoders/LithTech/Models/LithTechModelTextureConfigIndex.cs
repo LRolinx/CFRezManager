@@ -357,10 +357,14 @@ internal static class LithTechModelTextureConfigIndex
                 continue;
             }
 
-            decodedDocuments++;
             IReadOnlyList<CftModelTextureMapping> mappings;
             try
             {
+                if (CrossFireCftTableDecoder.TryDecode(data, out _))
+                {
+                    decodedDocuments++;
+                }
+
                 mappings = CftModelTextureMappingDecoder.Extract(data);
             }
             catch (InvalidDataException)
@@ -435,10 +439,14 @@ internal static class LithTechModelTextureConfigIndex
                 continue;
             }
 
-            decodedDocuments++;
             IReadOnlyList<CftModelTextureMapping> mappings;
             try
             {
+                if (CrossFireCftTableDecoder.TryDecode(data, out _))
+                {
+                    decodedDocuments++;
+                }
+
                 mappings = CftModelTextureMappingDecoder.Extract(data);
             }
             catch (InvalidDataException)

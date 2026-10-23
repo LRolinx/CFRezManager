@@ -84,7 +84,16 @@ internal static class CftModelTextureMappingDecoder
         // Keep path-block results as lower-confidence aliases even when typed
         // parsing succeeded. This also preserves coverage for rows after a
         // malformed/variant row stops the typed reader.
-        string text = Encoding.Unicode.GetString(decoded);
+        int scanBytes = decoded.Length;
+        if (CrossFireCftTableDecoder.TryDecodeWithDiagnostics(decoded, out _, out _, out int consumedBytes, out _) &&
+            CrossFireCftTableDecoder.TryGetEndMarkerStart(decoded, consumedBytes, out int endMarkerStart))
+        {
+            // Some shipped tables retain old model/texture strings after END.
+            // Audit those bytes separately; they do not support row bindings.
+            scanBytes = endMarkerStart;
+        }
+
+        string text = Encoding.Unicode.GetString(decoded, 0, scanBytes);
         MatchCollection matches = ResourcePathRegex.Matches(text);
         if (matches.Count == 0)
         {
