@@ -3799,6 +3799,8 @@ internal static class LithTechModelTextureConfigIndex
         var compatibleSourcePaths = new Dictionary<string, Dictionary<int, HashSet<string>>>(StringComparer.OrdinalIgnoreCase);
         var signatures = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         var textureSlotSignatures = new Dictionary<string, IReadOnlyDictionary<int, string>?>(StringComparer.OrdinalIgnoreCase);
+        var geometryUvTextureSlotSignatures = new Dictionary<string, IReadOnlyDictionary<int, string>?>(StringComparer.OrdinalIgnoreCase);
+        var textureSlotDocuments = new Dictionary<string, IReadOnlyList<LithTechModelDocument>?>(StringComparer.OrdinalIgnoreCase);
         var contextsBySourceModel = new Dictionary<string, List<KeyValuePair<string, Dictionary<int, string?>>>>(StringComparer.OrdinalIgnoreCase);
         foreach (KeyValuePair<string, Dictionary<int, string?>> binding in directContexts)
         {
@@ -3811,17 +3813,32 @@ internal static class LithTechModelTextureConfigIndex
         }
 
         var armDonorsBySlotSignature = new Dictionary<(int Slot, string Signature), List<string>>();
+        var armDonorsBySlotGeometryUvSignature = new Dictionary<(int Slot, string Signature), List<string>>();
         foreach (string sourcePath in directModels.Where(CftPlayerViewArmEquivalence.IsPlayerViewArmModel))
         {
             if (!contextsBySourceModel.ContainsKey(sourcePath)) continue;
             IReadOnlyDictionary<int, string>? sourceSlots = GetTextureSlotSignatures(sourcePath);
-            if (sourceSlots is null) continue;
-            foreach ((int slot, string signature) in sourceSlots)
+            if (sourceSlots is not null)
             {
-                var key = (slot, signature);
-                if (!armDonorsBySlotSignature.TryGetValue(key, out List<string>? paths))
-                    armDonorsBySlotSignature[key] = paths = [];
-                paths.Add(sourcePath);
+                foreach ((int slot, string signature) in sourceSlots)
+                {
+                    var key = (slot, signature);
+                    if (!armDonorsBySlotSignature.TryGetValue(key, out List<string>? paths))
+                        armDonorsBySlotSignature[key] = paths = [];
+                    paths.Add(sourcePath);
+                }
+            }
+
+            IReadOnlyDictionary<int, string>? sourceGeometryUvSlots = GetGeometryUvSlotSignatures(sourcePath);
+            if (sourceGeometryUvSlots is not null)
+            {
+                foreach ((int slot, string signature) in sourceGeometryUvSlots)
+                {
+                    var key = (slot, signature);
+                    if (!armDonorsBySlotGeometryUvSignature.TryGetValue(key, out List<string>? paths))
+                        armDonorsBySlotGeometryUvSignature[key] = paths = [];
+                    paths.Add(sourcePath);
+                }
             }
         }
 
@@ -3831,21 +3848,22 @@ internal static class LithTechModelTextureConfigIndex
             if (CftPlayerViewArmEquivalence.IsEmbeddedPreviewModel(targetPath))
             {
                 IReadOnlyDictionary<int, string>? targetSlots = GetTextureSlotSignatures(targetPath);
-                if (targetSlots is null) continue;
-                foreach ((int slot, string signature) in targetSlots)
+                if (targetSlots is not null)
                 {
-                    if (!armDonorsBySlotSignature.TryGetValue((slot, signature), out List<string>? sourcePaths)) continue;
-                    foreach (string sourcePath in sourcePaths)
+                    foreach ((int slot, string signature) in targetSlots)
                     {
-                        AddCompatibleSourcePath(targetPath, slot, sourcePath);
-                        if (!contextsBySourceModel.TryGetValue(sourcePath, out List<KeyValuePair<string, Dictionary<int, string?>>>? sourceBindings))
-                            continue;
-                        foreach (KeyValuePair<string, Dictionary<int, string?>> sourceBinding in sourceBindings)
-                        {
-                            if (!sourceBinding.Value.TryGetValue(slot, out string? texture)) continue;
-                            AddContextBinding(targetPath, sourcePath, sourceBinding, slot, texture);
-                            if (!string.IsNullOrWhiteSpace(texture)) AddPathTextureCandidate(targetPath, slot, texture);
-                        }
+                        if (armDonorsBySlotSignature.TryGetValue((slot, signature), out List<string>? sourcePaths))
+                            AddEquivalentArmDonors(targetPath, slot, sourcePaths);
+                    }
+                }
+
+                IReadOnlyDictionary<int, string>? targetGeometryUvSlots = GetGeometryUvSlotSignatures(targetPath);
+                if (targetGeometryUvSlots is not null)
+                {
+                    foreach ((int slot, string signature) in targetGeometryUvSlots)
+                    {
+                        if (armDonorsBySlotGeometryUvSignature.TryGetValue((slot, signature), out List<string>? sourcePaths))
+                            AddEquivalentArmDonors(targetPath, slot, sourcePaths);
                     }
                 }
 
@@ -3948,6 +3966,22 @@ internal static class LithTechModelTextureConfigIndex
             donorPaths.Add(sourcePath);
         }
 
+        void AddEquivalentArmDonors(string targetPath, int slot, IEnumerable<string> sourcePaths)
+        {
+            foreach (string sourcePath in sourcePaths)
+            {
+                AddCompatibleSourcePath(targetPath, slot, sourcePath);
+                if (!contextsBySourceModel.TryGetValue(sourcePath, out List<KeyValuePair<string, Dictionary<int, string?>>>? sourceBindings))
+                    continue;
+                foreach (KeyValuePair<string, Dictionary<int, string?>> sourceBinding in sourceBindings)
+                {
+                    if (!sourceBinding.Value.TryGetValue(slot, out string? texture)) continue;
+                    AddContextBinding(targetPath, sourcePath, sourceBinding, slot, texture);
+                    if (!string.IsNullOrWhiteSpace(texture)) AddPathTextureCandidate(targetPath, slot, texture);
+                }
+            }
+        }
+
         string? GetSignature(string path)
         {
             if (signatures.TryGetValue(path, out string? cached)) return cached;
@@ -3970,21 +4004,39 @@ internal static class LithTechModelTextureConfigIndex
         IReadOnlyDictionary<int, string>? GetTextureSlotSignatures(string path)
         {
             if (textureSlotSignatures.TryGetValue(path, out IReadOnlyDictionary<int, string>? cached)) return cached;
-            var documents = new List<LithTechModelDocument>();
-            if (modelItems.TryGetValue(path, out ExplorerItem[]? copies))
+            IReadOnlyList<LithTechModelDocument>? documents = GetTextureSlotDocuments(path);
+            return textureSlotSignatures[path] = documents is null
+                ? null
+                : CftPlayerViewArmEquivalence.GetConsistentTextureSlotLayoutSignatures(documents);
+        }
+
+        IReadOnlyDictionary<int, string>? GetGeometryUvSlotSignatures(string path)
+        {
+            if (geometryUvTextureSlotSignatures.TryGetValue(path, out IReadOnlyDictionary<int, string>? cached)) return cached;
+            IReadOnlyList<LithTechModelDocument>? documents = GetTextureSlotDocuments(path);
+            return geometryUvTextureSlotSignatures[path] = documents is null
+                ? null
+                : CftPlayerViewArmEquivalence.GetConsistentTextureSlotGeometryUvSignatures(documents);
+        }
+
+        IReadOnlyList<LithTechModelDocument>? GetTextureSlotDocuments(string path)
+        {
+            if (textureSlotDocuments.TryGetValue(path, out IReadOnlyList<LithTechModelDocument>? cached)) return cached;
+            if (!modelItems.TryGetValue(path, out ExplorerItem[]? copies) || copies.Length == 0)
+                return textureSlotDocuments[path] = null;
+
+            var documents = new List<LithTechModelDocument>(copies.Length);
+            foreach (ExplorerItem copy in copies)
             {
-                foreach (ExplorerItem copy in copies)
-                {
-                    // Validate each physical copy; archive metadata alone is not enough.
-                    byte[]? data = TryReadItemBytes(copy, 64 * 1024 * 1024);
-                    if (data is null || !LithTechModelDecoder.TryDecode(data, GetModelResourcePath(copy), "ltb",
-                            out LithTechModelDocument? document, out _) || document is null)
-                        return textureSlotSignatures[path] = null;
-                    documents.Add(document);
-                }
+                // Decode each physical copy once for both strict and canonical layout checks.
+                byte[]? data = TryReadItemBytes(copy, 64 * 1024 * 1024);
+                if (data is null || !LithTechModelDecoder.TryDecode(data, GetModelResourcePath(copy), "ltb",
+                        out LithTechModelDocument? document, out _) || document is null)
+                    return textureSlotDocuments[path] = null;
+                documents.Add(document);
             }
 
-            return textureSlotSignatures[path] = CftPlayerViewArmEquivalence.GetConsistentTextureSlotLayoutSignatures(documents);
+            return textureSlotDocuments[path] = documents;
         }
     }
 
