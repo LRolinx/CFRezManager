@@ -5114,6 +5114,7 @@ internal static class LithTechModelTextureConfigIndex
             ReplaceIgnoreCase(baseName, "Natalya_HAT_BL", "Natalya_hair_BL"),
             ReplaceIgnoreCase(baseName, "Venus_CAB_BL", "Venus_HAIR_BL"),
             ReplaceIgnoreCase(baseName, "Venus_Ribon_GR", "Venus_HAIR_GR"),
+            ReplaceIgnoreCase(baseName, "PV-SixEyed_Sword_Gold", "PV-SixEyedSword_Gold"),
             CollapseDuplicatedLeadingPrefix(baseName) ?? baseName,
             baseName.StartsWith("GSG9_BODY_", StringComparison.OrdinalIgnoreCase)
                 ? "GSG9_CH_Body_" + baseName["GSG9_BODY_".Length..]
