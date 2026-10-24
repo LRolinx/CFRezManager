@@ -3452,6 +3452,7 @@ internal static class LithTechModelTextureConfigIndex
 
                 var rowSlotTextures = new Dictionary<int, string?>();
                 var explicitTextureSlots = new HashSet<int>();
+                var exactCftTextureSlots = new HashSet<int>();
                 bool hasImplicitCharacterBodyTexture = false;
                 string implicitCharacterBodySide = string.Empty;
                 foreach (CftTextureReference texture in mapping.TextureReferences)
@@ -3470,6 +3471,14 @@ internal static class LithTechModelTextureConfigIndex
 
                         if (existingTexturePath is not null)
                         {
+                            if (string.Equals(
+                                    NormalizeKey(existingTexturePath),
+                                    NormalizeKey(texture.Path),
+                                    StringComparison.OrdinalIgnoreCase))
+                            {
+                                exactCftTextureSlots.Add(slotIndex);
+                            }
+
                             foreach (string contextKey in contextKeys)
                             {
                                 AddModelTextureContextSlotMapping(
@@ -3794,6 +3803,32 @@ internal static class LithTechModelTextureConfigIndex
                         continue;
                     }
 
+                    bool hasConsistentRelatedSlotLayout = TryGetConsistentLtcModelSlots(
+                        relatedModelItems,
+                        decodedModels,
+                        out int[] consistentRelatedSlots);
+                    if (hasPhysicalParentModels && hasConsistentRelatedSlotLayout)
+                    {
+                        // A numbered CFT field names an engine skin slot even
+                        // when that slot is used only by the row's motion model.
+                        // Require an exact texture path, identical physical DTX
+                        // copies, and the same child slot layout in every copy.
+                        foreach ((int slotIndex, string? texturePath) in rowSlotTextures)
+                        {
+                            if (!exactCftTextureSlots.Contains(slotIndex) ||
+                                parentUsedSlots.Contains(slotIndex) ||
+                                !childUsedSlots.Contains(slotIndex) ||
+                                !consistentRelatedSlots.Contains(slotIndex) ||
+                                string.IsNullOrWhiteSpace(texturePath) ||
+                                !HasConsistentPhysicalResourceCopies(resourceItems, texturePath))
+                            {
+                                continue;
+                            }
+
+                            validatedSlotSet.Add(slotIndex);
+                        }
+                    }
+
                     foreach (VerifiedCftMotionTextureAlias alias in VerifiedCftMotionTextureAliases)
                     {
                         if (!IsVerifiedCftMotionTextureAlias(
@@ -3803,7 +3838,7 @@ internal static class LithTechModelTextureConfigIndex
                                 rowSlotTextures.GetValueOrDefault(alias.SlotIndex)) ||
                             parentUsedSlots.Contains(alias.SlotIndex) ||
                             !childUsedSlots.Contains(alias.SlotIndex) ||
-                            !TryGetConsistentLtcModelSlots(relatedModelItems, decodedModels, out int[] consistentRelatedSlots) ||
+                            !hasConsistentRelatedSlotLayout ||
                             !consistentRelatedSlots.Contains(alias.SlotIndex))
                         {
                             continue;
