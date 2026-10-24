@@ -5224,12 +5224,12 @@ internal static class LithTechModelTextureConfigIndex
             }
         }
 
-        AddExactStemDtxBindingsForIdenticalModelCopies();
+        AddVerifiedSkinDtxBindingsForIdenticalModelCopies();
 
-        // Skin variants can reuse the exact same model bytes when a table
-        // binding for the source slot points to its same-stem DTX. Bind the
-        // variant's unique same-stem atlas only after the slot UVs agree.
-        void AddExactStemDtxBindingsForIdenticalModelCopies()
+        // A skin variant with identical model bytes may reuse a table-bound
+        // source slot when the matching main or numbered-part DTX is unique
+        // and its slot UVs agree.
+        void AddVerifiedSkinDtxBindingsForIdenticalModelCopies()
         {
             var playerViewTexturePathsByBaseName = textureItemsByLogicalPath.Keys
                 .Where(path => path.StartsWith("ModelTextures/PLAYERVIEW/", StringComparison.OrdinalIgnoreCase))
@@ -5260,6 +5260,7 @@ internal static class LithTechModelTextureConfigIndex
             }
 
             var candidateDonorsBySlot = new Dictionary<string, Dictionary<int, HashSet<string>>>(StringComparer.OrdinalIgnoreCase);
+            var candidateTexturesBySlot = new Dictionary<string, Dictionary<int, HashSet<string>>>(StringComparer.OrdinalIgnoreCase);
 
             foreach (string targetModelPath in modelItemsByPlayerViewRolePath.Keys)
             {
@@ -5310,57 +5311,103 @@ internal static class LithTechModelTextureConfigIndex
 
                     string donorStem = Path.GetFileName(donorModelPath);
                     string donorTexturePath = "ModelTextures/PLAYERVIEW/" + donorStem + ".dtx";
-                    if (!HasConsistentDecodableDtxCopies(donorTexturePath, textureItemsByLogicalPath, verifiedTexturePathCache))
-                    {
-                        continue;
-                    }
-
-                    int[] donorSlots = donorBindings
-                        .Where(binding => binding.Value.Contains(donorTexturePath))
-                        .Select(binding => binding.Key)
-                        .ToArray();
-                    if (donorSlots.Length == 0)
-                    {
-                        continue;
-                    }
-
                     IReadOnlyDictionary<int, string>? donorSignatures = GetSlotUvTriangleSignatures(donorModelPath);
                     if (donorSignatures is null)
                     {
                         continue;
                     }
 
-                    foreach (int slot in donorSlots)
+                    if (HasConsistentDecodableDtxCopies(donorTexturePath, textureItemsByLogicalPath, verifiedTexturePathCache))
                     {
-                        if (slot < 0 ||
-                            IsPlayerViewHandOrArmTextureSlot(donorDocuments, slot) ||
-                            IsPlayerViewHandOrArmTextureSlot(targetDocuments, slot) ||
-                            !targetSignatures.TryGetValue(slot, out string? targetSignature) ||
-                            !donorSignatures.TryGetValue(slot, out string? donorSignature) ||
-                            !string.Equals(targetSignature, donorSignature, StringComparison.Ordinal) ||
-                            byModelPath.TryGetValue(targetModelPath, out Dictionary<int, string?>? targetPathSlots) &&
-                            targetPathSlots.ContainsKey(slot) ||
-                            contextTexturesByModelPath.TryGetValue(targetModelPath, out Dictionary<int, HashSet<string?>>? targetContextSlots) &&
-                            targetContextSlots.ContainsKey(slot) ||
-                            previewSlotUvByModelPath.TryGetValue(targetModelPath, out Dictionary<int, string?>? inferredTargetSlots) &&
-                            inferredTargetSlots.ContainsKey(slot))
+                        foreach ((int slot, HashSet<string> textures) in donorBindings)
+                        {
+                            if (textures.Contains(donorTexturePath) &&
+                                IsVerifiedUnmappedSlot(targetModelPath, slot, targetDocuments, donorDocuments, targetSignatures, donorSignatures))
+                            {
+                                AddCandidateBinding(targetModelPath, slot, donorModelPath, targetTexturePath);
+                            }
+                        }
+                    }
+
+                    string skinPrefix = donorStem + "_";
+                    if (!targetStem.StartsWith(skinPrefix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    string skinSuffix = targetStem[skinPrefix.Length..];
+                    foreach ((int slot, HashSet<string> sourceTexturePaths) in donorBindings)
+                    {
+                        if (!IsVerifiedUnmappedSlot(targetModelPath, slot, targetDocuments, donorDocuments, targetSignatures, donorSignatures))
                         {
                             continue;
                         }
 
-                        if (!candidateDonorsBySlot.TryGetValue(targetModelPath, out Dictionary<int, HashSet<string>>? targetCandidates))
+                        foreach (string sourceTexturePath in sourceTexturePaths)
                         {
-                            candidateDonorsBySlot[targetModelPath] = targetCandidates = [];
-                        }
+                            if (string.Equals(sourceTexturePath, donorTexturePath, StringComparison.OrdinalIgnoreCase) ||
+                                !TryGetNumberedPartSuffix(sourceTexturePath, donorStem, out string partSuffix) ||
+                                !HasConsistentDecodableDtxCopies(sourceTexturePath, textureItemsByLogicalPath, verifiedTexturePathCache))
+                            {
+                                continue;
+                            }
 
-                        if (!targetCandidates.TryGetValue(slot, out HashSet<string>? donors))
-                        {
-                            targetCandidates[slot] = donors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                        }
+                            string sourceTextureStem = Path.GetFileNameWithoutExtension(sourceTexturePath);
+                            var candidateTextureNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                            {
+                                targetStem + partSuffix,
+                                targetStem + "_" + partSuffix.TrimStart('_'),
+                                sourceTextureStem + "_" + skinSuffix
+                            };
+                            var matchingTexturePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                            foreach (string candidateTextureName in candidateTextureNames)
+                            {
+                                string candidateTexturePath = "ModelTextures/PLAYERVIEW/" + candidateTextureName + ".dtx";
+                                if (!playerViewTexturePathsByBaseName.TryGetValue(candidateTextureName, out string[]? candidatePaths) ||
+                                    candidatePaths.Length != 1 ||
+                                    !string.Equals(candidatePaths[0], candidateTexturePath, StringComparison.OrdinalIgnoreCase) ||
+                                    !HasConsistentDecodableDtxCopies(candidateTexturePath, textureItemsByLogicalPath, verifiedTexturePathCache))
+                                {
+                                    continue;
+                                }
 
-                        donors.Add(donorModelPath);
+                                matchingTexturePaths.Add(candidateTexturePath);
+                            }
+
+                            if (matchingTexturePaths.Count == 1)
+                            {
+                                AddCandidateBinding(targetModelPath, slot, donorModelPath, matchingTexturePaths.Single());
+                            }
+                        }
                     }
                 }
+            }
+
+            void AddCandidateBinding(string targetModelPath, int slot, string donorModelPath, string texturePath)
+            {
+                if (!candidateDonorsBySlot.TryGetValue(targetModelPath, out Dictionary<int, HashSet<string>>? targetDonors))
+                {
+                    candidateDonorsBySlot[targetModelPath] = targetDonors = [];
+                }
+
+                if (!targetDonors.TryGetValue(slot, out HashSet<string>? donors))
+                {
+                    targetDonors[slot] = donors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                }
+
+                donors.Add(donorModelPath);
+
+                if (!candidateTexturesBySlot.TryGetValue(targetModelPath, out Dictionary<int, HashSet<string>>? targetTextures))
+                {
+                    candidateTexturesBySlot[targetModelPath] = targetTextures = [];
+                }
+
+                if (!targetTextures.TryGetValue(slot, out HashSet<string>? textures))
+                {
+                    targetTextures[slot] = textures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                }
+
+                textures.Add(texturePath);
             }
 
             void AddTableMappedTexturePath(string modelPath, int slot, string? texturePath)
@@ -5383,16 +5430,58 @@ internal static class LithTechModelTextureConfigIndex
                 textures.Add(NormalizeKey(texturePath));
             }
 
+            bool IsVerifiedUnmappedSlot(
+                string targetModelPath,
+                int slot,
+                IReadOnlyList<LithTechModelDocument> targetDocuments,
+                IReadOnlyList<LithTechModelDocument> donorDocuments,
+                IReadOnlyDictionary<int, string> targetUvSignatures,
+                IReadOnlyDictionary<int, string> donorUvSignatures)
+            {
+                return slot >= 0 &&
+                    !IsPlayerViewHandOrArmTextureSlot(donorDocuments, slot) &&
+                    !IsPlayerViewHandOrArmTextureSlot(targetDocuments, slot) &&
+                    targetUvSignatures.TryGetValue(slot, out string? targetSignature) &&
+                    donorUvSignatures.TryGetValue(slot, out string? donorSignature) &&
+                    string.Equals(targetSignature, donorSignature, StringComparison.Ordinal) &&
+                    !(byModelPath.TryGetValue(targetModelPath, out Dictionary<int, string?>? targetPathSlots) && targetPathSlots.ContainsKey(slot)) &&
+                    !(contextTexturesByModelPath.TryGetValue(targetModelPath, out Dictionary<int, HashSet<string?>>? targetContextSlots) && targetContextSlots.ContainsKey(slot)) &&
+                    !(previewSlotUvByModelPath.TryGetValue(targetModelPath, out Dictionary<int, string?>? inferredTargetSlots) && inferredTargetSlots.ContainsKey(slot));
+            }
+
+            static bool TryGetNumberedPartSuffix(string texturePath, string modelStem, out string partSuffix)
+            {
+                partSuffix = string.Empty;
+                string textureDirectory = Path.GetDirectoryName(texturePath)?.Replace('\\', '/') ?? string.Empty;
+                if (!string.Equals(textureDirectory, "ModelTextures/PLAYERVIEW", StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
+                string textureStem = Path.GetFileNameWithoutExtension(texturePath);
+                if (!textureStem.StartsWith(modelStem, StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
+                partSuffix = textureStem[modelStem.Length..];
+                string digits = partSuffix.StartsWith('_') ? partSuffix[1..] : partSuffix;
+                return digits.Length > 0 && digits.All(char.IsAsciiDigit);
+            }
+
             foreach ((string targetModelPath, Dictionary<int, HashSet<string>> slotCandidates) in candidateDonorsBySlot)
             {
                 foreach ((int slot, HashSet<string> donorPaths) in slotCandidates)
                 {
-                    if (donorPaths.Count != 1)
+                    if (donorPaths.Count != 1 ||
+                        !candidateTexturesBySlot.TryGetValue(targetModelPath, out Dictionary<int, HashSet<string>>? targetTextures) ||
+                        !targetTextures.TryGetValue(slot, out HashSet<string>? textures) ||
+                        textures.Count != 1)
                     {
                         continue;
                     }
 
-                    string texturePath = "ModelTextures/PLAYERVIEW/" + Path.GetFileName(targetModelPath) + ".dtx";
+                    string texturePath = textures.Single();
                     AddModelTextureSlotMapping(previewSlotUvByModelPath, targetModelPath, slot, texturePath);
                     modelsWithSlotSpecificBindings.Add(targetModelPath);
                 }
