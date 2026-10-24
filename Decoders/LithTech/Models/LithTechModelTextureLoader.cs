@@ -848,11 +848,15 @@ internal static class LithTechModelTextureLoader
                 filesByPath.TryAdd(normalizedPath, item);
             }
 
-            if (LithTechResourceHeuristics.IsLikelyModelTexturePath(normalizedPath, item.FileExtension))
+            bool isLikelyModelTexture = LithTechResourceHeuristics.IsLikelyModelTexturePath(normalizedPath, item.FileExtension);
+            if (isLikelyModelTexture || LithTechResourceHeuristics.IsTEXRootedResourcePath(normalizedPath))
             {
                 AddSuffixIndexCandidates(filesBySuffix, normalizedPath, item);
                 AddSuffixIndexCandidates(filesBySuffixCandidates, normalizedPath, item);
+            }
 
+            if (isLikelyModelTexture)
+            {
                 string fileName = GetResourceFileName(normalizedPath);
                 if (!string.IsNullOrWhiteSpace(fileName))
                 {
@@ -895,10 +899,14 @@ internal static class LithTechModelTextureLoader
                     filesByPath.TryAdd(normalizedPath, file);
                 }
 
-                if (LithTechResourceHeuristics.IsLikelyModelTexturePath(normalizedPath, file.Extension))
+                bool isLikelyModelTexture = LithTechResourceHeuristics.IsLikelyModelTexturePath(normalizedPath, file.Extension);
+                if (isLikelyModelTexture || LithTechResourceHeuristics.IsTEXRootedResourcePath(normalizedPath))
                 {
                     AddSuffixIndexCandidates(filesBySuffix, normalizedPath, file);
+                }
 
+                if (isLikelyModelTexture)
+                {
                     string fileName = GetResourceFileName(normalizedPath);
                     if (!string.IsNullOrWhiteSpace(fileName))
                     {

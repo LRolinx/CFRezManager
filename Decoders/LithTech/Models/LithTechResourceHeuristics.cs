@@ -18,6 +18,13 @@ internal static class LithTechResourceHeuristics
                normalized.Contains("/UI/Scripts/", StringComparison.OrdinalIgnoreCase);
     }
 
+    public static bool IsTEXRootedResourcePath(string path)
+    {
+        string normalized = NormalizeResourcePath(path);
+        return normalized.StartsWith("TEX/", StringComparison.OrdinalIgnoreCase) ||
+               normalized.Contains("/TEX/", StringComparison.OrdinalIgnoreCase);
+    }
+
     public static bool IsLikelyModelTextureConfigPath(string path, string extension)
     {
         string normalized = NormalizeResourcePath(path);

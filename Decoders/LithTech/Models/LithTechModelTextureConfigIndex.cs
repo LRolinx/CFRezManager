@@ -30,6 +30,13 @@ internal static class LithTechModelTextureConfigIndex
         string TexturePath,
         IReadOnlyList<string> MeshNames);
 
+    private sealed record VerifiedPlayerViewMeshTextureSlotAlias(
+        string FamilyKey,
+        string TargetModelPath,
+        int TargetSlotIndex,
+        string TexturePath,
+        string MeshName);
+
     private const int MaxConfigBytes = 1024 * 1024;
     private const int MaxCftBytes = 4 * 1024 * 1024;
     private const int MaxLtcBytes = 16 * 1024 * 1024;
@@ -132,6 +139,23 @@ internal static class LithTechModelTextureConfigIndex
             "ModelTextures/Character/AIMode/AI1_EvilDen/AI_Stone.dtx", ["stone01", "stone02", "stone03"]),
         new("Models/Character/AIMode/AI1_EvilDen/AI_EvilDen_CutScene02_Fire_M-motion", 4,
             "ModelTextures/Character/AIMode/AI1_EvilDen/AI_Stone.dtx", ["stone01", "stone02", "stone03"])
+    ];
+
+    // The five AI shield-card previews share one slot-2 UV layout that spans
+    // the unique AI1PreCrater CARD atlas. Keep the semantic alias limited to
+    // these model paths and verify every model and DTX copy before using it.
+    private static readonly VerifiedPlayerViewMeshTextureSlotAlias[] VerifiedPlayerViewMeshTextureSlotAliases =
+    [
+        new("ai-shield-card", "Models/PLAYERVIEW/PV-ShieldCard_AI_NEW", 2,
+            "TEX/UI/AIMode/AI1PreCrater/CARD.DTX", "card"),
+        new("ai-shield-card", "Models/PLAYERVIEW/PV-ShieldCard_AI_NEW_BL", 2,
+            "TEX/UI/AIMode/AI1PreCrater/CARD.DTX", "card"),
+        new("ai-shield-card", "Models/PLAYERVIEW/PV-ShieldCard_AI_NEW_GR", 2,
+            "TEX/UI/AIMode/AI1PreCrater/CARD.DTX", "Box003"),
+        new("ai-shield-card", "Models/PLAYERVIEW/PV-ShieldCard_AI_NEW_WOMAN_BL", 2,
+            "TEX/UI/AIMode/AI1PreCrater/CARD.DTX", "Box003"),
+        new("ai-shield-card", "Models/PLAYERVIEW/PV-ShieldCard_AI_NEW_WOMAN_GR", 2,
+            "TEX/UI/AIMode/AI1PreCrater/CARD.DTX", "Box003")
     ];
 
     public static Func<IEnumerable<string>, IReadOnlyList<string>>? CreateResolver(ExplorerItem root)
@@ -4661,6 +4685,16 @@ internal static class LithTechModelTextureConfigIndex
             previewSlotUvByModelPath,
             modelsWithSlotSpecificBindings);
 
+        AddVerifiedPlayerViewMeshTextureSlotAliases(
+            modelItemsByPlayerViewRolePath,
+            textureItemsByLogicalPath,
+            verifiedTexturePathCache,
+            decodedModels,
+            byModelPath,
+            byModelContext,
+            previewSlotUvByModelPath,
+            modelsWithSlotSpecificBindings);
+
         return new ModelTextureSlotDictionary(
             byModelPath,
             byModelContext,
@@ -5790,6 +5824,115 @@ internal static class LithTechModelTextureConfigIndex
             }
 
             return NormalizeLooseKey(stem);
+        }
+    }
+
+    private static void AddVerifiedPlayerViewMeshTextureSlotAliases(
+        IReadOnlyDictionary<string, ExplorerItem[]> modelItemsByPlayerViewRolePath,
+        IReadOnlyDictionary<string, ExplorerItem[]> textureItemsByLogicalPath,
+        Dictionary<string, bool> verifiedTexturePathCache,
+        Dictionary<string, LithTechModelDocument?> decodedModels,
+        IReadOnlyDictionary<string, Dictionary<int, string?>> byModelPath,
+        IReadOnlyDictionary<string, Dictionary<int, string?>> byModelContext,
+        Dictionary<string, Dictionary<int, string?>> previewSlotUvByModelPath,
+        HashSet<string> modelsWithSlotSpecificBindings)
+    {
+        foreach (IGrouping<string, VerifiedPlayerViewMeshTextureSlotAlias> family in
+                 VerifiedPlayerViewMeshTextureSlotAliases.GroupBy(alias => alias.FamilyKey, StringComparer.OrdinalIgnoreCase))
+        {
+            VerifiedPlayerViewMeshTextureSlotAlias[] aliases = family.ToArray();
+            int[] slots = aliases.Select(alias => alias.TargetSlotIndex).Distinct().ToArray();
+            string[] texturePaths = aliases.Select(alias => NormalizeKey(alias.TexturePath))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (aliases.Length == 0 || slots.Length != 1 || texturePaths.Length != 1 ||
+                !HasConsistentDecodableDtxCopies(texturePaths[0], textureItemsByLogicalPath, verifiedTexturePathCache))
+            {
+                continue;
+            }
+
+            int slotIndex = slots[0];
+            string texturePath = aliases[0].TexturePath;
+            string? expectedFamilySignature = null;
+            var pendingBindings = new List<string>();
+            bool validFamily = true;
+
+            foreach (VerifiedPlayerViewMeshTextureSlotAlias alias in aliases)
+            {
+                string targetModelPath = NormalizeExtensionlessModelReference(alias.TargetModelPath);
+                if (targetModelPath.Length == 0 ||
+                    !modelItemsByPlayerViewRolePath.TryGetValue(targetModelPath, out ExplorerItem[]? modelCopies) ||
+                    modelCopies.Length == 0 ||
+                    !TryDecodeConsistentPlayerViewModelDocuments(modelCopies, decodedModels, out List<LithTechModelDocument> documents) ||
+                    documents.Count == 0 ||
+                    IsPlayerViewHandOrArmTextureSlot(documents, slotIndex) ||
+                    byModelPath.TryGetValue(targetModelPath, out Dictionary<int, string?>? directSlots) && directSlots.ContainsKey(slotIndex) ||
+                    previewSlotUvByModelPath.TryGetValue(targetModelPath, out Dictionary<int, string?>? existingInferredSlots) && existingInferredSlots.ContainsKey(slotIndex) ||
+                    byModelContext.Any(pair =>
+                        pair.Key.StartsWith(targetModelPath + "\0", StringComparison.OrdinalIgnoreCase) &&
+                        pair.Value.ContainsKey(slotIndex)))
+                {
+                    validFamily = false;
+                    break;
+                }
+
+                string? expectedModelSignature = null;
+                foreach (LithTechModelDocument document in documents)
+                {
+                    LithTechMesh[] slotMeshes = document.Meshes
+                        .Where(mesh => (mesh.TextureSlotIndices ?? []).Contains(slotIndex))
+                        .ToArray();
+                    if (slotMeshes.Length != 1)
+                    {
+                        validFamily = false;
+                        break;
+                    }
+
+                    LithTechMesh mesh = slotMeshes[0];
+                    if (!mesh.HasAuthoritativeTextureBindings ||
+                        mesh.TextureSlotIndices is not { Count: 1 } meshSlots || meshSlots[0] != slotIndex ||
+                        mesh.RenderStyleIndex is not int renderStyleIndex ||
+                        !string.IsNullOrWhiteSpace(mesh.TexturePath) ||
+                        !string.Equals(mesh.Name.Trim(), alias.MeshName, StringComparison.OrdinalIgnoreCase) ||
+                        GetVerifiedTextureUvTriangleSignature(mesh) is not string uvSignature)
+                    {
+                        validFamily = false;
+                        break;
+                    }
+
+                    string modelSignature = $"{renderStyleIndex}\0{uvSignature}";
+                    if (expectedModelSignature is not null &&
+                        !string.Equals(expectedModelSignature, modelSignature, StringComparison.Ordinal))
+                    {
+                        validFamily = false;
+                        break;
+                    }
+
+                    expectedModelSignature ??= modelSignature;
+                }
+
+                if (!validFamily || expectedModelSignature is null ||
+                    expectedFamilySignature is not null &&
+                    !string.Equals(expectedFamilySignature, expectedModelSignature, StringComparison.Ordinal))
+                {
+                    validFamily = false;
+                    break;
+                }
+
+                expectedFamilySignature ??= expectedModelSignature;
+                pendingBindings.Add(targetModelPath);
+            }
+
+            if (!validFamily || pendingBindings.Count != aliases.Length)
+            {
+                continue;
+            }
+
+            foreach (string targetModelPath in pendingBindings)
+            {
+                AddModelTextureSlotMapping(previewSlotUvByModelPath, targetModelPath, slotIndex, texturePath);
+                modelsWithSlotSpecificBindings.Add(targetModelPath);
+            }
         }
     }
 
@@ -7639,6 +7782,12 @@ internal static class LithTechModelTextureConfigIndex
     {
         string normalized = NormalizeKey(resourcePath);
         int texturePathIndex = normalized.IndexOf("ModelTextures/", StringComparison.OrdinalIgnoreCase);
+        if (texturePathIndex >= 0)
+        {
+            return normalized[texturePathIndex..];
+        }
+
+        texturePathIndex = normalized.IndexOf("TEX/", StringComparison.OrdinalIgnoreCase);
         return texturePathIndex >= 0 ? normalized[texturePathIndex..] : string.Empty;
     }
 
