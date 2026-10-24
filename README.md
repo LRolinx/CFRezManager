@@ -204,6 +204,7 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 - `PV-464SPX` 基模及 BL、GR、WOMAN_BL 变体的 5 个槽 2 网格均使用 `ModelTextures/PlayerView/PV-464SPX.dtx`，三个变体通过 LTC 同名推导；WOMAN_GR 的 5 个槽 2 项仍未解析。各模型的手、臂槽未解析。
 - 四个 `PV-M82A1_S_ReactiveArmor` 阵营/性别变体的 `PV-Scope` 网格槽 3 均映射到 `ModelTextures/PlayerView/PV-M82A1_S_ReactiveArmor01.dtx`。这些变体的槽 2 机身网格仍未解析；基模槽 2/3 均有直接贴图。
 - `PV-M82A1_DemonicBeast` 基模的 7 个槽 2 网格和两个槽 3 网格分别直接映射到 `ModelTextures/PlayerView/PV-M82A1_DemonicBeast.dtx` 与 `_01.dtx`。BL、GR、WOMAN_BL、WOMAN_GR 变体均通过 LTC 同名推导映射全部 7 个槽 2 网格，但各自的两个槽 3 项仍未解析；手、臂和 `clanmark` 网格也未解析。
+- `PV-M82A1_DemonicBeast_PVE` 基模沿用同两张 DTX，槽 2 恢复 7 个网格、槽 3 恢复 2 个网格。BL、GR、WOMAN_BL、WOMAN_GR 的 PVE 变体中，7 个槽 2 项和两个槽 3 项均未解析；手、臂和 `clanmark` 网格也未解析。
 - `PV-M82A1_S_BornBeast_Winter` 基模槽 2 使用 `ModelTextures/PlayerView/PV-M82A1_S_BornBeast_Winter.dtx`，槽 3 使用 `ModelTextures/PlayerView/PV-M82A1_S_BornBeast_Winter_01.dtx`。四个阵营/性别变体保留 LTC 推导的槽 2 贴图，并在 `dsdsdsfs` 网格 UV 完全一致时将槽 3 映射到 `_01.dtx`。每个聚焦导出均恢复两张贴图，只留下两条手/臂项未解析。
 - `WeaponPreview/Skin` 变体只有在预览 BIN 唯一对应同名 PV 模型、基模有直接槽位贴图、目标武器网格名与基模名相同且所有模型副本的几何/UV 签名一致时，才会绑定唯一同名 DTX；贴图副本的 MD5 也必须一致。绑定使用 `preview:<模型组号>:<道具编号>`，不据此生成可能与 LTC `WeaponIndex` 冲突的 `item:` 身份。若某模型槽只有一个变体上下文，且该槽没有直接路径或身份上下文映射，CLI 和 GUI 无上下文导出也会按模型路径使用该 DTX。BCAxe 的 Chs/YOD 槽 2 是已验证样例，审计标记为 `weapon-preview-variant-derived`。
 - `Arm_SwatElite_Renewal_GR` 的手/臂网格带有明确的角色和阵营后缀，可按 CFT A0017 中登记的 SWAT-ELITE 手/臂贴图名解析；仅当对应玩家视角 DTX 路径唯一且归档副本哈希一致时绑定。`Arm_WildWest_SP` 仍没有可靠的角色表贴图关联，继续保持未映射。
