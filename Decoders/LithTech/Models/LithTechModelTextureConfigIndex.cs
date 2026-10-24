@@ -4340,29 +4340,6 @@ internal static class LithTechModelTextureConfigIndex
                         mapping.ModelField,
                         textureOrdinal,
                         equivalentPlayerViewArmSlots);
-                    if (existingTexturePath is not null &&
-                        mappedSlots.Length == 1 &&
-                        mapping.ModelField.StartsWith("PViewModelFileName", StringComparison.OrdinalIgnoreCase))
-                    {
-                        AddLtcPreviewVariantSameNameTextureBindings(
-                            modelPath,
-                            mapping.ModelField,
-                            existingTexturePath,
-                            textureOrdinal,
-                            mappedSlots,
-                            contextKeys,
-                            typedLtcPlayerViewModels,
-                            modelItemsByPlayerViewRolePath,
-                            decodedModels,
-                            textureItemsByLogicalPath,
-                            verifiedTexturePathCache,
-                            byModelPath,
-                            byModelContext,
-                            ltcPreviewVariantByModelPath,
-                            ltcPreviewVariantByModelContext,
-                            modelsWithSlotSpecificBindings);
-                    }
-
                     if (mappedSlots.Length == 0)
                     {
                         continue;
@@ -4396,6 +4373,29 @@ internal static class LithTechModelTextureConfigIndex
                                 slotIndex,
                                 existingTexturePath);
                         }
+                    }
+
+                    if (existingTexturePath is not null &&
+                        mappedSlots.Length == 1 &&
+                        mapping.ModelField.StartsWith("PViewModelFileName", StringComparison.OrdinalIgnoreCase))
+                    {
+                        AddLtcPreviewVariantSameNameTextureBindings(
+                            modelPath,
+                            mapping.ModelField,
+                            existingTexturePath,
+                            textureOrdinal,
+                            mappedSlots,
+                            contextKeys,
+                            typedLtcPlayerViewModels,
+                            modelItemsByPlayerViewRolePath,
+                            decodedModels,
+                            textureItemsByLogicalPath,
+                            verifiedTexturePathCache,
+                            byModelPath,
+                            byModelContext,
+                            ltcPreviewVariantByModelPath,
+                            ltcPreviewVariantByModelContext,
+                            modelsWithSlotSpecificBindings);
                     }
                 }
             }
@@ -4719,6 +4719,31 @@ internal static class LithTechModelTextureConfigIndex
         }
 
         string sameNameTexturePath = NormalizeKey(Path.Combine(textureDirectory, modelStem + textureExtension));
+        string sourceModelPath = NormalizeModelResourcePath(modelPath);
+        int sourceSlotIndex = sourceMappedSlots[0];
+        // Do not let a same-name fallback replace a different texture bound to the source slot.
+        if (byModelPath.TryGetValue(sourceModelPath, out Dictionary<int, string?>? sourceDirectSlots) &&
+            sourceDirectSlots.TryGetValue(sourceSlotIndex, out string? sourceDirectTexture) &&
+            !string.IsNullOrWhiteSpace(sourceDirectTexture) &&
+            !string.Equals(NormalizeKey(sourceDirectTexture), sameNameTexturePath, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        foreach (string contextKey in contextKeys)
+        {
+            string normalizedContext = NormalizeLooseKey(contextKey);
+            string sourceContextKey = $"{sourceModelPath}\0{normalizedContext}";
+            if (normalizedContext.Length > 0 &&
+                byModelContext.TryGetValue(sourceContextKey, out Dictionary<int, string?>? sourceContextSlots) &&
+                sourceContextSlots.TryGetValue(sourceSlotIndex, out string? sourceContextTexture) &&
+                !string.IsNullOrWhiteSpace(sourceContextTexture) &&
+                !string.Equals(NormalizeKey(sourceContextTexture), sameNameTexturePath, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+        }
+
         if (!HasConsistentDecodableDtxCopies(
                 sameNameTexturePath,
                 textureItemsByLogicalPath,
