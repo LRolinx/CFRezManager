@@ -169,6 +169,26 @@ internal static class CrossFireWeaponPreviewModelIndexDecoder
             "preview:" + modelGroupId.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" +
             itemId.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
+        // Keep an explicit preview target separate from the item's WeaponModel link.
+        foreach (var previewModel in previewModelIdsByGroupAndItem)
+        {
+            if (previewModel.Key.ModelGroupId == 0 || previewModel.Key.ItemId == 0 || previewModel.Value.Length != 1)
+            {
+                continue;
+            }
+
+            uint modelId = previewModel.Value[0];
+            string alias = PreviewAlias(previewModel.Key.ModelGroupId, previewModel.Key.ItemId);
+            if (ltcWeaponIndexIds.Contains(modelId))
+            {
+                AddAlias(aliasesByWeaponIndex, modelId, alias);
+            }
+            else if (ltcWeaponLegacyMappingIndexIds.Contains(modelId))
+            {
+                AddAlias(aliasesByLtcLegacyMappingIndex, modelId, alias);
+            }
+        }
+
         foreach (CrossFireWeaponPreviewEntry preview in previewEntries)
         {
             var key = (preview.ModelGroupId, preview.ItemId);
@@ -179,30 +199,43 @@ internal static class CrossFireWeaponPreviewModelIndexDecoder
                 continue;
             }
 
+            uint modelId = modelIds[0];
+            bool hasPreviewModelIds = previewModelIdsByGroupAndItem.TryGetValue(key, out uint[]? previewModelIds);
+            bool previewModelIdsAreAmbiguous = hasPreviewModelIds && previewModelIds!.Length != 1;
+            bool addPreviewAliasToWeaponModel = !previewModelIdsAreAmbiguous &&
+                                                (!hasPreviewModelIds || previewModelIds![0] == modelId);
             if (modelIds[0] != preview.ItemId &&
-                previewModelIdsByGroupAndItem.TryGetValue(key, out uint[]? previewModelIds) &&
-                previewModelIds.Any(previewModelId => previewModelId != modelIds[0]))
+                hasPreviewModelIds &&
+                previewModelIds!.Any(previewModelId => previewModelId != modelId))
             {
                 continue;
             }
 
-            uint modelId = modelIds[0];
             if (ltcWeaponIndexIds.Contains(modelId))
             {
                 AddAlias(aliasesByWeaponIndex, modelId, ItemAlias(preview.ItemId));
-                AddAlias(aliasesByWeaponIndex, modelId, PreviewAlias(preview.ModelGroupId, preview.ItemId));
+                if (addPreviewAliasToWeaponModel)
+                {
+                    AddAlias(aliasesByWeaponIndex, modelId, PreviewAlias(preview.ModelGroupId, preview.ItemId));
+                }
             }
             else if (ltcWeaponLegacyMappingIndexIds.Contains(modelId))
             {
                 if (ltcWeaponIndexIds.Contains(preview.ItemId))
                 {
                     AddAlias(aliasesByWeaponIndex, preview.ItemId, ItemAlias(preview.ItemId));
-                    AddAlias(aliasesByLtcLegacyMappingIndex, modelId, PreviewAlias(preview.ModelGroupId, preview.ItemId));
+                    if (addPreviewAliasToWeaponModel)
+                    {
+                        AddAlias(aliasesByLtcLegacyMappingIndex, modelId, PreviewAlias(preview.ModelGroupId, preview.ItemId));
+                    }
                 }
                 else
                 {
                     AddAlias(aliasesByLtcLegacyMappingIndex, modelId, ItemAlias(preview.ItemId));
-                    AddAlias(aliasesByLtcLegacyMappingIndex, modelId, PreviewAlias(preview.ModelGroupId, preview.ItemId));
+                    if (addPreviewAliasToWeaponModel)
+                    {
+                        AddAlias(aliasesByLtcLegacyMappingIndex, modelId, PreviewAlias(preview.ModelGroupId, preview.ItemId));
+                    }
                 }
             }
         }
@@ -226,7 +259,12 @@ internal static class CrossFireWeaponPreviewModelIndexDecoder
             }
 
             AddAlias(aliasesByWeaponIndex, preview.ItemId, ItemAlias(preview.ItemId));
-            AddAlias(aliasesByWeaponIndex, preview.ItemId, PreviewAlias(preview.ModelGroupId, preview.ItemId));
+            if (!previewModelIdsByGroupAndItem.TryGetValue(key, out uint[]? previewModelIds) ||
+                previewModelIds.Length == 0 ||
+                previewModelIds.Length == 1 && previewModelIds[0] == preview.ItemId)
+            {
+                AddAlias(aliasesByWeaponIndex, preview.ItemId, PreviewAlias(preview.ModelGroupId, preview.ItemId));
+            }
         }
 
         return new CrossFireWeaponPreviewItemAliasIndex(
