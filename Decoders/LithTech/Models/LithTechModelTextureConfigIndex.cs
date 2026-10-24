@@ -10,6 +10,13 @@ namespace CFRezManager;
 
 internal static class LithTechModelTextureConfigIndex
 {
+    private sealed record VerifiedCftMotionTextureAlias(
+        string ParentModelPath,
+        string MotionModelPath,
+        int SlotIndex,
+        string MissingTexturePath,
+        string ExistingTexturePath);
+
     private const int MaxConfigBytes = 1024 * 1024;
     private const int MaxCftBytes = 4 * 1024 * 1024;
     private const int MaxLtcBytes = 16 * 1024 * 1024;
@@ -53,6 +60,20 @@ internal static class LithTechModelTextureConfigIndex
         "LeftHandModelFileName",
         "PreViewModelFileName",
         "PViewModelFileName"
+    ];
+
+    // The AI Princess Iron CFT points slot 2 at a missing AI_PrincessIron_HAIR
+    // path. Its motion hair mesh shares 1,607 of 1,663 UV triangles with the
+    // CFT-bound Princess Iron socket hair models; the replacement DTX is the
+    // only physical resource at its exact path.
+    private static readonly VerifiedCftMotionTextureAlias[] VerifiedCftMotionTextureAliases =
+    [
+        new(
+            "Models/Character/AIMode/AI1_EvilDen/AI_Boss_PrincessIron",
+            "Models/Character/AIMode/AI1_EvilDen/AI_Boss_PrincessIron_M-motion",
+            2,
+            "ModelTextures/Character/AIMode/AI1_EvilDen/AI_PrincessIron_HAIR.dtx",
+            "ModelTextures/SOCKETITEM/BASIC/PrincessIron_pc/PrincessIron_PC_HAIR.dtx")
     ];
 
     public static Func<IEnumerable<string>, IReadOnlyList<string>>? CreateResolver(ExplorerItem root)
@@ -3438,8 +3459,10 @@ internal static class LithTechModelTextureConfigIndex
                     if (CftModelTextureMappingDecoder.TryGetTextureSlotIndex(texture.Column, out int slotIndex))
                     {
                         explicitTextureSlots.Add(slotIndex);
-                        string? existingTexturePath = ResolveExistingTextureReference(
+                        string? existingTexturePath = ResolveExistingCftTextureReference(
+                            modelResourcePath,
                             texture.Path,
+                            resourceItems,
                             resourcePaths,
                             texturePathsByBaseName);
                         string texturePath = existingTexturePath ?? texture.Path;
@@ -3474,8 +3497,10 @@ internal static class LithTechModelTextureConfigIndex
                              IsUnindexedCftSkinFileName(texture.Column) &&
                              mapping.RelatedModelReferences is { Count: > 0 } relatedModelReferences)
                     {
-                        string? existingTexturePath = ResolveExistingTextureReference(
+                        string? existingTexturePath = ResolveExistingCftTextureReference(
+                            modelResourcePath,
                             texture.Path,
+                            resourceItems,
                             resourcePaths,
                             texturePathsByBaseName);
                         if (existingTexturePath is null)
@@ -3497,8 +3522,10 @@ internal static class LithTechModelTextureConfigIndex
                     }
                     else if (TryGetCharacterCftBodySide(configItem.Path, mapping, texture, out string bodySide))
                     {
-                        string? existingTexturePath = ResolveExistingTextureReference(
+                        string? existingTexturePath = ResolveExistingCftTextureReference(
+                            modelResourcePath,
                             texture.Path,
+                            resourceItems,
                             resourcePaths,
                             texturePathsByBaseName);
                         if (existingTexturePath is null)
@@ -3631,8 +3658,10 @@ internal static class LithTechModelTextureConfigIndex
                             continue;
                         }
 
-                        string? existingTexturePath = ResolveExistingTextureReference(
+                        string? existingTexturePath = ResolveExistingCftTextureReference(
+                            modelResourcePath,
                             texture.Path,
+                            resourceItems,
                             resourcePaths,
                             texturePathsByBaseName);
                         string texturePath = existingTexturePath ?? texture.Path;
@@ -3760,7 +3789,33 @@ internal static class LithTechModelTextureConfigIndex
                         validatedSlotSet.IntersectWith(parentUsedSlots);
                     }
                     validatedSlotSet.IntersectWith(childUsedSlots);
-                    if (!allRelatedCopiesValidated || validatedSlotSet.Count == 0)
+                    if (!allRelatedCopiesValidated)
+                    {
+                        continue;
+                    }
+
+                    foreach (VerifiedCftMotionTextureAlias alias in VerifiedCftMotionTextureAliases)
+                    {
+                        if (!IsVerifiedCftMotionTextureAlias(
+                                modelResourcePath,
+                                relatedResourcePath,
+                                alias.SlotIndex,
+                                rowSlotTextures.GetValueOrDefault(alias.SlotIndex)) ||
+                            parentUsedSlots.Contains(alias.SlotIndex) ||
+                            !childUsedSlots.Contains(alias.SlotIndex) ||
+                            !TryGetConsistentLtcModelSlots(relatedModelItems, decodedModels, out int[] consistentRelatedSlots) ||
+                            !consistentRelatedSlots.Contains(alias.SlotIndex))
+                        {
+                            continue;
+                        }
+
+                        // The verified Princess Iron hair slot is present on
+                        // the related motion model only, so it cannot pass the
+                        // shared-parent-slot rule above.
+                        validatedSlotSet.Add(alias.SlotIndex);
+                    }
+
+                    if (validatedSlotSet.Count == 0)
                     {
                         continue;
                     }
@@ -6297,6 +6352,79 @@ internal static class LithTechModelTextureConfigIndex
         }
 
         return resolvedPaths.Count == 1 ? resolvedPaths.First() : null;
+    }
+
+    private static string? ResolveExistingCftTextureReference(
+        string modelReference,
+        string textureReference,
+        IReadOnlyList<ExplorerItem> resourceItems,
+        IReadOnlySet<string> resourcePaths,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> texturePathsByBaseName)
+    {
+        string? existingTexturePath = ResolveExistingTextureReference(
+            textureReference,
+            resourcePaths,
+            texturePathsByBaseName);
+        if (existingTexturePath is not null)
+        {
+            return existingTexturePath;
+        }
+
+        string normalizedModelPath = NormalizeExtensionlessModelReference(modelReference);
+        string normalizedTexturePath = NormalizeKey(textureReference);
+        foreach (VerifiedCftMotionTextureAlias alias in VerifiedCftMotionTextureAliases)
+        {
+            if (!string.Equals(
+                    normalizedModelPath,
+                    NormalizeExtensionlessModelReference(alias.ParentModelPath),
+                    StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(normalizedTexturePath, NormalizeKey(alias.MissingTexturePath), StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            existingTexturePath = ResolveExistingTextureReference(
+                alias.ExistingTexturePath,
+                resourcePaths,
+                texturePathsByBaseName);
+            if (existingTexturePath is not null &&
+                HasConsistentPhysicalResourceCopies(resourceItems, existingTexturePath))
+            {
+                return existingTexturePath;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsVerifiedCftMotionTextureAlias(
+        string parentModelPath,
+        string motionModelPath,
+        int slotIndex,
+        string? texturePath)
+    {
+        if (string.IsNullOrWhiteSpace(texturePath))
+        {
+            return false;
+        }
+
+        string normalizedParentPath = NormalizeExtensionlessModelReference(parentModelPath);
+        string normalizedMotionPath = NormalizeExtensionlessModelReference(motionModelPath);
+        string normalizedTexturePath = NormalizeKey(texturePath);
+        return VerifiedCftMotionTextureAliases.Any(alias =>
+            alias.SlotIndex == slotIndex &&
+            string.Equals(
+                normalizedParentPath,
+                NormalizeExtensionlessModelReference(alias.ParentModelPath),
+                StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(
+                normalizedMotionPath,
+                NormalizeExtensionlessModelReference(alias.MotionModelPath),
+                StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(
+                normalizedTexturePath,
+                NormalizeKey(alias.ExistingTexturePath),
+                StringComparison.OrdinalIgnoreCase));
     }
 
     private static bool TryResolveClientShellCategoryPair(
