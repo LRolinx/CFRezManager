@@ -110,6 +110,28 @@ internal static class CftPlayerViewArmEquivalence
         return expected;
     }
 
+    public static IReadOnlyDictionary<int, string>? GetConsistentTextureSlotUvTriangleSignatures(
+        IReadOnlyList<LithTechModelDocument> documents)
+    {
+        if (documents.Count == 0) return null;
+        Dictionary<int, string>? expected = null;
+        foreach (LithTechModelDocument document in documents)
+        {
+            Dictionary<int, string>? current = GetTextureSlotUvTriangleSignatures(document);
+            if (current is null || expected is not null &&
+                (expected.Count != current.Count || expected.Any(pair =>
+                    !current.TryGetValue(pair.Key, out string? value) ||
+                    !string.Equals(pair.Value, value, StringComparison.Ordinal))))
+            {
+                return null;
+            }
+
+            expected ??= current;
+        }
+
+        return expected;
+    }
+
     private static Dictionary<int, string>? GetTextureSlotLayoutSignatures(LithTechModelDocument document)
     {
         if (document.Meshes.Count == 0) return null;
@@ -225,6 +247,101 @@ internal static class CftPlayerViewArmEquivalence
         }
 
         return signatures;
+    }
+
+    private static Dictionary<int, string>? GetTextureSlotUvTriangleSignatures(LithTechModelDocument document)
+    {
+        if (document.Meshes.Count == 0) return null;
+        int[] slots = document.Meshes
+            .SelectMany(mesh => mesh.TextureSlotIndices ?? [])
+            .Distinct()
+            .Order()
+            .ToArray();
+        if (slots.Length == 0) return null;
+
+        var signatures = new Dictionary<int, string>();
+        foreach (int slot in slots)
+        {
+            string?[] meshSignatures = document.Meshes
+                .Where(mesh => (mesh.TextureSlotIndices ?? []).Contains(slot))
+                .Select(GetTextureUvTriangleSignature)
+                .ToArray();
+            if (meshSignatures.Length == 0 || meshSignatures.Any(string.IsNullOrEmpty)) return null;
+            using var bytes = new MemoryStream();
+            using var writer = new BinaryWriter(bytes, Encoding.UTF8, leaveOpen: true);
+            writer.Write(slot);
+            writer.Write(meshSignatures.Length);
+            foreach (string meshSignature in meshSignatures.Select(signature => signature!).Order(StringComparer.Ordinal))
+            {
+                writer.Write(meshSignature);
+            }
+
+            writer.Flush();
+            signatures.Add(slot, Convert.ToHexString(SHA256.HashData(bytes.GetBuffer().AsSpan(0, (int)bytes.Length))));
+        }
+
+        return signatures;
+    }
+
+    private static string? GetTextureUvTriangleSignature(LithTechMesh mesh)
+    {
+        if (!mesh.HasAuthoritativeTextureBindings || !TryGetTextureCoordinateSets(mesh, out IReadOnlyList<IReadOnlyList<LithTechVector2>?> uvSets) ||
+            mesh.Vertices.Count == 0 || mesh.TriangleIndices.Count == 0 || mesh.TriangleIndices.Count % 3 != 0 ||
+            mesh.TextureSlotIndices is not { Count: > 0 } slots || slots.Any(slot => slot < 0) ||
+            !string.IsNullOrWhiteSpace(mesh.TexturePath))
+        {
+            return null;
+        }
+
+        string Number(double value) => (value == 0 ? 0 : value).ToString("R", CultureInfo.InvariantCulture);
+        var triangles = new List<string>(mesh.TriangleIndices.Count / 3);
+        for (int offset = 0; offset < mesh.TriangleIndices.Count; offset += 3)
+        {
+            var corners = new string[3];
+            for (int corner = 0; corner < 3; corner++)
+            {
+                int index = mesh.TriangleIndices[offset + corner];
+                if (index < 0 || index >= mesh.Vertices.Count) return null;
+                var values = new List<string>(uvSets.Count * 2);
+                foreach (IReadOnlyList<LithTechVector2>? uvSet in uvSets)
+                {
+                    if (uvSet is null)
+                    {
+                        values.Add("-");
+                        continue;
+                    }
+
+                    LithTechVector2 uv = uvSet[index];
+                    if (!double.IsFinite(uv.X) || !double.IsFinite(uv.Y)) return null;
+                    values.Add(Number(uv.X));
+                    values.Add(Number(uv.Y));
+                }
+
+                corners[corner] = string.Join(",", values);
+            }
+
+            Array.Sort(corners, StringComparer.Ordinal);
+            triangles.Add(string.Join('|', corners));
+        }
+
+        triangles.Sort(StringComparer.Ordinal);
+        using var bytes = new MemoryStream();
+        using var writer = new BinaryWriter(bytes, Encoding.UTF8, leaveOpen: true);
+        writer.Write(mesh.Name.ToUpperInvariant());
+        writer.Write(slots.Count);
+        foreach (int slot in slots) writer.Write(slot);
+        writer.Write(mesh.RenderStyleIndex.HasValue);
+        writer.Write(mesh.RenderStyleIndex ?? -1);
+        writer.Write(uvSets.Count);
+        for (int setIndex = 0; setIndex < uvSets.Count; setIndex++)
+        {
+            writer.Write(uvSets[setIndex] is not null);
+            writer.Write(mesh.GetTextureCoordinateSourceStreamIndex(setIndex) ?? -1);
+        }
+        writer.Write(triangles.Count);
+        foreach (string triangle in triangles) writer.Write(triangle);
+        writer.Flush();
+        return Convert.ToHexString(SHA256.HashData(bytes.GetBuffer().AsSpan(0, (int)bytes.Length)));
     }
 
     private static string? GetTextureGeometryUvSignature(LithTechMesh mesh)

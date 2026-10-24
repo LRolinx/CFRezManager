@@ -6388,6 +6388,7 @@ internal static class LithTechModelTextureConfigIndex
         var signatures = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         var textureSlotSignatures = new Dictionary<string, IReadOnlyDictionary<int, string>?>(StringComparer.OrdinalIgnoreCase);
         var geometryUvTextureSlotSignatures = new Dictionary<string, IReadOnlyDictionary<int, string>?>(StringComparer.OrdinalIgnoreCase);
+        var uvTriangleTextureSlotSignatures = new Dictionary<string, IReadOnlyDictionary<int, string>?>(StringComparer.OrdinalIgnoreCase);
         var textureSlotDocuments = new Dictionary<string, IReadOnlyList<LithTechModelDocument>?>(StringComparer.OrdinalIgnoreCase);
         var contextsBySourceModel = new Dictionary<string, List<KeyValuePair<string, Dictionary<int, string?>>>>(StringComparer.OrdinalIgnoreCase);
         foreach (KeyValuePair<string, Dictionary<int, string?>> binding in directContexts)
@@ -6402,6 +6403,7 @@ internal static class LithTechModelTextureConfigIndex
 
         var armDonorsBySlotSignature = new Dictionary<(int Slot, string Signature), List<string>>();
         var armDonorsBySlotGeometryUvSignature = new Dictionary<(int Slot, string Signature), List<string>>();
+        var armDonorsBySlotUvTriangleSignature = new Dictionary<(int Slot, string Signature), List<string>>();
         foreach (string sourcePath in directModels.Where(CftPlayerViewArmEquivalence.IsPlayerViewArmModel))
         {
             if (!contextsBySourceModel.ContainsKey(sourcePath)) continue;
@@ -6428,6 +6430,18 @@ internal static class LithTechModelTextureConfigIndex
                     paths.Add(sourcePath);
                 }
             }
+
+            IReadOnlyDictionary<int, string>? sourceUvTriangleSlots = GetUvTriangleSlotSignatures(sourcePath);
+            if (sourceUvTriangleSlots is not null)
+            {
+                foreach ((int slot, string signature) in sourceUvTriangleSlots)
+                {
+                    var key = (slot, signature);
+                    if (!armDonorsBySlotUvTriangleSignature.TryGetValue(key, out List<string>? paths))
+                        armDonorsBySlotUvTriangleSignature[key] = paths = [];
+                    paths.Add(sourcePath);
+                }
+            }
         }
 
         foreach ((string targetPath, ExplorerItem[] _) in modelItems)
@@ -6437,6 +6451,7 @@ internal static class LithTechModelTextureConfigIndex
             if (!isEmbeddedPreview && !isTypedLtcPlayerViewModel && directModels.Contains(targetPath)) continue;
             if (isEmbeddedPreview || isTypedLtcPlayerViewModel)
             {
+                var strongerMatches = new HashSet<int>();
                 IReadOnlyDictionary<int, string>? targetSlots = GetTextureSlotSignatures(targetPath);
                 if (targetSlots is not null)
                 {
@@ -6449,7 +6464,10 @@ internal static class LithTechModelTextureConfigIndex
                         }
 
                         if (armDonorsBySlotSignature.TryGetValue((slot, signature), out List<string>? sourcePaths))
+                        {
                             AddEquivalentArmDonors(targetPath, slot, sourcePaths);
+                            strongerMatches.Add(slot);
+                        }
                     }
                 }
 
@@ -6465,7 +6483,30 @@ internal static class LithTechModelTextureConfigIndex
                         }
 
                         if (armDonorsBySlotGeometryUvSignature.TryGetValue((slot, signature), out List<string>? sourcePaths))
+                        {
                             AddEquivalentArmDonors(targetPath, slot, sourcePaths);
+                            strongerMatches.Add(slot);
+                        }
+                    }
+                }
+
+                if (isEmbeddedPreview)
+                {
+                    IReadOnlyDictionary<int, string>? targetUvTriangleSlots = GetUvTriangleSlotSignatures(targetPath);
+                    if (targetUvTriangleSlots is not null)
+                    {
+                        foreach ((int slot, string signature) in targetUvTriangleSlots)
+                        {
+                            if (strongerMatches.Contains(slot) ||
+                                directPaths.TryGetValue(targetPath, out Dictionary<int, string?>? targetDirectSlots) &&
+                                targetDirectSlots.ContainsKey(slot))
+                            {
+                                continue;
+                            }
+
+                            if (armDonorsBySlotUvTriangleSignature.TryGetValue((slot, signature), out List<string>? sourcePaths))
+                                AddEquivalentArmDonors(targetPath, slot, sourcePaths);
+                        }
                     }
                 }
 
@@ -6619,6 +6660,15 @@ internal static class LithTechModelTextureConfigIndex
             return geometryUvTextureSlotSignatures[path] = documents is null
                 ? null
                 : CftPlayerViewArmEquivalence.GetConsistentTextureSlotGeometryUvSignatures(documents);
+        }
+
+        IReadOnlyDictionary<int, string>? GetUvTriangleSlotSignatures(string path)
+        {
+            if (uvTriangleTextureSlotSignatures.TryGetValue(path, out IReadOnlyDictionary<int, string>? cached)) return cached;
+            IReadOnlyList<LithTechModelDocument>? documents = GetTextureSlotDocuments(path);
+            return uvTriangleTextureSlotSignatures[path] = documents is null
+                ? null
+                : CftPlayerViewArmEquivalence.GetConsistentTextureSlotUvTriangleSignatures(documents);
         }
 
         IReadOnlyList<LithTechModelDocument>? GetTextureSlotDocuments(string path)
