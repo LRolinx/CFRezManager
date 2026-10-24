@@ -5226,9 +5226,9 @@ internal static class LithTechModelTextureConfigIndex
 
         AddVerifiedSkinDtxBindingsForIdenticalModelCopies();
 
-        // A skin variant with identical model bytes may reuse a table-bound
-        // source slot when the matching main or numbered-part DTX is unique
-        // and its slot UVs agree.
+        // Identical skin variants may reuse a table-bound slot from a prefix
+        // model or a same-family sibling when the matching DTX is unique and
+        // the slot UVs agree.
         void AddVerifiedSkinDtxBindingsForIdenticalModelCopies()
         {
             var playerViewTexturePathsByBaseName = textureItemsByLogicalPath.Keys
@@ -5261,6 +5261,22 @@ internal static class LithTechModelTextureConfigIndex
 
             var candidateDonorsBySlot = new Dictionary<string, Dictionary<int, HashSet<string>>>(StringComparer.OrdinalIgnoreCase);
             var candidateTexturesBySlot = new Dictionary<string, Dictionary<int, HashSet<string>>>(StringComparer.OrdinalIgnoreCase);
+            var playerViewModelPathsByHash = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+            foreach ((string modelPath, ExplorerItem[] modelItems) in modelItemsByPlayerViewRolePath)
+            {
+                string? modelHash = GetUniqueArchivedModelHash(modelItems);
+                if (modelHash is null)
+                {
+                    continue;
+                }
+
+                if (!playerViewModelPathsByHash.TryGetValue(modelHash, out List<string>? modelPaths))
+                {
+                    playerViewModelPathsByHash[modelHash] = modelPaths = [];
+                }
+
+                modelPaths.Add(modelPath);
+            }
 
             foreach (string targetModelPath in modelItemsByPlayerViewRolePath.Keys)
             {
@@ -5284,6 +5300,11 @@ internal static class LithTechModelTextureConfigIndex
 
                 string? targetModelHash = GetUniqueArchivedModelHash(targetItems);
                 if (targetModelHash is null)
+                {
+                    continue;
+                }
+
+                if (!playerViewModelPathsByHash.TryGetValue(targetModelHash, out List<string>? identicalModelPaths))
                 {
                     continue;
                 }
@@ -5381,6 +5402,147 @@ internal static class LithTechModelTextureConfigIndex
                         }
                     }
                 }
+
+                AddSameHashSkinSiblingBindings(
+                    targetModelPath,
+                    targetStem,
+                    targetTexturePath,
+                    targetModelHash,
+                    identicalModelPaths,
+                    targetDocuments,
+                    targetSignatures);
+            }
+
+            void AddSameHashSkinSiblingBindings(
+                string targetModelPath,
+                string targetStem,
+                string targetTexturePath,
+                string targetModelHash,
+                IReadOnlyList<string> identicalModelPaths,
+                IReadOnlyList<LithTechModelDocument> targetDocuments,
+                IReadOnlyDictionary<int, string> targetSignatures)
+            {
+                string targetDirectory = Path.GetDirectoryName(targetModelPath)?.Replace('\\', '/') ?? string.Empty;
+                foreach (string donorModelPath in identicalModelPaths)
+                {
+                    if (string.Equals(donorModelPath, targetModelPath, StringComparison.OrdinalIgnoreCase) ||
+                        !string.Equals(
+                            Path.GetDirectoryName(donorModelPath)?.Replace('\\', '/') ?? string.Empty,
+                            targetDirectory,
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    string donorStem = Path.GetFileName(donorModelPath);
+                    string? familyRootStem = FindExistingSkinFamilyRoot(targetDirectory, targetStem, donorStem);
+                    if (familyRootStem is null ||
+                        !tableMappedTexturesByModelSlot.TryGetValue(donorModelPath, out Dictionary<int, HashSet<string>>? donorBindings) ||
+                        !modelItemsByPlayerViewRolePath.TryGetValue(donorModelPath, out ExplorerItem[]? donorItems) ||
+                        !string.Equals(targetModelHash, GetUniqueArchivedModelHash(donorItems), StringComparison.OrdinalIgnoreCase) ||
+                        !TryDecodeConsistentPlayerViewModelDocuments(donorItems, decodedModels, out List<LithTechModelDocument> donorDocuments) ||
+                        donorDocuments.Count == 0)
+                    {
+                        continue;
+                    }
+
+                    string donorTexturePath = "ModelTextures/PLAYERVIEW/" + donorStem + ".dtx";
+                    string familyRootPath = targetDirectory + "/" + familyRootStem;
+                    IReadOnlyDictionary<int, string>? donorSignatures = GetSlotUvTriangleSignatures(donorModelPath);
+                    if (donorSignatures is null)
+                    {
+                        continue;
+                    }
+
+                    bool hasDecodableMainTexture = HasConsistentDecodableDtxCopies(
+                        donorTexturePath,
+                        textureItemsByLogicalPath,
+                        verifiedTexturePathCache);
+                    if (hasDecodableMainTexture)
+                    {
+                        foreach ((int slot, HashSet<string> textures) in donorBindings)
+                        {
+                            if (textures.Contains(donorTexturePath) &&
+                                IsVerifiedUnmappedSlot(targetModelPath, slot, targetDocuments, donorDocuments, targetSignatures, donorSignatures))
+                            {
+                                AddCandidateBinding(targetModelPath, slot, familyRootPath, targetTexturePath);
+                            }
+                        }
+                    }
+
+                    string targetSkinSuffix = targetStem.Length > familyRootStem.Length
+                        ? targetStem[(familyRootStem.Length + 1)..]
+                        : string.Empty;
+                    foreach ((int slot, HashSet<string> sourceTexturePaths) in donorBindings)
+                    {
+                        if (!IsVerifiedUnmappedSlot(targetModelPath, slot, targetDocuments, donorDocuments, targetSignatures, donorSignatures))
+                        {
+                            continue;
+                        }
+
+                        foreach (string sourceTexturePath in sourceTexturePaths)
+                        {
+                            if (string.Equals(sourceTexturePath, donorTexturePath, StringComparison.OrdinalIgnoreCase) ||
+                                !TryGetNumberedPartSuffix(sourceTexturePath, donorStem, out string partSuffix) ||
+                                !HasConsistentDecodableDtxCopies(sourceTexturePath, textureItemsByLogicalPath, verifiedTexturePathCache))
+                            {
+                                continue;
+                            }
+
+                            string partNumber = partSuffix.TrimStart('_');
+                            var candidateTextureNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                            {
+                                targetStem + partSuffix,
+                                targetStem + "_" + partNumber,
+                                familyRootStem + partNumber + "_" + targetSkinSuffix,
+                                familyRootStem + "_" + partNumber + "_" + targetSkinSuffix
+                            };
+                            var matchingTexturePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                            foreach (string candidateTextureName in candidateTextureNames)
+                            {
+                                string candidateTexturePath = "ModelTextures/PLAYERVIEW/" + candidateTextureName + ".dtx";
+                                if (!playerViewTexturePathsByBaseName.TryGetValue(candidateTextureName, out string[]? candidatePaths) ||
+                                    candidatePaths.Length != 1 ||
+                                    !string.Equals(candidatePaths[0], candidateTexturePath, StringComparison.OrdinalIgnoreCase) ||
+                                    !HasConsistentDecodableDtxCopies(candidateTexturePath, textureItemsByLogicalPath, verifiedTexturePathCache))
+                                {
+                                    continue;
+                                }
+
+                                matchingTexturePaths.Add(candidateTexturePath);
+                            }
+
+                            if (matchingTexturePaths.Count == 1)
+                            {
+                                AddCandidateBinding(targetModelPath, slot, familyRootPath, matchingTexturePaths.Single());
+                            }
+                        }
+                    }
+                }
+            }
+
+            string? FindExistingSkinFamilyRoot(string directory, string targetStem, string donorStem)
+            {
+                if (donorStem.StartsWith(targetStem + "_", StringComparison.OrdinalIgnoreCase) &&
+                    modelItemsByPlayerViewRolePath.ContainsKey(directory + "/" + targetStem))
+                {
+                    return targetStem;
+                }
+
+                int separatorIndex = targetStem.LastIndexOf('_');
+                while (separatorIndex > 0)
+                {
+                    string candidateRoot = targetStem[..separatorIndex];
+                    if (donorStem.StartsWith(candidateRoot + "_", StringComparison.OrdinalIgnoreCase) &&
+                        modelItemsByPlayerViewRolePath.ContainsKey(directory + "/" + candidateRoot))
+                    {
+                        return candidateRoot;
+                    }
+
+                    separatorIndex = targetStem.LastIndexOf('_', separatorIndex - 1);
+                }
+
+                return null;
             }
 
             void AddCandidateBinding(string targetModelPath, int slot, string donorModelPath, string texturePath)
