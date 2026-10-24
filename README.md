@@ -221,7 +221,7 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 - `PV-M82A1_DemonicBeast_PVE` 基模沿用同两张 DTX，槽 2 恢复 7 个网格、槽 3 恢复 2 个网格。BL、GR、WOMAN_BL、WOMAN_GR 的 PVE 变体中，7 个槽 2 项和两个槽 3 项均未解析；手、臂和 `clanmark` 网格也未解析。
 - `PV-M82A1_S_BornBeast_Winter` 基模槽 2 使用 `ModelTextures/PlayerView/PV-M82A1_S_BornBeast_Winter.dtx`，槽 3 使用 `ModelTextures/PlayerView/PV-M82A1_S_BornBeast_Winter_01.dtx`。四个阵营/性别变体保留 LTC 推导的槽 2 贴图，并在 `dsdsdsfs` 网格 UV 完全一致时将槽 3 映射到 `_01.dtx`。每个聚焦导出均恢复两张贴图，只留下两条手/臂项未解析。
 - `WeaponPreview/Skin` 变体只有在预览 BIN 唯一对应同名 PV 模型、基模有直接槽位贴图、目标武器网格名与基模名相同且所有模型副本的几何/UV 签名一致时，才会绑定唯一同名 DTX；贴图副本的 MD5 也必须一致。绑定使用 `preview:<模型组号>:<道具编号>`，不据此生成可能与 LTC `WeaponIndex` 冲突的 `item:` 身份。若某模型槽只有一个变体上下文，且该槽没有直接路径或身份上下文映射，CLI 和 GUI 无上下文导出也会按模型路径使用该 DTX。BCAxe 的 Chs/YOD 槽 2 是已验证样例，审计标记为 `weapon-preview-variant-derived`。
-- `Arm_SwatElite_Renewal_GR` 的手/臂网格带有明确的角色和阵营后缀，可按 CFT A0017 中登记的 SWAT-ELITE 手/臂贴图名解析；仅当对应玩家视角 DTX 路径唯一且归档副本哈希一致时绑定。`Arm_WildWest_SP` 仍没有可靠的角色表贴图关联，继续保持未映射。
+- `Arm_SwatElite_Renewal_GR` 的手/臂网格带有明确的角色和阵营后缀，可按 CFT A0017 中登记的 SWAT-ELITE 手/臂贴图名解析；仅当对应玩家视角 DTX 路径唯一且归档副本哈希一致时绑定。当前归档导出已验证：A0017 的手槽 0 使用 `FVIEW_HAND_SWAT-ELITE_BL.DTX`，臂槽 1 使用 `FVIEW_ARM_SWAT-ELITE_GR.DTX`，两张贴图均成功解码和导出。`Arm_WildWest_SP` 仍无可验证的角色表贴图关联；其槽 UV 签名与 CFT 登记的 WildWest BLGR、Santa 臂模供体均不匹配，因此保持未映射。
 - LTC 已验证的 SixEyed Sword 条目使用相同 PView 模型和身份，但贴图名分别写作 `PV-SixEyedSword_Gold` 与 `PV-SixEyed_Sword_Gold`；后者只在无下划线 basename 对应唯一物理路径时回链。
 - `WeaponAttachItemDoll.CFT` 多条记录共用 Joy QV 模型，PV 侧指向 `PV-ACC_Baihu`；Joy、TropicalOcean 和 PartyDoggy 的 PV/QV 模型 UV 布局一致。缺失的 `QV-ACC_Interaction_Joy` 与 `QV-ACC_Interaction_PartyDoggy` 贴图名仅在 `QV-ACC_Baihu` 对应唯一物理 DTX 时回链。
 - 原生 LTB 解码保留每个网格的 RenderStyle 编号，并区分文件声明的材质槽与推测槽。OBJ 仍只导出漫反射贴图，不重建全部 RenderStyle 效果。
