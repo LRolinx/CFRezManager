@@ -3382,6 +3382,7 @@ internal static class LithTechModelTextureConfigIndex
         var modelsWithSlotSpecificBindings = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var deferredCftMotionSkinBindings = new List<DeferredCftMotionSkinBinding>();
         var directPlayerViewModels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var typedLtcPlayerViewModels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var modelItemsByPath = modelResourceItems
             .Where(item => string.Equals(item.FileExtension, "ltb", StringComparison.OrdinalIgnoreCase))
             .Select(item => (Item: item, ResourcePath: GetModelResourcePath(item)))
@@ -3881,19 +3882,6 @@ internal static class LithTechModelTextureConfigIndex
             }
         }
 
-        (Dictionary<string, Dictionary<int, string?>> equivalentArmByModelContext,
-            Dictionary<string, Dictionary<int, string?>> equivalentArmByModelPath) = BuildEquivalentArmContextBindings(
-            directPlayerViewModels, modelItemsByPlayerViewRolePath, byModelContext, byModelPath);
-        modelsWithSlotSpecificBindings.UnionWith(equivalentArmByModelPath.Keys);
-        foreach (string contextBindingKey in equivalentArmByModelContext.Keys)
-        {
-            int contextSeparator = contextBindingKey.IndexOf('\0');
-            if (contextSeparator > 0)
-            {
-                modelsWithSlotSpecificBindings.Add(contextBindingKey[..contextSeparator]);
-            }
-        }
-
         var ltcMappingCache = new Dictionary<string, IReadOnlyList<CrossFireLtcModelTextureMapping>>(StringComparer.OrdinalIgnoreCase);
         foreach (ExplorerItem ltcItem in ltcItems)
         {
@@ -4031,6 +4019,25 @@ internal static class LithTechModelTextureConfigIndex
                     continue;
                 }
 
+                if (mapping.ModelField.StartsWith("PViewModelFileName", StringComparison.OrdinalIgnoreCase))
+                {
+                    // A typed LTC player-view role is direct evidence that this
+                    // model and its side/gender variants can carry CFT hand/arm skins.
+                    typedLtcPlayerViewModels.Add(modelPath);
+                    foreach (string variantSuffix in new[]
+                             {
+                                 "_BL", "_GR", "_SP",
+                                 "_WOMAN_BL", "_WOMAN_GR", "_WOMAN_SP"
+                             })
+                    {
+                        string variantPath = modelPath + variantSuffix;
+                        if (modelItemsByPlayerViewRolePath.ContainsKey(NormalizeModelResourcePath(variantPath)))
+                        {
+                            typedLtcPlayerViewModels.Add(variantPath);
+                        }
+                    }
+                }
+
                 IReadOnlyDictionary<string, LithTechModelDocument>? playerViewArmDocuments =
                     mapping.ModelField.StartsWith("PViewModelFileName", StringComparison.OrdinalIgnoreCase)
                         ? TryGetLtcPlayerViewArmDocuments(
@@ -4101,6 +4108,23 @@ internal static class LithTechModelTextureConfigIndex
                         }
                     }
                 }
+            }
+        }
+
+        (Dictionary<string, Dictionary<int, string?>> equivalentArmByModelContext,
+            Dictionary<string, Dictionary<int, string?>> equivalentArmByModelPath) = BuildEquivalentArmContextBindings(
+            directPlayerViewModels,
+            typedLtcPlayerViewModels,
+            modelItemsByPlayerViewRolePath,
+            byModelContext,
+            byModelPath);
+        modelsWithSlotSpecificBindings.UnionWith(equivalentArmByModelPath.Keys);
+        foreach (string contextBindingKey in equivalentArmByModelContext.Keys)
+        {
+            int contextSeparator = contextBindingKey.IndexOf('\0');
+            if (contextSeparator > 0)
+            {
+                modelsWithSlotSpecificBindings.Add(contextBindingKey[..contextSeparator]);
             }
         }
 
@@ -4330,6 +4354,7 @@ internal static class LithTechModelTextureConfigIndex
     private static (Dictionary<string, Dictionary<int, string?>> ByContext,
         Dictionary<string, Dictionary<int, string?>> ByPath) BuildEquivalentArmContextBindings(
         IReadOnlySet<string> directModels,
+        IReadOnlySet<string> typedLtcPlayerViewModels,
         IReadOnlyDictionary<string, ExplorerItem[]> modelItems,
         IReadOnlyDictionary<string, Dictionary<int, string?>> directContexts,
         IReadOnlyDictionary<string, Dictionary<int, string?>> directPaths)
@@ -4385,7 +4410,8 @@ internal static class LithTechModelTextureConfigIndex
         foreach ((string targetPath, ExplorerItem[] _) in modelItems)
         {
             if (directModels.Contains(targetPath)) continue;
-            if (CftPlayerViewArmEquivalence.IsEmbeddedPreviewModel(targetPath))
+            if (CftPlayerViewArmEquivalence.IsEmbeddedPreviewModel(targetPath) ||
+                typedLtcPlayerViewModels.Contains(targetPath))
             {
                 IReadOnlyDictionary<int, string>? targetSlots = GetTextureSlotSignatures(targetPath);
                 if (targetSlots is not null)
@@ -4562,7 +4588,19 @@ internal static class LithTechModelTextureConfigIndex
         IReadOnlyList<LithTechModelDocument>? GetTextureSlotDocuments(string path)
         {
             if (textureSlotDocuments.TryGetValue(path, out IReadOnlyList<LithTechModelDocument>? cached)) return cached;
-            if (!modelItems.TryGetValue(path, out ExplorerItem[]? copies) || copies.Length == 0)
+            if (!modelItems.TryGetValue(path, out ExplorerItem[]? copies))
+            {
+                // CharacterType.CFT refers to player-view arms as ArmModel/Arm_*.
+                // Their physical LTB resources are stored below Models/PLAYERVIEW.
+                string normalizedPath = NormalizeExtensionlessModelReference(path);
+                if (!normalizedPath.StartsWith("ArmModel/Arm_", StringComparison.OrdinalIgnoreCase) ||
+                    !modelItems.TryGetValue("Models/PLAYERVIEW/" + normalizedPath, out copies))
+                {
+                    return textureSlotDocuments[path] = null;
+                }
+            }
+
+            if (copies.Length == 0)
                 return textureSlotDocuments[path] = null;
 
             var documents = new List<LithTechModelDocument>(copies.Length);
