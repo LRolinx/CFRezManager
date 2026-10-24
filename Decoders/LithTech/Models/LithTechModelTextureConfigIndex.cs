@@ -698,6 +698,7 @@ internal static class LithTechModelTextureConfigIndex
         WriteContextDictionary(dictionary.InferredByModelContext, "context", "cft-body-face-derived", isInferred: true);
         WriteContextDictionary(dictionary.EquivalentArmByModelContext, "context", "cft-equivalent-arm-derived", isInferred: true);
         WriteContextDictionary(dictionary.WeaponPreviewVariantByModelContext, "context", "weapon-preview-variant-derived", isInferred: true);
+        WriteRenderStyleContextDictionary(dictionary.RenderStyleByModelContext);
 
         var physicalModelGroups = index.ModelResourceItems
             .Where(item => string.Equals(item.FileExtension, "ltb", StringComparison.OrdinalIgnoreCase))
@@ -706,12 +707,22 @@ internal static class LithTechModelTextureConfigIndex
             .GroupBy(pair => pair.LogicalPath, StringComparer.OrdinalIgnoreCase)
             .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        var physicalModelGroupsByPath = physicalModelGroups.ToDictionary(
+            group => group.Key,
+            group => group,
+            StringComparer.OrdinalIgnoreCase);
+        var renderStyleCache = new Dictionary<string, (string Status, LithTechRenderStyleDocument? Document, int Copies, string Detail)>(
+            StringComparer.OrdinalIgnoreCase);
         int modelsWithEvidence = 0;
         int modelsWithoutEvidence = 0;
         int processedModelGroups = 0;
         foreach (IGrouping<string, (ExplorerItem Item, string LogicalPath)> group in physicalModelGroups)
         {
             ExplorerItem[] groupItems = group.Select(pair => pair.Item).ToArray();
+            string modelContextPrefix = group.Key + "\0";
+            KeyValuePair<string, Dictionary<int, string?>>[] renderStyleContexts = dictionary.RenderStyleByModelContext
+                .Where(pair => pair.Key.StartsWith(modelContextPrefix, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
             var storedBytesByItem = new Dictionary<ExplorerItem, byte[]?>();
             var headersByItem = new Dictionary<ExplorerItem, (byte FileType, ushort Version)?>();
             bool mayContainNonGeometryLtbResource = groupItems.Any(item =>
@@ -921,6 +932,11 @@ internal static class LithTechModelTextureConfigIndex
                         ambiguousSemanticCandidate,
                         semanticTexture is null ? undecodedSemanticTexturePath : null,
                         semanticTexture is null ? undecodedSemanticCandidate : null);
+
+                    if (renderStyleContexts.Length > 0)
+                    {
+                        WriteRenderStyleMeshStageRows(group.Key, mesh, meshIndex, modelItem, renderStyleContexts, group.Count());
+                    }
 
                     int[] meshSlots = (mesh.TextureSlotIndices ?? []).Distinct().ToArray();
                     if (meshSlots.Length == 0)
@@ -1547,6 +1563,283 @@ internal static class LithTechModelTextureConfigIndex
                     WriteMappingRow(modelPath, string.Empty, scope, context, slot, texturePath, mappingKind, isInferred);
                 }
             }
+        }
+
+        void WriteRenderStyleContextDictionary(IReadOnlyDictionary<string, Dictionary<int, string?>> mappings)
+        {
+            foreach ((string key, Dictionary<int, string?> styles) in mappings.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase))
+            {
+                int separator = key.IndexOf('\0');
+                if (separator <= 0 || separator == key.Length - 1)
+                {
+                    continue;
+                }
+
+                string modelPath = key[..separator];
+                string context = key[(separator + 1)..];
+                foreach ((int renderStyleIndex, string? renderStylePath) in styles.OrderBy(pair => pair.Key))
+                {
+                    string status = string.IsNullOrWhiteSpace(renderStylePath)
+                        ? "ambiguous-renderstyle-reference"
+                        : index.ResourcePaths.Contains(NormalizeKey(renderStylePath))
+                            ? "renderstyle-resource-present"
+                            : "renderstyle-resource-missing";
+                    WriteAuditRow(
+                        modelPath,
+                        string.Empty,
+                        "renderstyle-context",
+                        context,
+                        renderStyleIndex,
+                        renderStylePath,
+                        "ltc-renderstyle-reference",
+                        status,
+                        null,
+                        "texture_slot column contains the zero-based renderstyle file index for this scope");
+                }
+            }
+        }
+
+        void WriteRenderStyleMeshStageRows(
+            string modelPath,
+            LithTechMesh mesh,
+            int meshIndex,
+            ExplorerItem modelItem,
+            IReadOnlyList<KeyValuePair<string, Dictionary<int, string?>>> contexts,
+            int physicalCopies)
+        {
+            foreach ((string contextKey, Dictionary<int, string?> styleBindings) in contexts)
+            {
+                int separator = contextKey.IndexOf('\0');
+                if (separator < 0 || separator == contextKey.Length - 1)
+                {
+                    continue;
+                }
+
+                string context = contextKey[(separator + 1)..];
+                string modelPhysicalPath = modelItem.ArchiveFile?.FullPath ?? modelItem.OutputRelativePath;
+                string modelArchivePath = modelItem.Archive?.FilePath ?? "local";
+                string copyDetail = $"mesh_index={meshIndex.ToString(CultureInfo.InvariantCulture)};model_archive={modelArchivePath};model_copy={modelPhysicalPath}";
+                if (mesh.RenderStyleIndex is not int renderStyleIndex)
+                {
+                    WriteAuditRow(
+                        modelPath,
+                        mesh.Name,
+                        "mesh-renderstyle",
+                        context,
+                        null,
+                        null,
+                        "ltb-renderstyle-index",
+                        "mesh-renderstyle-index-missing",
+                        physicalCopies,
+                        copyDetail);
+                    continue;
+                }
+
+                if (!styleBindings.TryGetValue(renderStyleIndex, out string? renderStylePath))
+                {
+                    WriteAuditRow(
+                        modelPath,
+                        mesh.Name,
+                        "mesh-renderstyle",
+                        context,
+                        renderStyleIndex,
+                        null,
+                        "ltb-renderstyle-index",
+                        "ltc-renderstyle-reference-missing",
+                        physicalCopies,
+                        $"{copyDetail};declared_renderstyle_indices={string.Join(",", styleBindings.Keys.Order())}");
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(renderStylePath))
+                {
+                    WriteAuditRow(
+                        modelPath,
+                        mesh.Name,
+                        "mesh-renderstyle",
+                        context,
+                        renderStyleIndex,
+                        null,
+                        "ltc-renderstyle-reference",
+                        "ambiguous-renderstyle-reference",
+                        physicalCopies,
+                        copyDetail);
+                    continue;
+                }
+
+                (string styleStatus, LithTechRenderStyleDocument? renderStyleDocument, int renderStyleCopies, string styleDetail) =
+                    ResolveRenderStyleDocument(renderStylePath);
+                if (renderStyleDocument is null)
+                {
+                    WriteAuditRow(
+                        modelPath,
+                        mesh.Name,
+                        "mesh-renderstyle",
+                        context,
+                        renderStyleIndex,
+                        renderStylePath,
+                        "ltc-renderstyle-reference",
+                        styleStatus,
+                        renderStyleCopies,
+                        $"{copyDetail};{styleDetail}");
+                    continue;
+                }
+
+                if (renderStyleDocument.Styles.Count == 0)
+                {
+                    WriteAuditRow(
+                        modelPath,
+                        mesh.Name,
+                        "mesh-renderstyle",
+                        context,
+                        renderStyleIndex,
+                        renderStylePath,
+                        "ltc-renderstyle-reference",
+                        "renderstyle-file-has-no-styles",
+                        renderStyleCopies,
+                        $"{copyDetail};{styleDetail}");
+                    continue;
+                }
+
+                for (int styleVariantIndex = 0; styleVariantIndex < renderStyleDocument.Styles.Count; styleVariantIndex++)
+                {
+                    LithTechRenderStyle styleVariant = renderStyleDocument.Styles[styleVariantIndex];
+                    for (int passIndex = 0; passIndex < styleVariant.Passes.Count; passIndex++)
+                    {
+                        LithTechRenderPass pass = styleVariant.Passes[passIndex];
+                        for (int stageIndex = 0; stageIndex < pass.TextureStages.Count; stageIndex++)
+                        {
+                            LithTechTextureStage stage = pass.TextureStages[stageIndex];
+                            int localTextureIndex = stage.TextureParam - 1;
+                            int? globalTextureSlot = null;
+                            string? texturePath = null;
+                            string stageStatus;
+                            bool stageDisabled = stage.ColorOp == 0 && stage.AlphaOp == 0;
+                            if (stage.TextureParam == 0)
+                            {
+                                stageStatus = "renderstyle-stage-no-texture";
+                            }
+                            else if (stage.TextureParam is < 1 or > 4)
+                            {
+                                stageStatus = "renderstyle-stage-unsupported-texture-param";
+                            }
+                            else if (localTextureIndex >= (mesh.TextureSlotIndices?.Count ?? 0))
+                            {
+                                stageStatus = "mesh-texture-list-index-out-of-range";
+                            }
+                            else
+                            {
+                                globalTextureSlot = mesh.TextureSlotIndices![localTextureIndex];
+                                string textureContextKey = $"{modelPath}\0{context}";
+                                if (!dictionary.LtcTextureByModelContext.TryGetValue(textureContextKey, out Dictionary<int, string?>? textures) ||
+                                    !textures.TryGetValue(globalTextureSlot.Value, out texturePath))
+                                {
+                                    stageStatus = "ltc-context-texture-unresolved";
+                                }
+                                else if (string.IsNullOrWhiteSpace(texturePath))
+                                {
+                                    stageStatus = "ltc-context-texture-ambiguous";
+                                }
+                                else if (stageDisabled)
+                                {
+                                    stageStatus = "renderstyle-stage-disabled";
+                                }
+                                else if (!IsTextureResourcePresent(index, texturePath))
+                                {
+                                    stageStatus = "texture-resource-missing";
+                                }
+                                else
+                                {
+                                    stageStatus = "renderstyle-stage-bound";
+                                }
+                            }
+
+                            string detail = $"{copyDetail};renderstyle_path={renderStylePath};renderstyle_file_index={renderStyleIndex.ToString(CultureInfo.InvariantCulture)};style_variant_index={styleVariantIndex.ToString(CultureInfo.InvariantCulture)};pass_index={passIndex.ToString(CultureInfo.InvariantCulture)};stage_index={stageIndex.ToString(CultureInfo.InvariantCulture)};texture_param={stage.TextureParam.ToString(CultureInfo.InvariantCulture)};local_texture_index={(localTextureIndex >= 0 ? localTextureIndex.ToString(CultureInfo.InvariantCulture) : string.Empty)};uv_source={stage.UvSource.ToString(CultureInfo.InvariantCulture)};color_op={stage.ColorOp.ToString(CultureInfo.InvariantCulture)};alpha_op={stage.AlphaOp.ToString(CultureInfo.InvariantCulture)};{styleDetail}";
+                            WriteAuditRow(
+                                modelPath,
+                                mesh.Name,
+                                "mesh-render-stage",
+                                context,
+                                globalTextureSlot,
+                                texturePath,
+                                "renderstyle-texture-param",
+                                stageStatus,
+                                physicalCopies,
+                                detail);
+                        }
+                    }
+                }
+            }
+        }
+
+        (string Status, LithTechRenderStyleDocument? Document, int Copies, string Detail) ResolveRenderStyleDocument(string renderStylePath)
+        {
+            string logicalPath = NormalizeExtensionlessModelReference(renderStylePath);
+            if (renderStyleCache.TryGetValue(logicalPath, out var cached))
+            {
+                return cached;
+            }
+
+            if (logicalPath.Length == 0 || !physicalModelGroupsByPath.TryGetValue(logicalPath, out IGrouping<string, (ExplorerItem Item, string LogicalPath)>? styleGroup))
+            {
+                var missing = ("renderstyle-resource-missing", (LithTechRenderStyleDocument?)null, 0, $"renderstyle_path={renderStylePath}");
+                renderStyleCache[logicalPath] = missing;
+                return missing;
+            }
+
+            var decodedCopies = new List<(ExplorerItem Item, LithTechRenderStyleDocument Document)>();
+            var decodeErrors = new List<string>();
+            foreach (ExplorerItem styleItem in styleGroup.Select(pair => pair.Item))
+            {
+                string physicalPath = GetModelResourcePath(styleItem);
+                byte[]? data = TryReadItemBytes(styleItem, 128 * 1024 * 1024);
+                if (data is null)
+                {
+                    decodeErrors.Add($"{physicalPath}: RenderStyle bytes unavailable or larger than the 128 MiB audit read limit.");
+                    continue;
+                }
+
+                if (!LithTechRenderStyleDecoder.TryDecode(
+                        data,
+                        physicalPath,
+                        styleItem.Archive?.FilePath ?? "local",
+                        data.Length,
+                        out LithTechRenderStyleDocument? document,
+                        out string? error) || document is null)
+                {
+                    decodeErrors.Add($"{physicalPath}: {error ?? "RenderStyle bytes unavailable or decoding failed."}");
+                    continue;
+                }
+
+                decodedCopies.Add((styleItem, document));
+            }
+
+            int copies = styleGroup.Count();
+            if (decodeErrors.Count > 0 || decodedCopies.Count != copies)
+            {
+                var failed = ("renderstyle-copy-decode-failed", (LithTechRenderStyleDocument?)null, copies, string.Join(" | ", decodeErrors));
+                renderStyleCache[logicalPath] = failed;
+                return failed;
+            }
+
+            static string GetBindingSignature(LithTechRenderStyleDocument document) => string.Join("||", document.Styles.Select(style =>
+                string.Join("|", style.Passes.Select(pass => string.Join(";", pass.TextureStages.Select(stage =>
+                    $"{stage.TextureParam}:{stage.UvSource}:{stage.ColorOp}:{stage.AlphaOp}"))))));
+
+            string expectedSignature = GetBindingSignature(decodedCopies[0].Document);
+            if (decodedCopies.Skip(1).Any(copy => !string.Equals(GetBindingSignature(copy.Document), expectedSignature, StringComparison.Ordinal)))
+            {
+                string copiesDetail = string.Join(" | ", decodedCopies.Select(copy =>
+                    $"{copy.Item.Archive?.FilePath ?? "local"}:{GetModelResourcePath(copy.Item)}#{copy.Item.ArchiveFile?.Md5 ?? "local"}"));
+                var conflict = ("renderstyle-physical-copy-conflict", (LithTechRenderStyleDocument?)null, copies, copiesDetail);
+                renderStyleCache[logicalPath] = conflict;
+                return conflict;
+            }
+
+            var resolved = ("renderstyle-decoded", (LithTechRenderStyleDocument?)decodedCopies[0].Document, copies,
+                $"renderstyle_path={renderStylePath};physical_copies={copies.ToString(CultureInfo.InvariantCulture)}");
+            renderStyleCache[logicalPath] = resolved;
+            return resolved;
         }
 
         void WriteMappingRow(
@@ -3034,6 +3327,8 @@ internal static class LithTechModelTextureConfigIndex
         var inferredByModelPath = new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase);
         var inferredByModelContext = new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase);
         var weaponPreviewVariantByModelContext = new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase);
+        var renderStyleByModelContext = new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase);
+        var ltcTextureByModelContext = new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase);
         var modelsWithSlotSpecificBindings = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var deferredCftMotionSkinBindings = new List<DeferredCftMotionSkinBinding>();
         var directPlayerViewModels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -3554,8 +3849,34 @@ internal static class LithTechModelTextureConfigIndex
             {
                 string modelPath = NormalizeExtensionlessModelReference(mapping.ModelReference);
                 string roleModelPath = NormalizeModelResourcePath(mapping.ModelReference);
-                if (modelPath.Length == 0 ||
-                    !modelItemsByPlayerViewRolePath.TryGetValue(roleModelPath, out ExplorerItem[]? modelItems) ||
+                if (modelPath.Length == 0)
+                {
+                    continue;
+                }
+
+                string[] contextKeys = GetLtcContextKeys(ltcItem, mapping)
+                    .Concat(GetWeaponItemContextAliases(mapping, itemAliases))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                foreach (CrossFireLtcRenderStyleFieldReference renderStyleReference in mapping.RenderStyleFieldReferences)
+                {
+                    if (!TryGetLtcRenderStyleIndex(renderStyleReference.FieldName, out int renderStyleIndex))
+                    {
+                        continue;
+                    }
+
+                    foreach (string contextKey in contextKeys)
+                    {
+                        AddModelTextureContextSlotMapping(
+                            renderStyleByModelContext,
+                            modelPath,
+                            contextKey,
+                            renderStyleIndex,
+                            NormalizeKey(renderStyleReference.Path));
+                    }
+                }
+
+                if (!modelItemsByPlayerViewRolePath.TryGetValue(roleModelPath, out ExplorerItem[]? modelItems) ||
                     modelItems.Length == 0)
                 {
                     continue;
@@ -3605,10 +3926,6 @@ internal static class LithTechModelTextureConfigIndex
                         ? ResolveEquivalentPlayerViewArmSlots(modelItems, modelDocuments, playerViewArmDocuments)
                         : [];
 
-                string[] contextKeys = GetLtcContextKeys(ltcItem, mapping)
-                    .Concat(GetWeaponItemContextAliases(mapping, itemAliases))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray();
                 foreach (CrossFireLtcTextureFieldReference textureReference in mapping.TextureFieldReferences)
                 {
                     if (!TryGetLtcPlayerViewTextureOrdinal(
@@ -3639,6 +3956,16 @@ internal static class LithTechModelTextureConfigIndex
                     foreach (int slotIndex in mappedSlots)
                     {
                         AddModelTextureSlotMapping(byModelPath, modelPath, slotIndex, texturePath);
+                        foreach (string contextKey in contextKeys)
+                        {
+                            AddModelTextureContextSlotMapping(
+                                ltcTextureByModelContext,
+                                modelPath,
+                                contextKey,
+                                slotIndex,
+                                texturePath);
+                        }
+
                         if (existingTexturePath is null)
                         {
                             continue;
@@ -3739,12 +4066,23 @@ internal static class LithTechModelTextureConfigIndex
                         textureReferences[index].Path,
                         resourcePaths,
                         texturePathsByBaseName);
+                    string texturePath = existingTexturePath ?? textureReferences[index].Path;
+                    int slotIndex = mappedSlots[index];
+                    foreach (string contextKey in contextKeys)
+                    {
+                        AddModelTextureContextSlotMapping(
+                            ltcTextureByModelContext,
+                            modelPath,
+                            contextKey,
+                            slotIndex,
+                            texturePath);
+                    }
+
                     if (existingTexturePath is null)
                     {
                         continue;
                     }
 
-                    int slotIndex = mappedSlots[index];
                     AddModelTextureSlotMapping(byModelPath, modelPath, slotIndex, existingTexturePath);
                     modelsWithSlotSpecificBindings.Add(modelPath);
                     foreach (string contextKey in contextKeys)
@@ -3861,6 +4199,8 @@ internal static class LithTechModelTextureConfigIndex
             byModelContext,
             inferredByModelPath,
             inferredByModelContext,
+            renderStyleByModelContext,
+            ltcTextureByModelContext,
             weaponPreviewVariantByModelContext,
             weaponPreviewVariantByModelPath,
             modelsWithSlotSpecificBindings,
@@ -5298,6 +5638,38 @@ internal static class LithTechModelTextureConfigIndex
             columnName.TrimStart('_'),
             "SkinFileName",
             StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryGetLtcRenderStyleIndex(string fieldName, out int renderStyleIndex)
+    {
+        renderStyleIndex = -1;
+        string? prefix = new[]
+            {
+                "WLeftHandRenderStyleFileName",
+                "LeftHandRenderStyleFileName",
+                "PreViewRenderStyleFileName",
+                "PViewRenderStyleFileName"
+            }
+            .FirstOrDefault(candidate => fieldName.StartsWith(candidate, StringComparison.OrdinalIgnoreCase));
+        if (prefix is null)
+        {
+            return false;
+        }
+
+        string suffix = fieldName[prefix.Length..];
+        if (suffix.Length == 0)
+        {
+            renderStyleIndex = 0;
+            return true;
+        }
+
+        if (!int.TryParse(suffix, NumberStyles.None, CultureInfo.InvariantCulture, out int fieldOrdinal) || fieldOrdinal < 1)
+        {
+            return false;
+        }
+
+        renderStyleIndex = fieldOrdinal - 1;
+        return true;
     }
 
     private static bool IsPrimaryCftMotionSourceColumn(string columnName)
@@ -6811,6 +7183,8 @@ internal static class LithTechModelTextureConfigIndex
         IReadOnlyDictionary<string, Dictionary<int, string?>> ByModelContext,
         IReadOnlyDictionary<string, Dictionary<int, string?>> InferredByModelPath,
         IReadOnlyDictionary<string, Dictionary<int, string?>> InferredByModelContext,
+        IReadOnlyDictionary<string, Dictionary<int, string?>> RenderStyleByModelContext,
+        IReadOnlyDictionary<string, Dictionary<int, string?>> LtcTextureByModelContext,
         IReadOnlyDictionary<string, Dictionary<int, string?>> WeaponPreviewVariantByModelContext,
         IReadOnlyDictionary<string, Dictionary<int, string?>> WeaponPreviewVariantByModelPath,
         IReadOnlySet<string> ModelsWithSlotSpecificBindings,
@@ -6818,6 +7192,8 @@ internal static class LithTechModelTextureConfigIndex
         IReadOnlyDictionary<string, Dictionary<int, string?>> EquivalentArmByModelPath)
     {
         public static ModelTextureSlotDictionary Empty { get; } = new(
+            new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase),
+            new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase),

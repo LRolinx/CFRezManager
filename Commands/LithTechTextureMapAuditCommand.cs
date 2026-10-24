@@ -303,7 +303,8 @@ internal static class LithTechTextureMapAuditCommand
             if (fields.Length < 8 ||
                 !(string.Equals(fields[2], "model", StringComparison.OrdinalIgnoreCase) ||
                   string.Equals(fields[2], "context", StringComparison.OrdinalIgnoreCase) ||
-                  string.Equals(fields[2], "mesh-slot", StringComparison.OrdinalIgnoreCase)))
+                  string.Equals(fields[2], "mesh-slot", StringComparison.OrdinalIgnoreCase) ||
+                  string.Equals(fields[2], "mesh-render-stage", StringComparison.OrdinalIgnoreCase)))
             {
                 continue;
             }

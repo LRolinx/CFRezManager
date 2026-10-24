@@ -10,6 +10,7 @@ internal sealed record CrossFireLtcModelTextureMapping(
     string ModelReference,
     IReadOnlyList<string> TextureReferences,
     IReadOnlyList<CrossFireLtcTextureFieldReference> TextureFieldReferences,
+    IReadOnlyList<CrossFireLtcRenderStyleFieldReference> RenderStyleFieldReferences,
     IReadOnlyList<string> AuxiliaryTextureReferences,
     IReadOnlyList<string> IdentityAliases,
     string RowType,
@@ -17,6 +18,8 @@ internal sealed record CrossFireLtcModelTextureMapping(
     IReadOnlyList<string> TextureFields);
 
 internal sealed record CrossFireLtcTextureFieldReference(string FieldName, string Path);
+
+internal sealed record CrossFireLtcRenderStyleFieldReference(string FieldName, string Path);
 
 internal sealed record CrossFireLtcMotionModelReferenceDiagnostic(
     int RowIndex,
@@ -137,7 +140,11 @@ internal static class CrossFireLtcModelTextureMappingDecoder
                               text.Contains("TexFX/", StringComparison.OrdinalIgnoreCase) ||
                               text.Contains("TexFX\\", StringComparison.OrdinalIgnoreCase) ||
                               text.Contains("UCC/ModelAssets/", StringComparison.OrdinalIgnoreCase) ||
-                              text.Contains("UCC\\ModelAssets\\", StringComparison.OrdinalIgnoreCase);
+                              text.Contains("UCC\\ModelAssets\\", StringComparison.OrdinalIgnoreCase) ||
+                              text.Contains("RS/", StringComparison.OrdinalIgnoreCase) ||
+                              text.Contains("RS\\", StringComparison.OrdinalIgnoreCase) ||
+                              text.Contains("RenderStyles/", StringComparison.OrdinalIgnoreCase) ||
+                              text.Contains("RenderStyles\\", StringComparison.OrdinalIgnoreCase);
         if (!hasModelPath || !hasTexturePath)
         {
             return [];
@@ -215,13 +222,21 @@ internal static class CrossFireLtcModelTextureMappingDecoder
                         .Where(reference => IsTexturePath(reference.Path))
                         .Distinct()
                         .ToArray();
+                    string[] compatibleRenderStyleFields = GetCompatibleRenderStyleFields(modelField.Name, fields);
+                    CrossFireLtcRenderStyleFieldReference[] renderStyleFieldReferences = fields
+                        .Where(field => compatibleRenderStyleFields.Contains(field.Name, StringComparer.OrdinalIgnoreCase))
+                        .SelectMany(field => field.Values
+                            .Select(value => new CrossFireLtcRenderStyleFieldReference(field.Name, NormalizeResourcePath(value))))
+                        .Where(reference => IsRenderStylePath(reference.Path))
+                        .Distinct()
+                        .ToArray();
                     string[] auxiliaryTextures = compatibleTextureFields
                         .SelectMany(field => field.Values)
                         .Select(NormalizeResourcePath)
                         .Where(IsAuxiliaryTexturePath)
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .ToArray();
-                    if (textures.Length == 0 && auxiliaryTextures.Length == 0)
+                    if (textures.Length == 0 && auxiliaryTextures.Length == 0 && renderStyleFieldReferences.Length == 0)
                     {
                         continue;
                     }
@@ -257,6 +272,7 @@ internal static class CrossFireLtcModelTextureMappingDecoder
                         modelField.Name,
                         modelReference,
                         string.Join("|", textureFieldReferences.Select(reference => $"{reference.FieldName}:{reference.Path}")),
+                        string.Join("|", renderStyleFieldReferences.Select(reference => $"{reference.FieldName}:{reference.Path}")),
                         string.Join("|", textures),
                         string.Join("|", auxiliaryTextures),
                         string.Join("|", identityAliases));
@@ -269,6 +285,7 @@ internal static class CrossFireLtcModelTextureMappingDecoder
                             modelReference,
                             textures,
                             textureFieldReferences,
+                            renderStyleFieldReferences,
                             auxiliaryTextures,
                             identityAliases,
                             rowType,
@@ -382,6 +399,41 @@ internal static class CrossFireLtcModelTextureMappingDecoder
         }
 
         return [];
+    }
+
+    private static string[] GetCompatibleRenderStyleFields(string modelField, IReadOnlyList<LtcField> fields)
+    {
+        if (modelField.StartsWith("PViewModelFileName", StringComparison.OrdinalIgnoreCase) ||
+            modelField.StartsWith("PreViewModelFileName", StringComparison.OrdinalIgnoreCase) ||
+            modelField.StartsWith("LeftHandModelFileName", StringComparison.OrdinalIgnoreCase) ||
+            modelField.StartsWith("WLeftHandModelFileName", StringComparison.OrdinalIgnoreCase))
+        {
+            string modelPrefix = GetMatchingPrefix(
+                modelField,
+                "WLeftHandModelFileName",
+                "LeftHandModelFileName",
+                "PreViewModelFileName",
+                "PViewModelFileName");
+            string renderStylePrefix = modelPrefix switch
+            {
+                "WLeftHandModelFileName" => "WLeftHandRenderStyleFileName",
+                "LeftHandModelFileName" => "LeftHandRenderStyleFileName",
+                "PreViewModelFileName" => "PreViewRenderStyleFileName",
+                _ => "PViewRenderStyleFileName"
+            };
+            return GetVariantTextureFields(modelField, fields, modelPrefix, renderStylePrefix);
+        }
+
+        return [];
+    }
+
+    private static bool IsRenderStylePath(string value)
+    {
+        return Path.GetExtension(value).Equals(".ltb", StringComparison.OrdinalIgnoreCase) &&
+               (value.StartsWith("RS/", StringComparison.OrdinalIgnoreCase) ||
+                value.StartsWith("RenderStyles/", StringComparison.OrdinalIgnoreCase) ||
+                value.Contains("/RS/", StringComparison.OrdinalIgnoreCase) ||
+                value.Contains("/RenderStyles/", StringComparison.OrdinalIgnoreCase));
     }
 
     private static string[] GetVariantTextureFields(
