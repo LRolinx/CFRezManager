@@ -6432,15 +6432,22 @@ internal static class LithTechModelTextureConfigIndex
 
         foreach ((string targetPath, ExplorerItem[] _) in modelItems)
         {
-            if (directModels.Contains(targetPath)) continue;
-            if (CftPlayerViewArmEquivalence.IsEmbeddedPreviewModel(targetPath) ||
-                typedLtcPlayerViewModels.Contains(targetPath))
+            bool isEmbeddedPreview = CftPlayerViewArmEquivalence.IsEmbeddedPreviewModel(targetPath);
+            bool isTypedLtcPlayerViewModel = typedLtcPlayerViewModels.Contains(targetPath);
+            if (!isEmbeddedPreview && !isTypedLtcPlayerViewModel && directModels.Contains(targetPath)) continue;
+            if (isEmbeddedPreview || isTypedLtcPlayerViewModel)
             {
                 IReadOnlyDictionary<int, string>? targetSlots = GetTextureSlotSignatures(targetPath);
                 if (targetSlots is not null)
                 {
                     foreach ((int slot, string signature) in targetSlots)
                     {
+                        if (directPaths.TryGetValue(targetPath, out Dictionary<int, string?>? targetDirectSlots) &&
+                            targetDirectSlots.ContainsKey(slot))
+                        {
+                            continue;
+                        }
+
                         if (armDonorsBySlotSignature.TryGetValue((slot, signature), out List<string>? sourcePaths))
                             AddEquivalentArmDonors(targetPath, slot, sourcePaths);
                     }
@@ -6451,6 +6458,12 @@ internal static class LithTechModelTextureConfigIndex
                 {
                     foreach ((int slot, string signature) in targetGeometryUvSlots)
                     {
+                        if (directPaths.TryGetValue(targetPath, out Dictionary<int, string?>? targetDirectSlots) &&
+                            targetDirectSlots.ContainsKey(slot))
+                        {
+                            continue;
+                        }
+
                         if (armDonorsBySlotGeometryUvSignature.TryGetValue((slot, signature), out List<string>? sourcePaths))
                             AddEquivalentArmDonors(targetPath, slot, sourcePaths);
                     }

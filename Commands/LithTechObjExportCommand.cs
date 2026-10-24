@@ -69,7 +69,7 @@ internal static class LithTechObjExportCommand
         string? sourceRoot = null;
         var modelQueries = new List<string>();
         string? outputPath = null;
-        string? textureContext = null;
+        var textureContexts = new List<string>();
 
         for (int index = 0; index < args.Length; index++)
         {
@@ -103,7 +103,7 @@ internal static class LithTechObjExportCommand
 
             if (TryReadOptionValue(args, ref index, "--texture-context", out string? textureContextValue))
             {
-                textureContext = textureContextValue;
+                if (!string.IsNullOrWhiteSpace(textureContextValue)) textureContexts.Add(textureContextValue);
                 continue;
             }
 
@@ -146,6 +146,7 @@ internal static class LithTechObjExportCommand
             outputPath = Path.Combine(outputDirectory, $"{SanitizePathSegment(outputStem)}.obj");
         }
 
+        string? textureContext = textureContexts.Count == 0 ? null : string.Join(';', textureContexts);
         return new Options(Path.GetFullPath(sourceRoot), modelQueries.ToArray(), Path.GetFullPath(outputPath), textureContext);
     }
 

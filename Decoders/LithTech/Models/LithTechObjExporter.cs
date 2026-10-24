@@ -48,6 +48,11 @@ internal sealed record LithTechObjExportResult(
 
 internal static class LithTechObjExporter
 {
+    private readonly record struct TextureContextSlotResolution(
+        IReadOnlyList<string> References,
+        string ResolverName,
+        bool IsConflict);
+
     private const double BlenderFitSize = 4.5;
 
     private static readonly ConcurrentDictionary<string, IReadOnlyList<string>> TextureNameCandidateCache = new(StringComparer.OrdinalIgnoreCase);
@@ -342,88 +347,66 @@ internal static class LithTechObjExporter
         bool useContextBinding = source.TextureContextSlotResolver is not null &&
                                  !string.IsNullOrWhiteSpace(source.TextureContext);
         Func<string, int, IReadOnlyList<string>>? modelSlotResolver = source.TextureSlotResolver;
+        string[] textureContexts = ParseTextureContexts(source.TextureContext);
         var reports = new List<ObjTextureSlotReport>();
 
         for (int stageIndex = 0; stageIndex < textureSlots.Count; stageIndex++)
         {
             int skinSlotIndex = textureSlots[stageIndex];
-            IReadOnlyList<string> references = useContextBinding
-                ? source.TextureContextSlotResolver!(modelReference, source.TextureContext!, skinSlotIndex)
-                : modelSlotResolver?.Invoke(modelReference, skinSlotIndex) ?? [];
-            string resolverName = useContextBinding ? "context-slot" : modelSlotResolver is null ? "unmapped" : "model-slot";
-            if (references.Count == 0 && useContextBinding)
+            IReadOnlyList<string> references;
+            string resolverName;
+            bool contextConflict = false;
+            if (useContextBinding)
             {
-                references = source.WeaponPreviewVariantTextureContextSlotResolver?.Invoke(modelReference, source.TextureContext!, skinSlotIndex) ?? [];
-                if (references.Count > 0) resolverName = "weapon-preview-variant-derived";
+                TextureContextSlotResolution contextResolution = ResolveTextureContextSlot(
+                    source, modelReference, textureContexts, skinSlotIndex);
+                references = contextResolution.References;
+                resolverName = contextResolution.ResolverName;
+                contextConflict = contextResolution.IsConflict;
             }
-            if (references.Count == 0 && useContextBinding)
+            else
             {
-                references = source.EquivalentArmTextureContextSlotResolver?.Invoke(modelReference, source.TextureContext!, skinSlotIndex) ?? [];
-                if (references.Count > 0) resolverName = "cft-equivalent-arm-derived";
-            }
-            if (references.Count == 0 && !useContextBinding)
-            {
-                references = source.WeaponPreviewVariantTextureSlotResolver?.Invoke(modelReference, skinSlotIndex) ?? [];
-                if (references.Count > 0) resolverName = "weapon-preview-variant-derived";
-            }
-            if (references.Count == 0)
-            {
-                IReadOnlyList<string> inferredReferences = useContextBinding
-                    ? source.InferredTextureContextSlotResolver?.Invoke(
-                          modelReference,
-                          source.TextureContext!,
-                          skinSlotIndex) ?? []
-                    : source.InferredTextureSlotResolver?.Invoke(modelReference, skinSlotIndex) ?? [];
-                if (inferredReferences.Count > 0)
+                references = modelSlotResolver?.Invoke(modelReference, skinSlotIndex) ?? [];
+                resolverName = modelSlotResolver is null ? "unmapped" : "model-slot";
+                if (references.Count == 0)
                 {
-                    references = inferredReferences;
-                    IReadOnlyList<string> ltcPreviewVariantReferences = useContextBinding
-                        ? source.LtcPreviewVariantTextureContextSlotResolver?.Invoke(
-                              modelReference,
-                              source.TextureContext!,
-                              skinSlotIndex) ?? []
-                        : source.LtcPreviewVariantTextureSlotResolver?.Invoke(modelReference, skinSlotIndex) ?? [];
-                    IReadOnlyList<string> previewNormalizedBasenameReferences = useContextBinding
-                        ? []
-                        : source.PreviewNormalizedBasenameTextureSlotResolver?.Invoke(modelReference, skinSlotIndex) ?? [];
-                    IReadOnlyList<string> variantSlotUvReferences = useContextBinding
-                        ? []
-                        : source.VariantSlotUvTextureSlotResolver?.Invoke(modelReference, skinSlotIndex) ?? [];
-                    bool matchesLtcPreviewVariant = ltcPreviewVariantReferences.Count > 0 &&
-                                                    inferredReferences.SequenceEqual(
-                                                        ltcPreviewVariantReferences,
-                                                        StringComparer.OrdinalIgnoreCase);
-                    bool matchesVariantSlotUv = variantSlotUvReferences.Count > 0 &&
-                                                inferredReferences.SequenceEqual(
-                                                    variantSlotUvReferences,
-                                                    StringComparer.OrdinalIgnoreCase);
-                    bool matchesPreviewNormalizedBasename = previewNormalizedBasenameReferences.Count > 0 &&
-                                                             inferredReferences.SequenceEqual(
-                                                                 previewNormalizedBasenameReferences,
-                                                                 StringComparer.OrdinalIgnoreCase);
-                    resolverName = matchesLtcPreviewVariant
-                        ? "ltc-preview-variant-same-name-derived"
-                        : matchesVariantSlotUv
-                            ? "variant-slot-uv-derived"
-                            : matchesPreviewNormalizedBasename
-                                ? "preview-normalized-basename-derived"
-                                : "cft-body-face-derived";
+                    references = source.WeaponPreviewVariantTextureSlotResolver?.Invoke(modelReference, skinSlotIndex) ?? [];
+                    if (references.Count > 0) resolverName = "weapon-preview-variant-derived";
+                }
+
+                if (references.Count == 0)
+                {
+                    IReadOnlyList<string> inferredReferences = source.InferredTextureSlotResolver?.Invoke(modelReference, skinSlotIndex) ?? [];
+                    if (inferredReferences.Count > 0)
+                    {
+                        references = inferredReferences;
+                        IReadOnlyList<string> ltcPreviewVariantReferences = source.LtcPreviewVariantTextureSlotResolver?.Invoke(modelReference, skinSlotIndex) ?? [];
+                        IReadOnlyList<string> previewNormalizedBasenameReferences = source.PreviewNormalizedBasenameTextureSlotResolver?.Invoke(modelReference, skinSlotIndex) ?? [];
+                        IReadOnlyList<string> variantSlotUvReferences = source.VariantSlotUvTextureSlotResolver?.Invoke(modelReference, skinSlotIndex) ?? [];
+                        bool matchesLtcPreviewVariant = ltcPreviewVariantReferences.Count > 0 &&
+                                                        inferredReferences.SequenceEqual(ltcPreviewVariantReferences, StringComparer.OrdinalIgnoreCase);
+                        bool matchesVariantSlotUv = variantSlotUvReferences.Count > 0 &&
+                                                    inferredReferences.SequenceEqual(variantSlotUvReferences, StringComparer.OrdinalIgnoreCase);
+                        bool matchesPreviewNormalizedBasename = previewNormalizedBasenameReferences.Count > 0 &&
+                                                                 inferredReferences.SequenceEqual(previewNormalizedBasenameReferences, StringComparer.OrdinalIgnoreCase);
+                        resolverName = matchesLtcPreviewVariant
+                            ? "ltc-preview-variant-same-name-derived"
+                            : matchesVariantSlotUv
+                                ? "variant-slot-uv-derived"
+                                : matchesPreviewNormalizedBasename
+                                    ? "preview-normalized-basename-derived"
+                                    : "cft-body-face-derived";
+                    }
+                }
+
+                if (references.Count == 0)
+                {
+                    references = source.MotionParentSlotTextureSlotResolver?.Invoke(modelReference, skinSlotIndex) ?? [];
+                    if (references.Count > 0) resolverName = "motion-parent-slot-derived";
                 }
             }
 
-            if (references.Count == 0 && useContextBinding)
-            {
-                references = source.MotionParentContextSlotResolver?.Invoke(modelReference, source.TextureContext!, skinSlotIndex) ?? [];
-                if (references.Count > 0) resolverName = "motion-parent-slot-derived";
-            }
-
-            if (references.Count == 0 && !useContextBinding)
-            {
-                references = source.MotionParentSlotTextureSlotResolver?.Invoke(modelReference, skinSlotIndex) ?? [];
-                if (references.Count > 0) resolverName = "motion-parent-slot-derived";
-            }
-
-            if (references.Count == 0 && source.MeshTextureResolver is not null)
+            if (references.Count == 0 && !contextConflict && source.MeshTextureResolver is not null)
             {
                 IReadOnlyList<string> meshReferences = source.MeshTextureResolver(
                     modelReference,
@@ -481,6 +464,92 @@ internal static class LithTechObjExporter
         }
 
         return reports;
+    }
+
+    private static string[] ParseTextureContexts(string? textureContext)
+    {
+        return (textureContext ?? string.Empty)
+            .Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static TextureContextSlotResolution ResolveTextureContextSlot(
+        LithTechObjExportSource source,
+        string modelReference,
+        IReadOnlyList<string> textureContexts,
+        int slotIndex)
+    {
+        if (textureContexts.Count == 0) return new([], "context-slot", false);
+        if (textureContexts.Count == 1)
+            return ResolveSingleTextureContextSlot(source, modelReference, textureContexts[0], slotIndex);
+
+        var references = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string textureContext in textureContexts)
+        {
+            TextureContextSlotResolution resolution = ResolveSingleTextureContextSlot(
+                source, modelReference, textureContext, slotIndex);
+            foreach (string reference in resolution.References)
+            {
+                if (!references.TryGetValue(reference, out string? previousResolver) ||
+                    GetContextResolverPriority(resolution.ResolverName) < GetContextResolverPriority(previousResolver))
+                {
+                    references[reference] = resolution.ResolverName;
+                }
+            }
+        }
+
+        if (references.Count == 0) return new([], "context-slot", false);
+        if (references.Count > 1) return new([], "context-conflict", true);
+        KeyValuePair<string, string> resolved = references.Single();
+        return new([resolved.Key], resolved.Value, false);
+    }
+
+    private static TextureContextSlotResolution ResolveSingleTextureContextSlot(
+        LithTechObjExportSource source,
+        string modelReference,
+        string textureContext,
+        int slotIndex)
+    {
+        IReadOnlyList<string> references = source.TextureContextSlotResolver?.Invoke(modelReference, textureContext, slotIndex) ?? [];
+        if (references.Count > 0) return new(references, "context-slot", false);
+
+        references = source.WeaponPreviewVariantTextureContextSlotResolver?.Invoke(modelReference, textureContext, slotIndex) ?? [];
+        if (references.Count > 0) return new(references, "weapon-preview-variant-derived", false);
+
+        references = source.EquivalentArmTextureContextSlotResolver?.Invoke(modelReference, textureContext, slotIndex) ?? [];
+        if (references.Count > 0) return new(references, "cft-equivalent-arm-derived", false);
+
+        IReadOnlyList<string> inferredReferences = source.InferredTextureContextSlotResolver?.Invoke(modelReference, textureContext, slotIndex) ?? [];
+        if (inferredReferences.Count > 0)
+        {
+            IReadOnlyList<string> ltcPreviewVariantReferences = source.LtcPreviewVariantTextureContextSlotResolver?.Invoke(
+                modelReference, textureContext, slotIndex) ?? [];
+            bool matchesLtcPreviewVariant = ltcPreviewVariantReferences.Count > 0 &&
+                                            inferredReferences.SequenceEqual(ltcPreviewVariantReferences, StringComparer.OrdinalIgnoreCase);
+            return new(inferredReferences, matchesLtcPreviewVariant
+                ? "ltc-preview-variant-same-name-derived"
+                : "cft-body-face-derived", false);
+        }
+
+        references = source.MotionParentContextSlotResolver?.Invoke(modelReference, textureContext, slotIndex) ?? [];
+        return references.Count > 0
+            ? new(references, "motion-parent-slot-derived", false)
+            : new([], "context-slot", false);
+    }
+
+    private static int GetContextResolverPriority(string resolverName)
+    {
+        return resolverName switch
+        {
+            "context-slot" => 0,
+            "weapon-preview-variant-derived" => 1,
+            "cft-equivalent-arm-derived" => 2,
+            "ltc-preview-variant-same-name-derived" => 3,
+            "cft-body-face-derived" => 3,
+            "motion-parent-slot-derived" => 4,
+            _ => 5
+        };
     }
 
     private static ExportTransform CalculateExportTransform(IReadOnlyList<LithTechObjExportSource> sources)
@@ -663,6 +732,17 @@ internal static class LithTechObjExporter
     internal static IEnumerable<string> EnumerateTextureCandidates(LithTechMesh mesh, LithTechObjExportSource source)
     {
         var yielded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        string[] textureContexts = ParseTextureContexts(source.TextureContext);
+        bool hasContextResolver = source.TextureContextSlotResolver is not null && textureContexts.Length > 0;
+        string slotModelReference = string.IsNullOrWhiteSpace(source.ResourcePath)
+            ? source.Document.Name
+            : source.ResourcePath;
+        if (hasContextResolver && textureContexts.Length > 1 &&
+            (mesh.TextureSlotIndices ?? []).Distinct().Any(slotIndex =>
+                ResolveTextureContextSlot(source, slotModelReference, textureContexts, slotIndex).IsConflict))
+        {
+            yield break;
+        }
 
         if (!string.IsNullOrWhiteSpace(mesh.TexturePath))
         {
@@ -689,41 +769,12 @@ internal static class LithTechObjExporter
             }
         }
 
-        string slotModelReference = string.IsNullOrWhiteSpace(source.ResourcePath)
-            ? source.Document.Name
-            : source.ResourcePath;
-        if (source.TextureContextSlotResolver is not null && !string.IsNullOrWhiteSpace(source.TextureContext))
+        if (hasContextResolver)
         {
             foreach (int slotIndex in (mesh.TextureSlotIndices ?? []).Distinct())
             {
-                IReadOnlyList<string> slotTextures = source.TextureContextSlotResolver(
-                    slotModelReference,
-                    source.TextureContext,
-                    slotIndex);
-                if (slotTextures.Count == 0)
-                {
-                    slotTextures = source.WeaponPreviewVariantTextureContextSlotResolver?.Invoke(
-                        slotModelReference, source.TextureContext, slotIndex) ?? [];
-                }
-                if (slotTextures.Count == 0)
-                {
-                    slotTextures = source.EquivalentArmTextureContextSlotResolver?.Invoke(
-                        slotModelReference, source.TextureContext, slotIndex) ?? [];
-                }
-                if (slotTextures.Count == 0)
-                {
-                    slotTextures = source.InferredTextureContextSlotResolver?.Invoke(
-                        slotModelReference,
-                        source.TextureContext,
-                        slotIndex) ?? [];
-                }
-                if (slotTextures.Count == 0)
-                {
-                    slotTextures = source.MotionParentContextSlotResolver?.Invoke(
-                        slotModelReference,
-                        source.TextureContext,
-                        slotIndex) ?? [];
-                }
+                IReadOnlyList<string> slotTextures = ResolveTextureContextSlot(
+                    source, slotModelReference, textureContexts, slotIndex).References;
 
                 foreach (string slotTexture in slotTextures)
                 {
@@ -780,7 +831,7 @@ internal static class LithTechObjExporter
             }
         }
 
-        if ((source.TextureContextSlotResolver is null || string.IsNullOrWhiteSpace(source.TextureContext)) &&
+        if (!hasContextResolver &&
             source.TextureSlotResolver is null &&
             source.WeaponPreviewVariantTextureSlotResolver is null &&
             source.InferredTextureSlotResolver is not null)
