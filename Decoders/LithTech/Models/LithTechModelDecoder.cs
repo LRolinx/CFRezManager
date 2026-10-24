@@ -34,7 +34,61 @@ public sealed record LithTechMesh(
     int? RenderStyleIndex = null,
     bool HasAuthoritativeTextureBindings = false)
 {
-    public bool HasTextureCoordinates => TextureCoordinates is not null && TextureCoordinates.Count == Vertices.Count;
+    /// <summary>
+    /// Model-data UV sets in engine order; absent or conflicting channels are null. TextureCoordinates remains UV set 1 for existing callers.
+    /// </summary>
+    public IReadOnlyList<IReadOnlyList<LithTechVector2>?>? TextureCoordinateSets { get; init; }
+
+    /// <summary>
+    /// Native LTB vertex stream indices for UV sets 1–4. Missing or conflicting sets have no source index.
+    /// </summary>
+    public IReadOnlyList<int?>? TextureCoordinateSourceStreamIndices { get; init; }
+
+    /// <summary>
+    /// Native LTB vertex stream that supplied UV set 1, when known.
+    /// </summary>
+    public int? TextureCoordinateSourceStreamIndex { get; init; }
+
+    public int TextureCoordinateSetCount => TextureCoordinateSets is { Count: > 0 } sets
+        ? sets.Count(coordinates => coordinates is { } values && values.Count == Vertices.Count)
+        : TextureCoordinates is { } textureCoordinates && textureCoordinates.Count == Vertices.Count ? 1 : 0;
+
+    public IReadOnlyList<LithTechVector2>? GetTextureCoordinateSet(int setIndex)
+    {
+        if (setIndex < 0)
+        {
+            return null;
+        }
+
+        if (TextureCoordinateSets is { Count: > 0 } sets)
+        {
+            return setIndex < sets.Count ? sets[setIndex] : null;
+        }
+
+        return setIndex == 0 ? TextureCoordinates : null;
+    }
+
+    public bool HasTextureCoordinateSet(int setIndex)
+    {
+        return GetTextureCoordinateSet(setIndex) is { } coordinates && coordinates.Count == Vertices.Count;
+    }
+
+    public int? GetTextureCoordinateSourceStreamIndex(int setIndex)
+    {
+        if (setIndex < 0)
+        {
+            return null;
+        }
+
+        if (TextureCoordinateSourceStreamIndices is { } streamIndices)
+        {
+            return setIndex < streamIndices.Count ? streamIndices[setIndex] : null;
+        }
+
+        return setIndex == 0 ? TextureCoordinateSourceStreamIndex : null;
+    }
+
+    public bool HasTextureCoordinates => HasTextureCoordinateSet(0);
 }
 
 public readonly record struct LithTechVector3(double X, double Y, double Z);

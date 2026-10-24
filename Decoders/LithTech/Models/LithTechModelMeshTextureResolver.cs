@@ -745,7 +745,7 @@ internal static class LithTechModelMeshTextureResolver
             LithTechMesh rightMesh = right.Meshes[index];
             if (!leftMesh.Vertices.SequenceEqual(rightMesh.Vertices) ||
                 !leftMesh.TriangleIndices.SequenceEqual(rightMesh.TriangleIndices) ||
-                !NullableSequencesEqual(leftMesh.TextureCoordinates, rightMesh.TextureCoordinates) ||
+                !HaveIdenticalTextureCoordinateSets(leftMesh, rightMesh) ||
                 !NullableSequencesEqual(leftMesh.TextureSlotIndices, rightMesh.TextureSlotIndices))
             {
                 return false;
@@ -776,9 +776,23 @@ internal static class LithTechModelMeshTextureResolver
                string.Equals(leftMesh.TexturePath, rightMesh.TexturePath, StringComparison.OrdinalIgnoreCase) &&
                leftMesh.Vertices.SequenceEqual(rightMesh.Vertices) &&
                leftMesh.TriangleIndices.SequenceEqual(rightMesh.TriangleIndices) &&
-               NullableSequencesEqual(leftMesh.TextureCoordinates, rightMesh.TextureCoordinates) &&
+               HaveIdenticalTextureCoordinateSets(leftMesh, rightMesh) &&
                NullableSequencesEqual(leftMesh.TextureSlotIndices, rightMesh.TextureSlotIndices) &&
                NullableSequencesEqual(leftMesh.MaterialHints, rightMesh.MaterialHints, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static bool HaveIdenticalTextureCoordinateSets(LithTechMesh leftMesh, LithTechMesh rightMesh)
+    {
+        for (int setIndex = 0; setIndex < 4; setIndex++)
+        {
+            if (leftMesh.GetTextureCoordinateSourceStreamIndex(setIndex) != rightMesh.GetTextureCoordinateSourceStreamIndex(setIndex) ||
+                !NullableSequencesEqual(leftMesh.GetTextureCoordinateSet(setIndex), rightMesh.GetTextureCoordinateSet(setIndex)))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static bool NullableSequencesEqual<T>(IReadOnlyList<T>? left, IReadOnlyList<T>? right)

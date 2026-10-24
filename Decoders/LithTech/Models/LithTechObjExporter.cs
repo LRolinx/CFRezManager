@@ -400,7 +400,9 @@ internal static class LithTechObjExporter
                     resolverName,
                     string.Empty,
                     string.Empty,
-                    mesh.HasTextureCoordinates));
+                    mesh.HasTextureCoordinates,
+                    mesh.TextureCoordinateSetCount,
+                    mesh.TextureCoordinateSourceStreamIndex));
                 continue;
             }
 
@@ -424,7 +426,9 @@ internal static class LithTechObjExporter
                     resolverName,
                     reference,
                     exportedPath ?? string.Empty,
-                    mesh.HasTextureCoordinates));
+                    mesh.HasTextureCoordinates,
+                    mesh.TextureCoordinateSetCount,
+                    mesh.TextureCoordinateSourceStreamIndex));
             }
         }
 
@@ -2734,7 +2738,7 @@ internal static class LithTechObjExporter
         IReadOnlyList<ObjTextureSlotReport> reports)
     {
         using var writer = new StreamWriter(reportPath, false, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-        writer.WriteLine("source_path\tmesh_name\ttexture_context\tlocal_stage_index\tglobal_skin_slot\tmapping_source\ttexture_reference\texported_texture_path\texport_status\thas_uv");
+        writer.WriteLine("source_path\tmesh_name\ttexture_context\tlocal_stage_index\tglobal_skin_slot\tmapping_source\ttexture_reference\texported_texture_path\texport_status\thas_uv\tuv_set_count\tuv_source_stream_index");
         foreach (ObjTextureSlotReport report in reports)
         {
             writer.Write(EscapeTsv(report.SourcePath));
@@ -2755,7 +2759,11 @@ internal static class LithTechObjExporter
             writer.Write('\t');
             writer.Write(report.ExportStatus);
             writer.Write('\t');
-            writer.WriteLine(report.HasUv ? "true" : "false");
+            writer.Write(report.HasUv ? "true" : "false");
+            writer.Write('\t');
+            writer.Write(report.UvSetCount.ToString(CultureInfo.InvariantCulture));
+            writer.Write('\t');
+            writer.WriteLine(report.UvSourceStreamIndex?.ToString(CultureInfo.InvariantCulture) ?? string.Empty);
         }
     }
 
@@ -2920,7 +2928,9 @@ internal static class LithTechObjExporter
         string MappingSource,
         string TextureReference,
         string ExportedTexturePath,
-        bool HasUv)
+        bool HasUv,
+        int UvSetCount,
+        int? UvSourceStreamIndex)
     {
         public string ExportStatus => string.IsNullOrWhiteSpace(TextureReference)
             ? "unresolved"

@@ -146,10 +146,9 @@ internal static class CftPlayerViewArmEquivalence
 
     private static string? GetTextureLayoutSignature(LithTechMesh mesh)
     {
-        if (!mesh.HasAuthoritativeTextureBindings || !mesh.HasTextureCoordinates ||
+        if (!mesh.HasAuthoritativeTextureBindings || !TryGetTextureCoordinateSets(mesh, out IReadOnlyList<IReadOnlyList<LithTechVector2>?> uvSets) ||
             mesh.Vertices.Count == 0 || mesh.TriangleIndices.Count == 0 || mesh.TriangleIndices.Count % 3 != 0 ||
             mesh.TextureSlotIndices is not { Count: > 0 } slots || slots.Any(slot => slot < 0) ||
-            mesh.TextureCoordinates!.Count != mesh.Vertices.Count ||
             !string.IsNullOrWhiteSpace(mesh.TexturePath))
         {
             return null;
@@ -162,17 +161,25 @@ internal static class CftPlayerViewArmEquivalence
         foreach (int slot in slots) writer.Write(slot);
         writer.Write(mesh.RenderStyleIndex.HasValue);
         writer.Write(mesh.RenderStyleIndex ?? -1);
+        writer.Write(uvSets.Count);
         writer.Write(mesh.Vertices.Count);
         foreach (LithTechVector3 vertex in mesh.Vertices)
         {
             if (!double.IsFinite(vertex.X) || !double.IsFinite(vertex.Y) || !double.IsFinite(vertex.Z)) return null;
         }
 
-        foreach (LithTechVector2 uv in mesh.TextureCoordinates)
+        for (int setIndex = 0; setIndex < uvSets.Count; setIndex++)
         {
-            if (!double.IsFinite(uv.X) || !double.IsFinite(uv.Y)) return null;
-            writer.Write(uv.X);
-            writer.Write(uv.Y);
+            IReadOnlyList<LithTechVector2>? uvSet = uvSets[setIndex];
+            writer.Write(uvSet is not null);
+            writer.Write(mesh.GetTextureCoordinateSourceStreamIndex(setIndex) ?? -1);
+            if (uvSet is null) continue;
+            foreach (LithTechVector2 uv in uvSet)
+            {
+                if (!double.IsFinite(uv.X) || !double.IsFinite(uv.Y)) return null;
+                writer.Write(uv.X);
+                writer.Write(uv.Y);
+            }
         }
 
         writer.Write(mesh.TriangleIndices.Count);
@@ -222,10 +229,9 @@ internal static class CftPlayerViewArmEquivalence
 
     private static string? GetTextureGeometryUvSignature(LithTechMesh mesh)
     {
-        if (!mesh.HasAuthoritativeTextureBindings || !mesh.HasTextureCoordinates ||
+        if (!mesh.HasAuthoritativeTextureBindings || !TryGetTextureCoordinateSets(mesh, out IReadOnlyList<IReadOnlyList<LithTechVector2>?> uvSets) ||
             mesh.Vertices.Count == 0 || mesh.TriangleIndices.Count == 0 || mesh.TriangleIndices.Count % 3 != 0 ||
             mesh.TextureSlotIndices is not { Count: > 0 } slots || slots.Any(slot => slot < 0) ||
-            mesh.TextureCoordinates!.Count != mesh.Vertices.Count ||
             !string.IsNullOrWhiteSpace(mesh.TexturePath))
         {
             return null;
@@ -241,11 +247,26 @@ internal static class CftPlayerViewArmEquivalence
                 int index = mesh.TriangleIndices[offset + corner];
                 if (index < 0 || index >= mesh.Vertices.Count) return null;
                 LithTechVector3 position = mesh.Vertices[index];
-                LithTechVector2 uv = mesh.TextureCoordinates[index];
-                if (!double.IsFinite(position.X) || !double.IsFinite(position.Y) || !double.IsFinite(position.Z) ||
-                    !double.IsFinite(uv.X) || !double.IsFinite(uv.Y)) return null;
-                corners[corner] = string.Join(",", Number(position.X), Number(position.Y), Number(position.Z),
-                    Number(uv.X), Number(uv.Y));
+                if (!double.IsFinite(position.X) || !double.IsFinite(position.Y) || !double.IsFinite(position.Z)) return null;
+                var values = new List<string>(3 + uvSets.Count * 2)
+                {
+                    Number(position.X), Number(position.Y), Number(position.Z)
+                };
+                foreach (IReadOnlyList<LithTechVector2>? uvSet in uvSets)
+                {
+                    if (uvSet is null)
+                    {
+                        values.Add("-");
+                        continue;
+                    }
+
+                    LithTechVector2 uv = uvSet[index];
+                    if (!double.IsFinite(uv.X) || !double.IsFinite(uv.Y)) return null;
+                    values.Add(Number(uv.X));
+                    values.Add(Number(uv.Y));
+                }
+
+                corners[corner] = string.Join(",", values);
             }
 
             Array.Sort(corners, StringComparer.Ordinal);
@@ -260,6 +281,12 @@ internal static class CftPlayerViewArmEquivalence
         foreach (int slot in slots) writer.Write(slot);
         writer.Write(mesh.RenderStyleIndex.HasValue);
         writer.Write(mesh.RenderStyleIndex ?? -1);
+        writer.Write(uvSets.Count);
+        for (int setIndex = 0; setIndex < uvSets.Count; setIndex++)
+        {
+            writer.Write(uvSets[setIndex] is not null);
+            writer.Write(mesh.GetTextureCoordinateSourceStreamIndex(setIndex) ?? -1);
+        }
         writer.Write(mesh.Vertices.Count);
         writer.Write(mesh.TriangleIndices.Count / 3);
         foreach (string triangle in triangles) writer.Write(triangle);
@@ -275,7 +302,7 @@ internal static class CftPlayerViewArmEquivalence
         writer.Write(document.Meshes.Count);
         foreach (LithTechMesh mesh in document.Meshes)
         {
-            if (!mesh.HasAuthoritativeTextureBindings || !mesh.HasTextureCoordinates ||
+            if (!mesh.HasAuthoritativeTextureBindings || !TryGetTextureCoordinateSets(mesh, out IReadOnlyList<IReadOnlyList<LithTechVector2>?> uvSets) ||
                 mesh.Vertices.Count == 0 || mesh.TriangleIndices.Count == 0 || mesh.TriangleIndices.Count % 3 != 0 ||
                 mesh.TextureSlotIndices is not { Count: > 0 } slots || slots.Any(slot => slot < 0) ||
                 !string.IsNullOrWhiteSpace(mesh.TexturePath)) return null;
@@ -284,16 +311,27 @@ internal static class CftPlayerViewArmEquivalence
             foreach (int slot in slots) writer.Write(slot);
             writer.Write(mesh.RenderStyleIndex.HasValue);
             writer.Write(mesh.RenderStyleIndex ?? -1);
+            writer.Write(uvSets.Count);
+            for (int setIndex = 0; setIndex < uvSets.Count; setIndex++)
+            {
+                writer.Write(uvSets[setIndex] is not null);
+                writer.Write(mesh.GetTextureCoordinateSourceStreamIndex(setIndex) ?? -1);
+            }
             writer.Write(mesh.Vertices.Count);
             foreach (LithTechVector3 vertex in mesh.Vertices)
             {
                 if (!double.IsFinite(vertex.X) || !double.IsFinite(vertex.Y) || !double.IsFinite(vertex.Z)) return null;
                 writer.Write(vertex.X); writer.Write(vertex.Y); writer.Write(vertex.Z);
             }
-            foreach (LithTechVector2 uv in mesh.TextureCoordinates!)
+            for (int setIndex = 0; setIndex < uvSets.Count; setIndex++)
             {
-                if (!double.IsFinite(uv.X) || !double.IsFinite(uv.Y)) return null;
-                writer.Write(uv.X); writer.Write(uv.Y);
+                IReadOnlyList<LithTechVector2>? uvSet = uvSets[setIndex];
+                if (uvSet is null) continue;
+                foreach (LithTechVector2 uv in uvSet)
+                {
+                    if (!double.IsFinite(uv.X) || !double.IsFinite(uv.Y)) return null;
+                    writer.Write(uv.X); writer.Write(uv.Y);
+                }
             }
             writer.Write(mesh.TriangleIndices.Count);
             foreach (int index in mesh.TriangleIndices)
@@ -304,5 +342,33 @@ internal static class CftPlayerViewArmEquivalence
         }
         writer.Flush();
         return Convert.ToHexString(SHA256.HashData(bytes.GetBuffer().AsSpan(0, (int)bytes.Length)));
+    }
+
+    private static bool TryGetTextureCoordinateSets(
+        LithTechMesh mesh,
+        out IReadOnlyList<IReadOnlyList<LithTechVector2>?> textureCoordinateSets)
+    {
+        var sets = new IReadOnlyList<LithTechVector2>?[4];
+        bool hasSet = false;
+        for (int setIndex = 0; setIndex < sets.Length; setIndex++)
+        {
+            IReadOnlyList<LithTechVector2>? coordinates = mesh.GetTextureCoordinateSet(setIndex);
+            if (coordinates is null)
+            {
+                continue;
+            }
+
+            if (coordinates.Count != mesh.Vertices.Count)
+            {
+                textureCoordinateSets = Array.Empty<IReadOnlyList<LithTechVector2>?>();
+                return false;
+            }
+
+            hasSet = true;
+            sets[setIndex] = coordinates;
+        }
+
+        textureCoordinateSets = sets;
+        return hasSet;
     }
 }

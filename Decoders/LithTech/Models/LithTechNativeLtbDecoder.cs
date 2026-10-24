@@ -28,6 +28,7 @@ internal static class LithTechNativeLtbDecoder
     private const uint VertexUv2 = 0x020;
     private const uint VertexUv3 = 0x040;
     private const uint VertexUv4 = 0x080;
+    private const uint VertexUvMask = VertexUv1 | VertexUv2 | VertexUv3 | VertexUv4;
     private const uint VertexBasisVectors = 0x100;
     private const uint RenderObjectRigidMesh = 4;
     private const uint RenderObjectSkelMesh = 5;
@@ -667,7 +668,6 @@ internal static class LithTechNativeLtbDecoder
         mesh = null;
         errorMessage = null;
         Span<VertexStreamLayout> streams = stackalloc VertexStreamLayout[4];
-        bool hasUvStream = false;
         int positionStreamIndex = -1;
         for (int i = 0; i < streamFlags.Length; i++)
         {
@@ -690,7 +690,6 @@ internal static class LithTechNativeLtbDecoder
                 positionStreamIndex = i;
             }
 
-            hasUvStream |= layout.UvSetCount > 0;
             long streamEnd = (long)cursor + (long)layout.Stride * vertexCount;
             if (streamEnd > bodyEnd)
             {
@@ -727,34 +726,72 @@ internal static class LithTechNativeLtbDecoder
             vertices.Add(new LithTechVector3(x, y, z));
         }
 
-        List<LithTechVector2>? textureCoordinates = null;
-        if (hasUvStream)
+        var textureCoordinatesBySet = new List<LithTechVector2>?[4];
+        var textureCoordinateSourceStreamIndices = new int?[4];
+        var unavailableUvSets = new bool[4];
+        for (int i = 0; i < streams.Length; i++)
         {
-            VertexStreamLayout uvLayout = default;
-            for (int i = 0; i < streams.Length; i++)
+            VertexStreamLayout uvLayout = streams[i];
+            if (uvLayout.UvChannelMask == 0)
             {
-                if (streams[i].UvSetCount > 0)
-                {
-                    uvLayout = streams[i];
-                    break;
-                }
+                continue;
             }
 
-            textureCoordinates = new List<LithTechVector2>((int)vertexCount);
-            for (int i = 0; i < vertexCount; i++)
+            int compactUvIndex = 0;
+            for (int setIndex = 0; setIndex < 4; setIndex++)
             {
-                int uvOffset = uvLayout.Offset + i * uvLayout.Stride + uvLayout.TextureCoordinateOffset;
-                if (!TryReadSingle(data, uvOffset, out float u) ||
-                    !TryReadSingle(data, uvOffset + 4, out float v) ||
-                    !float.IsFinite(u) || !float.IsFinite(v))
+                uint uvFlag = 1u << (setIndex + 4);
+                if ((uvLayout.UvChannelMask & uvFlag) == 0)
                 {
-                    textureCoordinates = null;
-                    break;
+                    continue;
                 }
 
-                textureCoordinates.Add(new LithTechVector2(u, v));
+                var coordinates = new List<LithTechVector2>((int)vertexCount);
+                for (int vertexIndex = 0; vertexIndex < vertexCount; vertexIndex++)
+                {
+                    int uvOffset = uvLayout.Offset + vertexIndex * uvLayout.Stride +
+                                   uvLayout.TextureCoordinateOffset + compactUvIndex * sizeof(float) * 2;
+                    if (!TryReadSingle(data, uvOffset, out float u) ||
+                        !TryReadSingle(data, uvOffset + sizeof(float), out float v) ||
+                        !float.IsFinite(u) || !float.IsFinite(v))
+                    {
+                        unavailableUvSets[setIndex] = true;
+                        break;
+                    }
+
+                    coordinates.Add(new LithTechVector2(u, v));
+                }
+                compactUvIndex++;
+
+                if (coordinates.Count != vertexCount)
+                {
+                    continue;
+                }
+
+                if (unavailableUvSets[setIndex])
+                {
+                    continue;
+                }
+
+                if (textureCoordinatesBySet[setIndex] is null)
+                {
+                    textureCoordinatesBySet[setIndex] = coordinates;
+                    textureCoordinateSourceStreamIndices[setIndex] = i;
+                }
+                else if (!textureCoordinatesBySet[setIndex]!.SequenceEqual(coordinates))
+                {
+                    textureCoordinatesBySet[setIndex] = null;
+                    textureCoordinateSourceStreamIndices[setIndex] = null;
+                    unavailableUvSets[setIndex] = true;
+                }
             }
         }
+
+        IReadOnlyList<IReadOnlyList<LithTechVector2>?>? textureCoordinateSets =
+            textureCoordinatesBySet.Any(coordinates => coordinates is not null)
+                ? textureCoordinatesBySet.Select(coordinates => (IReadOnlyList<LithTechVector2>?)coordinates).ToArray()
+                : null;
+        IReadOnlyList<LithTechVector2>? textureCoordinates = textureCoordinatesBySet[0];
 
         var indices = new List<int>(checked((int)indexCount));
         int indexPosition = cursor;
@@ -775,7 +812,12 @@ internal static class LithTechNativeLtbDecoder
             vertices,
             indices,
             textureCoordinates?.Count == vertices.Count ? textureCoordinates : null,
-            TextureSlotIndices: textureSlotIndices);
+            TextureSlotIndices: textureSlotIndices)
+        {
+            TextureCoordinateSets = textureCoordinateSets,
+            TextureCoordinateSourceStreamIndex = textureCoordinateSourceStreamIndices[0],
+            TextureCoordinateSourceStreamIndices = textureCoordinateSets is null ? null : textureCoordinateSourceStreamIndices
+        };
         return true;
     }
 
@@ -788,11 +830,11 @@ internal static class LithTechNativeLtbDecoder
         int positionBytes = hasPosition ? 12 + (hasSkinning ? skinningPrefixBytes : 0) : 0;
         int normalBytes = hasNormal ? 12 : 0;
         int diffuseBytes = (flags & VertexDiffuse) != 0 ? sizeof(uint) : 0;
-        int uvSetCount = (flags & VertexUv4) != 0 ? 4
-            : (flags & VertexUv3) != 0 ? 3
-            : (flags & VertexUv2) != 0 ? 2
-            : (flags & VertexUv1) != 0 ? 1
-            : 0;
+        uint uvChannelMask = flags & VertexUvMask;
+        int uvSetCount = ((uvChannelMask & VertexUv1) != 0 ? 1 : 0) +
+                         ((uvChannelMask & VertexUv2) != 0 ? 1 : 0) +
+                         ((uvChannelMask & VertexUv3) != 0 ? 1 : 0) +
+                         ((uvChannelMask & VertexUv4) != 0 ? 1 : 0);
         int uvBytes = uvSetCount * sizeof(float) * 2;
         int basisBytes = (flags & VertexBasisVectors) != 0 ? sizeof(float) * 6 : 0;
         int stride = positionBytes + normalBytes + diffuseBytes + uvBytes + basisBytes;
@@ -806,7 +848,7 @@ internal static class LithTechNativeLtbDecoder
             Stride: stride,
             PositionOffset: 0,
             TextureCoordinateOffset: positionBytes + normalBytes + diffuseBytes,
-            UvSetCount: uvSetCount);
+            UvChannelMask: uvChannelMask);
         return true;
     }
 
@@ -895,5 +937,5 @@ internal static class LithTechNativeLtbDecoder
         int Stride,
         int PositionOffset,
         int TextureCoordinateOffset,
-        int UvSetCount);
+        uint UvChannelMask);
 }

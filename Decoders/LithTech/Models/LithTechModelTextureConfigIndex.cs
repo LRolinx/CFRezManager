@@ -1715,6 +1715,24 @@ internal static class LithTechModelTextureConfigIndex
                             string? texturePath = null;
                             string stageStatus;
                             bool stageDisabled = stage.ColorOp == 0 && stage.AlphaOp == 0;
+                            int? uvSetIndex = stage.UvSource is >= 0 and <= 3 ? stage.UvSource : null;
+                            string uvSourceName = stage.UvSource switch
+                            {
+                                0 => "model-uv-set-1",
+                                1 => "model-uv-set-2",
+                                2 => "model-uv-set-3",
+                                3 => "model-uv-set-4",
+                                4 => "camera-space-normal",
+                                5 => "camera-space-position",
+                                6 => "camera-space-reflection",
+                                7 => "world-space-normal",
+                                8 => "world-space-position",
+                                9 => "world-space-reflection",
+                                _ => "unknown-uv-source"
+                            };
+                            string uvDataStatus = uvSetIndex is int modelUvSetIndex
+                                ? mesh.HasTextureCoordinateSet(modelUvSetIndex) ? "model-uv-set-available" : "model-uv-set-unavailable"
+                                : stage.UvSource is >= 4 and <= 9 ? "renderstyle-generated-uv-source" : "unknown-uv-source";
                             if (stage.TextureParam == 0)
                             {
                                 stageStatus = "renderstyle-stage-no-texture";
@@ -1748,13 +1766,24 @@ internal static class LithTechModelTextureConfigIndex
                                 {
                                     stageStatus = "texture-resource-missing";
                                 }
+                                else if (uvDataStatus == "model-uv-set-unavailable")
+                                {
+                                    stageStatus = "renderstyle-stage-uv-set-unavailable";
+                                }
+                                else if (uvDataStatus == "unknown-uv-source")
+                                {
+                                    stageStatus = "renderstyle-stage-uv-source-unsupported";
+                                }
                                 else
                                 {
                                     stageStatus = "renderstyle-stage-bound";
                                 }
                             }
 
-                            string detail = $"{copyDetail};renderstyle_path={renderStylePath};renderstyle_file_index={renderStyleIndex.ToString(CultureInfo.InvariantCulture)};style_variant_index={styleVariantIndex.ToString(CultureInfo.InvariantCulture)};pass_index={passIndex.ToString(CultureInfo.InvariantCulture)};stage_index={stageIndex.ToString(CultureInfo.InvariantCulture)};texture_param={stage.TextureParam.ToString(CultureInfo.InvariantCulture)};local_texture_index={(localTextureIndex >= 0 ? localTextureIndex.ToString(CultureInfo.InvariantCulture) : string.Empty)};uv_source={stage.UvSource.ToString(CultureInfo.InvariantCulture)};color_op={stage.ColorOp.ToString(CultureInfo.InvariantCulture)};alpha_op={stage.AlphaOp.ToString(CultureInfo.InvariantCulture)};{styleDetail}";
+                            int? uvSourceStreamIndex = uvSetIndex is int sourceUvSetIndex
+                                ? mesh.GetTextureCoordinateSourceStreamIndex(sourceUvSetIndex)
+                                : null;
+                            string detail = $"{copyDetail};renderstyle_path={renderStylePath};renderstyle_file_index={renderStyleIndex.ToString(CultureInfo.InvariantCulture)};style_variant_index={styleVariantIndex.ToString(CultureInfo.InvariantCulture)};pass_index={passIndex.ToString(CultureInfo.InvariantCulture)};stage_index={stageIndex.ToString(CultureInfo.InvariantCulture)};texture_param={stage.TextureParam.ToString(CultureInfo.InvariantCulture)};local_texture_index={(localTextureIndex >= 0 ? localTextureIndex.ToString(CultureInfo.InvariantCulture) : string.Empty)};uv_source={stage.UvSource.ToString(CultureInfo.InvariantCulture)};uv_source_name={uvSourceName};uv_set_index={(uvSetIndex?.ToString(CultureInfo.InvariantCulture) ?? string.Empty)};mesh_uv_set_count={mesh.TextureCoordinateSetCount.ToString(CultureInfo.InvariantCulture)};uv_source_stream_index={(uvSourceStreamIndex?.ToString(CultureInfo.InvariantCulture) ?? string.Empty)};uv_data_status={uvDataStatus};color_op={stage.ColorOp.ToString(CultureInfo.InvariantCulture)};alpha_op={stage.AlphaOp.ToString(CultureInfo.InvariantCulture)};{styleDetail}";
                             WriteAuditRow(
                                 modelPath,
                                 mesh.Name,
