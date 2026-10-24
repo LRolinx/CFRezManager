@@ -5131,54 +5131,56 @@ internal static class LithTechModelTextureConfigIndex
                 if (string.Equals(donorModelPath, targetModelPath, StringComparison.OrdinalIgnoreCase) ||
                     !modelItemsByPlayerViewRolePath.TryGetValue(donorModelPath, out ExplorerItem[]? donorItems) ||
                     !TryDecodeConsistentPlayerViewModelDocuments(donorItems, decodedModels, out List<LithTechModelDocument> donorDocuments) ||
-                    !TryGetUniquePlayerViewNonArmTextureSlot(donorDocuments, out int donorSlotIndex) ||
-                    IsPlayerViewHandOrArmTextureSlot(targetDocuments, donorSlotIndex) ||
-                    !targetSignatures.TryGetValue(donorSlotIndex, out string? targetSignature) ||
-                    !byModelPath.TryGetValue(donorModelPath, out Dictionary<int, string?>? donorDirectSlots) ||
-                    !donorDirectSlots.TryGetValue(donorSlotIndex, out string? directTexturePath) ||
-                    string.IsNullOrWhiteSpace(directTexturePath))
+                    !byModelPath.TryGetValue(donorModelPath, out Dictionary<int, string?>? donorDirectSlots))
                 {
                     continue;
                 }
 
                 IReadOnlyDictionary<int, string>? donorSignatures = GetSlotUvTriangleSignatures(donorModelPath);
-                if (donorSignatures is null ||
-                    !donorSignatures.TryGetValue(donorSlotIndex, out string? donorSignature) ||
-                    !string.Equals(donorSignature, targetSignature, StringComparison.Ordinal) ||
-                    byModelPath.TryGetValue(targetModelPath, out Dictionary<int, string?>? targetDirectSlots) &&
-                    targetDirectSlots.ContainsKey(donorSlotIndex) ||
-                    contextTexturesByModelPath.TryGetValue(targetModelPath, out Dictionary<int, HashSet<string?>>? targetContextSlots) &&
-                    targetContextSlots.ContainsKey(donorSlotIndex))
+                if (donorSignatures is null)
                 {
                     continue;
                 }
 
-                string texturePath = NormalizeKey(directTexturePath);
-                if ((!texturePath.StartsWith("ModelTextures/PLAYERVIEW/", StringComparison.OrdinalIgnoreCase) &&
-                     !texturePath.StartsWith("ModelTextures/WEAPONS/", StringComparison.OrdinalIgnoreCase)) ||
-                    !string.Equals(
-                        NormalizeLooseKey(Path.GetFileNameWithoutExtension(texturePath)),
-                        targetStem,
-                        StringComparison.OrdinalIgnoreCase) ||
-                    !HasConsistentDecodableDtxCopies(texturePath, textureItemsByLogicalPath, verifiedTexturePathCache))
+                foreach ((int donorSlotIndex, string? directTextureReference) in donorDirectSlots)
                 {
-                    continue;
-                }
+                    if (string.IsNullOrWhiteSpace(directTextureReference) ||
+                        IsPlayerViewHandOrArmTextureSlot(donorDocuments, donorSlotIndex) ||
+                        IsPlayerViewHandOrArmTextureSlot(targetDocuments, donorSlotIndex) ||
+                        !targetSignatures.TryGetValue(donorSlotIndex, out string? targetSignature) ||
+                        !donorSignatures.TryGetValue(donorSlotIndex, out string? donorSignature) ||
+                        !string.Equals(donorSignature, targetSignature, StringComparison.Ordinal) ||
+                        byModelPath.TryGetValue(targetModelPath, out Dictionary<int, string?>? targetDirectSlots) &&
+                        targetDirectSlots.ContainsKey(donorSlotIndex) ||
+                        contextTexturesByModelPath.TryGetValue(targetModelPath, out Dictionary<int, HashSet<string?>>? targetContextSlots) &&
+                        targetContextSlots.ContainsKey(donorSlotIndex))
+                    {
+                        continue;
+                    }
 
-                if (contextTexturesByModelPath.TryGetValue(donorModelPath, out Dictionary<int, HashSet<string?>>? donorContextSlots) &&
-                    donorContextSlots.TryGetValue(donorSlotIndex, out HashSet<string?>? donorContextTextures) &&
-                    donorContextTextures.Any(contextTexture =>
-                        !string.Equals(contextTexture, texturePath, StringComparison.OrdinalIgnoreCase)))
-                {
-                    continue;
-                }
+                    string texturePath = NormalizeKey(directTextureReference);
+                    if ((!texturePath.StartsWith("ModelTextures/PLAYERVIEW/", StringComparison.OrdinalIgnoreCase) &&
+                         !texturePath.StartsWith("ModelTextures/WEAPONS/", StringComparison.OrdinalIgnoreCase)) ||
+                        !HasConsistentDecodableDtxCopies(texturePath, textureItemsByLogicalPath, verifiedTexturePathCache))
+                    {
+                        continue;
+                    }
 
-                if (!candidateTexturesBySlot.TryGetValue(donorSlotIndex, out HashSet<string>? candidateTextures))
-                {
-                    candidateTexturesBySlot[donorSlotIndex] = candidateTextures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                }
+                    if (contextTexturesByModelPath.TryGetValue(donorModelPath, out Dictionary<int, HashSet<string?>>? donorContextSlots) &&
+                        donorContextSlots.TryGetValue(donorSlotIndex, out HashSet<string?>? donorContextTextures) &&
+                        donorContextTextures.Any(contextTexture =>
+                            !string.Equals(contextTexture, texturePath, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        continue;
+                    }
 
-                candidateTextures.Add(texturePath);
+                    if (!candidateTexturesBySlot.TryGetValue(donorSlotIndex, out HashSet<string>? candidateTextures))
+                    {
+                        candidateTexturesBySlot[donorSlotIndex] = candidateTextures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    }
+
+                    candidateTextures.Add(texturePath);
+                }
             }
 
             foreach ((int slotIndex, HashSet<string> candidateTextures) in candidateTexturesBySlot)
