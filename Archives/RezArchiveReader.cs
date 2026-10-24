@@ -302,7 +302,7 @@ public sealed class RezArchiveReader
         return candidate;
     }
 
-    private static bool IsRezArchive(string path)
+    internal static bool IsRezArchive(string path)
     {
         return RezHeaderCache.GetOrAdd(path, static candidate =>
         {

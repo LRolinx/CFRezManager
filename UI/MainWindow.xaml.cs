@@ -3691,6 +3691,7 @@ public partial class MainWindow : Window
         {
             return Directory.EnumerateFiles(folder)
                 .Where(file => string.Equals(Path.GetExtension(file), ".rez", StringComparison.OrdinalIgnoreCase))
+                .Where(RezArchiveReader.IsRezArchive)
                 .ToList();
         }
         catch

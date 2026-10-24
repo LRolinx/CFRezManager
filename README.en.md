@@ -149,6 +149,8 @@ Notes:
 
 ## Command-Line Tools
 
+Directory browsing and export scans list only files with a valid REZ header. `.REZ` data shards beside an archive remain available to the reader through that archive's index and are not treated as separate archives.
+
 ```powershell
 dotnet run --project .\CFRezManager.csproj -- --export-obj --root "F:\Game\CrossFire" --model "PV-AK47_Balance" --output ".\out\PV-AK47_Balance.obj"
 dotnet run --project .\CFRezManager.csproj -- --audit-texture-map --root "F:\Game\CrossFire" --output ".\out\crossfire_texture_mapping_audit.tsv"

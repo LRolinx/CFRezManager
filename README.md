@@ -149,6 +149,8 @@ CFRezManager/
 
 ## 命令行工具
 
+目录视图与导出扫描只列出带有效 REZ 头的归档；同目录的 `.REZ` 数据分片由归档读取器按索引读取，不会误当成独立归档。
+
 ```powershell
 dotnet run --project .\CFRezManager.csproj -- --export-obj --root "F:\Game\CrossFire" --model "PV-AK47_Balance" --output ".\out\PV-AK47_Balance.obj"
 dotnet run --project .\CFRezManager.csproj -- --audit-texture-map --root "F:\Game\CrossFire" --output ".\out\crossfire_texture_mapping_audit.tsv"
