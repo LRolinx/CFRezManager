@@ -23,7 +23,9 @@ internal sealed record LithTechObjExportSource(
     Func<string, string, int, IReadOnlyList<string>>? InferredTextureContextSlotResolver = null,
     Func<string, string, int, IReadOnlyList<string>>? EquivalentArmTextureContextSlotResolver = null,
     Func<string, string, int, IReadOnlyList<string>>? WeaponPreviewVariantTextureContextSlotResolver = null,
-    Func<string, int, IReadOnlyList<string>>? WeaponPreviewVariantTextureSlotResolver = null);
+    Func<string, int, IReadOnlyList<string>>? WeaponPreviewVariantTextureSlotResolver = null,
+    Func<string, int, IReadOnlyList<string>>? LtcPreviewVariantTextureSlotResolver = null,
+    Func<string, string, int, IReadOnlyList<string>>? LtcPreviewVariantTextureContextSlotResolver = null);
 
 internal sealed record LithTechObjExportResult(
     string ObjPath,
@@ -371,7 +373,18 @@ internal static class LithTechObjExporter
                 if (inferredReferences.Count > 0)
                 {
                     references = inferredReferences;
-                    resolverName = "cft-body-face-derived";
+                    IReadOnlyList<string> ltcPreviewVariantReferences = useContextBinding
+                        ? source.LtcPreviewVariantTextureContextSlotResolver?.Invoke(
+                              modelReference,
+                              source.TextureContext!,
+                              skinSlotIndex) ?? []
+                        : source.LtcPreviewVariantTextureSlotResolver?.Invoke(modelReference, skinSlotIndex) ?? [];
+                    resolverName = ltcPreviewVariantReferences.Count > 0 &&
+                                   inferredReferences.SequenceEqual(
+                                       ltcPreviewVariantReferences,
+                                       StringComparer.OrdinalIgnoreCase)
+                        ? "ltc-preview-variant-same-name-derived"
+                        : "cft-body-face-derived";
                 }
             }
 

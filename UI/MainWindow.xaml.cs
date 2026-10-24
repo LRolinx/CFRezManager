@@ -999,6 +999,9 @@ public partial class MainWindow : Window
             Func<string, int, IReadOnlyList<string>>? weaponPreviewVariantTextureSlotResolver = exportRoot is null
                 ? null
                 : await Task.Run(() => LithTechModelTextureConfigIndex.CreateWeaponPreviewVariantTextureSlotResolver(exportRoot));
+            Func<string, int, IReadOnlyList<string>>? ltcPreviewVariantTextureSlotResolver = exportRoot is null
+                ? null
+                : await Task.Run(() => LithTechModelTextureConfigIndex.CreateLtcPreviewVariantTextureSlotResolver(exportRoot));
             Func<string, string, int, string, IReadOnlyList<string>>? meshTextureResolver = exportRoot is null
                 ? null
                 : await Task.Run(() => LithTechModelMeshTextureResolver.CreateResolver(exportRoot));
@@ -1028,6 +1031,7 @@ public partial class MainWindow : Window
                 textureSlotResolver,
                 inferredTextureSlotResolver,
                 weaponPreviewVariantTextureSlotResolver,
+                ltcPreviewVariantTextureSlotResolver,
                 meshTextureResolver,
                 progress));
             SetStatus(
@@ -1061,6 +1065,7 @@ public partial class MainWindow : Window
         Func<string, int, IReadOnlyList<string>>? textureSlotResolver,
         Func<string, int, IReadOnlyList<string>>? inferredTextureSlotResolver,
         Func<string, int, IReadOnlyList<string>>? weaponPreviewVariantTextureSlotResolver,
+        Func<string, int, IReadOnlyList<string>>? ltcPreviewVariantTextureSlotResolver,
         Func<string, string, int, string, IReadOnlyList<string>>? meshTextureResolver,
         IProgress<ModelObjExportProgress> progress)
     {
@@ -1082,7 +1087,8 @@ public partial class MainWindow : Window
                     textureSlotResolver,
                     meshTextureResolver,
                     InferredTextureSlotResolver: inferredTextureSlotResolver,
-                    WeaponPreviewVariantTextureSlotResolver: weaponPreviewVariantTextureSlotResolver));
+                    WeaponPreviewVariantTextureSlotResolver: weaponPreviewVariantTextureSlotResolver,
+                    LtcPreviewVariantTextureSlotResolver: ltcPreviewVariantTextureSlotResolver));
             }
             else
             {
