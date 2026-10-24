@@ -212,6 +212,7 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 - `PV-687EDP_NY2026` 基模的 7 个槽 2 网格及 BL、GR、WOMAN_BL、WOMAN_GR 变体各自的 5 个槽 2 网格，均映射到 `ModelTextures/PlayerView/PV-687EDP_NY2026.dtx`。基模为直接映射，四个变体通过 LTC 同名推导；每个导出仅剩两条手、臂项未解析。
 - `PV-NegevNG7` 基模的 8 个槽 2 网格使用 `PV-NegevNG7.dtx`，`scope` 网格槽 3 使用 `PV-NegevNG7_01.dtx`。BL、GR、WOMAN_BL 变体通过 LTC 同名推导映射槽 2，并按完全一致的 UV 映射槽 3；WOMAN_GR 的 `scope` 槽 3 已映射，但 8 个槽 2 项仍未解析。贴图路径均在 `ModelTextures/PlayerView` 下；各导出剩余手、臂项未解析。
 - `PV-MiniMythicHero` 基模及 BL、GR、WOMAN_BL、WOMAN_GR 变体的 `Object034` 网格槽 2 使用 `ModelTextures/PlayerView/PV-MiniMythicHero.dtx`，`sword` 网格槽 3 使用 `PV-MiniMythicHero_01.dtx`。四个变体的槽 2 通过 LTC 同名推导，槽 3 按完全一致的 UV 映射。每个导出均恢复两张道具贴图，仅手、臂槽未解析。
+- BF005.LTC 第 841 行为 `PV-TAC15` 登记的两张第一人称贴图，在 `PV-TAC15_WOMAN_BL/GR` 中按网格槽和 UV 签名分别映射：`body`、`bolt`、`Object001` 的槽 2 使用 `ModelTextures/PlayerView/PV-TAC15_01.dtx`，`scope` 的槽 3 使用 `_02.dtx`。聚焦导出确认每个变体恢复四个道具网格贴图，手、臂槽仍未解析。基模的三个道具网格都在槽 2，LTC 两条贴图引用无法确定各自槽位，仍保持未映射。
 - `PV-464SPX` 基模及 BL、GR、WOMAN_BL 变体的 5 个槽 2 网格均使用 `ModelTextures/PlayerView/PV-464SPX.dtx`，三个变体通过 LTC 同名推导；WOMAN_GR 的 5 个槽 2 项仍未解析。各模型的手、臂槽未解析。
 - `PV-HK417_Elite_RoyalDragon6` 基模的 3 个槽 2 网格直接使用 `ModelTextures/PlayerView/PV-HK417_Elite_RoyalDragon6.dtx`；BL、GR、WOMAN_BL 变体通过 LTC 同名推导映射同一贴图。WOMAN_GR 的 3 个槽 2 项仍未解析；所有模型的手、臂槽未解析。
 - 四个 `PV-M82A1_S_ReactiveArmor` 阵营/性别变体的 `PV-Scope` 网格槽 3 均映射到 `ModelTextures/PlayerView/PV-M82A1_S_ReactiveArmor01.dtx`。这些变体的槽 2 机身网格仍未解析；基模槽 2/3 均有直接贴图。

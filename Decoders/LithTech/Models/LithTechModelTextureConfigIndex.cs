@@ -35,7 +35,7 @@ internal static class LithTechModelTextureConfigIndex
         string TargetModelPath,
         int TargetSlotIndex,
         string TexturePath,
-        string MeshName);
+        IReadOnlyList<string> MeshNames);
 
     private const int MaxConfigBytes = 1024 * 1024;
     private const int MaxCftBytes = 4 * 1024 * 1024;
@@ -141,21 +141,33 @@ internal static class LithTechModelTextureConfigIndex
             "ModelTextures/Character/AIMode/AI1_EvilDen/AI_Stone.dtx", ["stone01", "stone02", "stone03"])
     ];
 
-    // The five AI shield-card previews share one slot-2 UV layout that spans
-    // the unique AI1PreCrater CARD atlas. Keep the semantic alias limited to
-    // these model paths and verify every model and DTX copy before using it.
+    // These path-scoped aliases cover player-view meshes whose table paths are
+    // present but whose slot layouts cannot be represented by the base model.
+    // Verify every target mesh UV signature and DTX copy before binding them.
     private static readonly VerifiedPlayerViewMeshTextureSlotAlias[] VerifiedPlayerViewMeshTextureSlotAliases =
     [
         new("ai-shield-card", "Models/PLAYERVIEW/PV-ShieldCard_AI_NEW", 2,
-            "TEX/UI/AIMode/AI1PreCrater/CARD.DTX", "card"),
+            "TEX/UI/AIMode/AI1PreCrater/CARD.DTX", ["card"]),
         new("ai-shield-card", "Models/PLAYERVIEW/PV-ShieldCard_AI_NEW_BL", 2,
-            "TEX/UI/AIMode/AI1PreCrater/CARD.DTX", "card"),
+            "TEX/UI/AIMode/AI1PreCrater/CARD.DTX", ["card"]),
         new("ai-shield-card", "Models/PLAYERVIEW/PV-ShieldCard_AI_NEW_GR", 2,
-            "TEX/UI/AIMode/AI1PreCrater/CARD.DTX", "Box003"),
+            "TEX/UI/AIMode/AI1PreCrater/CARD.DTX", ["Box003"]),
         new("ai-shield-card", "Models/PLAYERVIEW/PV-ShieldCard_AI_NEW_WOMAN_BL", 2,
-            "TEX/UI/AIMode/AI1PreCrater/CARD.DTX", "Box003"),
+            "TEX/UI/AIMode/AI1PreCrater/CARD.DTX", ["Box003"]),
         new("ai-shield-card", "Models/PLAYERVIEW/PV-ShieldCard_AI_NEW_WOMAN_GR", 2,
-            "TEX/UI/AIMode/AI1PreCrater/CARD.DTX", "Box003")
+            "TEX/UI/AIMode/AI1PreCrater/CARD.DTX", ["Box003"]),
+        // BF005.LTC row 841 lists these two DTXs for PV-TAC15, but its base
+        // model assigns both references to slot 2. The WOMAN side models have
+        // stable, distinct body and scope slots; keep this mapping scoped to
+        // their exact mesh layout.
+        new("tac15-woman-body", "Models/WAVE/Hunter/PV-TAC15_WOMAN_BL", 2,
+            "ModelTextures/PLAYERVIEW/PV-TAC15_01.DTX", ["body", "bolt", "Object001"]),
+        new("tac15-woman-body", "Models/WAVE/Hunter/PV-TAC15_WOMAN_GR", 2,
+            "ModelTextures/PLAYERVIEW/PV-TAC15_01.DTX", ["body", "bolt", "Object001"]),
+        new("tac15-woman-scope", "Models/WAVE/Hunter/PV-TAC15_WOMAN_BL", 3,
+            "ModelTextures/PLAYERVIEW/PV-TAC15_02.DTX", ["scope"]),
+        new("tac15-woman-scope", "Models/WAVE/Hunter/PV-TAC15_WOMAN_GR", 3,
+            "ModelTextures/PLAYERVIEW/PV-TAC15_02.DTX", ["scope"])
     ];
 
     public static Func<IEnumerable<string>, IReadOnlyList<string>>? CreateResolver(ExplorerItem root)
@@ -5877,49 +5889,83 @@ internal static class LithTechModelTextureConfigIndex
                 }
 
                 string? expectedModelSignature = null;
+                string? expectedModelTextureLayoutSignature = null;
                 foreach (LithTechModelDocument document in documents)
                 {
                     LithTechMesh[] slotMeshes = document.Meshes
                         .Where(mesh => (mesh.TextureSlotIndices ?? []).Contains(slotIndex))
                         .ToArray();
-                    if (slotMeshes.Length != 1)
+                    string[] expectedMeshNames = alias.MeshNames
+                        .Select(meshName => meshName.Trim())
+                        .OrderBy(meshName => meshName, StringComparer.OrdinalIgnoreCase)
+                        .ToArray();
+                    string[] actualMeshNames = slotMeshes
+                        .Select(mesh => mesh.Name.Trim())
+                        .OrderBy(meshName => meshName, StringComparer.OrdinalIgnoreCase)
+                        .ToArray();
+                    if (slotMeshes.Length == 0 ||
+                        slotMeshes.Length != expectedMeshNames.Length ||
+                        !actualMeshNames.SequenceEqual(expectedMeshNames, StringComparer.OrdinalIgnoreCase))
                     {
                         validFamily = false;
                         break;
                     }
 
-                    LithTechMesh mesh = slotMeshes[0];
-                    if (!mesh.HasAuthoritativeTextureBindings ||
-                        mesh.TextureSlotIndices is not { Count: 1 } meshSlots || meshSlots[0] != slotIndex ||
-                        mesh.RenderStyleIndex is not int renderStyleIndex ||
-                        !string.IsNullOrWhiteSpace(mesh.TexturePath) ||
-                        !string.Equals(mesh.Name.Trim(), alias.MeshName, StringComparison.OrdinalIgnoreCase) ||
-                        GetVerifiedTextureUvTriangleSignature(mesh) is not string uvSignature)
+                    var meshSignatures = new List<string>(slotMeshes.Length);
+                    var meshTextureLayoutSignatures = new List<string>(slotMeshes.Length);
+                    foreach (LithTechMesh mesh in slotMeshes)
                     {
-                        validFamily = false;
+                        if (!mesh.HasAuthoritativeTextureBindings ||
+                            mesh.TextureSlotIndices is not { Count: 1 } meshSlots || meshSlots[0] != slotIndex ||
+                            mesh.RenderStyleIndex is not int renderStyleIndex ||
+                            !string.IsNullOrWhiteSpace(mesh.TexturePath) ||
+                            GetVerifiedTextureUvTriangleSignature(mesh) is not string uvSignature)
+                        {
+                            validFamily = false;
+                            break;
+                        }
+
+                        meshSignatures.Add(
+                            $"{mesh.Name.Trim().ToUpperInvariant()}\0{renderStyleIndex}\0{uvSignature}");
+                        meshTextureLayoutSignatures.Add($"{renderStyleIndex}\0{uvSignature}");
+                    }
+
+                    if (!validFamily)
+                    {
                         break;
                     }
 
-                    string modelSignature = $"{renderStyleIndex}\0{uvSignature}";
-                    if (expectedModelSignature is not null &&
-                        !string.Equals(expectedModelSignature, modelSignature, StringComparison.Ordinal))
+                    string modelSignature = string.Join('|', meshSignatures.Order(StringComparer.Ordinal));
+                    string modelTextureLayoutSignature = string.Join(
+                        '|', meshTextureLayoutSignatures.Order(StringComparer.Ordinal));
+                    if ((expectedModelSignature is not null &&
+                         !string.Equals(expectedModelSignature, modelSignature, StringComparison.Ordinal)) ||
+                        (expectedModelTextureLayoutSignature is not null &&
+                         !string.Equals(
+                             expectedModelTextureLayoutSignature,
+                             modelTextureLayoutSignature,
+                             StringComparison.Ordinal)))
                     {
                         validFamily = false;
                         break;
                     }
 
                     expectedModelSignature ??= modelSignature;
+                    expectedModelTextureLayoutSignature ??= modelTextureLayoutSignature;
                 }
 
-                if (!validFamily || expectedModelSignature is null ||
+                if (!validFamily || expectedModelSignature is null || expectedModelTextureLayoutSignature is null ||
                     expectedFamilySignature is not null &&
-                    !string.Equals(expectedFamilySignature, expectedModelSignature, StringComparison.Ordinal))
+                    !string.Equals(
+                        expectedFamilySignature,
+                        expectedModelTextureLayoutSignature,
+                        StringComparison.Ordinal))
                 {
                     validFamily = false;
                     break;
                 }
 
-                expectedFamilySignature ??= expectedModelSignature;
+                expectedFamilySignature ??= expectedModelTextureLayoutSignature;
                 pendingBindings.Add(targetModelPath);
             }
 
