@@ -3591,6 +3591,20 @@ internal static class LithTechModelTextureConfigIndex
                     continue;
                 }
 
+                IReadOnlyDictionary<string, LithTechModelDocument>? playerViewArmDocuments =
+                    mapping.ModelField.StartsWith("PViewModelFileName", StringComparison.OrdinalIgnoreCase)
+                        ? TryGetLtcPlayerViewArmDocuments(
+                            roleModelPath,
+                            modelItemsByPlayerViewRolePath,
+                            decodedModels)
+                        : null;
+                int[] equivalentPlayerViewArmSlots =
+                    mapping.ModelField.StartsWith("PViewModelFileName", StringComparison.OrdinalIgnoreCase) &&
+                    playerViewArmDocuments is { Count: > 0 } &&
+                    modelItems.Length == modelDocuments.Count
+                        ? ResolveEquivalentPlayerViewArmSlots(modelItems, modelDocuments, playerViewArmDocuments)
+                        : [];
+
                 string[] contextKeys = GetLtcContextKeys(ltcItem, mapping)
                     .Concat(GetWeaponItemContextAliases(mapping, itemAliases))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -3610,7 +3624,8 @@ internal static class LithTechModelTextureConfigIndex
                     int[] mappedSlots = ResolveLtcPlayerViewTextureSlots(
                         modelDocuments,
                         mapping.ModelField,
-                        textureOrdinal);
+                        textureOrdinal,
+                        equivalentPlayerViewArmSlots);
                     if (mappedSlots.Length == 0)
                     {
                         continue;
@@ -5056,7 +5071,8 @@ internal static class LithTechModelTextureConfigIndex
     private static int[] ResolveLtcPlayerViewTextureSlots(
         IReadOnlyList<LithTechModelDocument> documents,
         string modelField,
-        int textureOrdinal)
+        int textureOrdinal,
+        IReadOnlyList<int> equivalentArmSlots)
     {
         int[]? resolvedSlots = null;
         bool excludeHandArmSlots = modelField.StartsWith("PViewModelFileName", StringComparison.OrdinalIgnoreCase);
@@ -5084,6 +5100,7 @@ internal static class LithTechModelTextureConfigIndex
                                   normalizedName == "hand" ||
                                   hasPairedHandArmSuffixes && mesh.Name.EndsWith("_H", StringComparison.OrdinalIgnoreCase);
                     bool isArm = normalizedName.StartsWith("fviewarm", StringComparison.Ordinal) ||
+                                 normalizedName.StartsWith("fviewam", StringComparison.Ordinal) ||
                                  normalizedName == "arm" ||
                                  hasPairedHandArmSuffixes && mesh.Name.EndsWith("_A", StringComparison.OrdinalIgnoreCase);
                     if (isHand && isArm)
@@ -5096,6 +5113,8 @@ internal static class LithTechModelTextureConfigIndex
                         handArmSlots.UnionWith(mesh.TextureSlotIndices ?? []);
                     }
                 }
+
+                handArmSlots.UnionWith(equivalentArmSlots);
             }
 
             int[] eligibleSlots = modelSlots.Except(handArmSlots).Order().ToArray();
@@ -5118,6 +5137,136 @@ internal static class LithTechModelTextureConfigIndex
             {
                 return [];
             }
+        }
+
+        return resolvedSlots ?? [];
+    }
+
+    private static IReadOnlyDictionary<string, LithTechModelDocument>? TryGetLtcPlayerViewArmDocuments(
+        string modelPath,
+        IReadOnlyDictionary<string, ExplorerItem[]> modelItemsByPlayerViewRolePath,
+        Dictionary<string, LithTechModelDocument?> decodedModels)
+    {
+        string? armModelPath = GetLtcPlayerViewArmModelPath(modelPath, modelItemsByPlayerViewRolePath);
+        if (armModelPath is null ||
+            !CftPlayerViewArmEquivalence.IsPlayerViewArmModel(armModelPath) ||
+            !modelItemsByPlayerViewRolePath.TryGetValue(armModelPath, out ExplorerItem[]? armModelItems) ||
+            armModelItems.Length == 0)
+        {
+            return null;
+        }
+
+        var documentsByArchiveRoot = new Dictionary<string, LithTechModelDocument>(StringComparer.OrdinalIgnoreCase);
+        foreach (ExplorerItem armModelItem in armModelItems)
+        {
+            string archiveRoot = GetModelArchiveRoot(GetModelResourcePath(armModelItem));
+            if (archiveRoot.Length == 0 || documentsByArchiveRoot.ContainsKey(archiveRoot))
+            {
+                return null;
+            }
+
+            LithTechModelDocument? document = TryDecodeSlotInheritanceModel(
+                armModelItem,
+                GetModelResourcePath(armModelItem),
+                decodedModels);
+            if (document is null)
+            {
+                return null;
+            }
+
+            documentsByArchiveRoot.Add(archiveRoot, document);
+        }
+
+        return documentsByArchiveRoot;
+    }
+
+    private static string? GetLtcPlayerViewArmModelPath(
+        string modelPath,
+        IReadOnlyDictionary<string, ExplorerItem[]> modelItemsByPlayerViewRolePath)
+    {
+        string normalizedPath = NormalizeExtensionlessModelReference(modelPath);
+        const string playerViewPrefix = "Models/PLAYERVIEW/PV-";
+        if (!normalizedPath.StartsWith(playerViewPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        string modelName = Path.GetFileName(normalizedPath);
+        string[] nameParts = modelName.Split('_', StringSplitOptions.RemoveEmptyEntries);
+        for (int index = nameParts.Length - 2; index >= 0; index--)
+        {
+            string side = nameParts[index + 1];
+            if (!side.Equals("BL", StringComparison.OrdinalIgnoreCase) &&
+                !side.Equals("GR", StringComparison.OrdinalIgnoreCase) &&
+                !side.Equals("SP", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            string armModelPath = $"ArmModel/Arm_{nameParts[index]}_{side}";
+            if (modelItemsByPlayerViewRolePath.ContainsKey(armModelPath))
+            {
+                return armModelPath;
+            }
+        }
+
+        return null;
+    }
+
+    private static int[] ResolveEquivalentPlayerViewArmSlots(
+        IReadOnlyList<ExplorerItem> targetItems,
+        IReadOnlyList<LithTechModelDocument> targetDocuments,
+        IReadOnlyDictionary<string, LithTechModelDocument> armDocumentsByArchiveRoot)
+    {
+        if (targetItems.Count == 0 || targetItems.Count != targetDocuments.Count)
+        {
+            return [];
+        }
+
+        int[]? resolvedSlots = null;
+        for (int documentIndex = 0; documentIndex < targetDocuments.Count; documentIndex++)
+        {
+            LithTechModelDocument targetDocument = targetDocuments[documentIndex];
+            // Pair copies by resource layer so unrelated archive versions cannot supply the arm layout.
+            string targetArchiveRoot = GetModelArchiveRoot(GetModelResourcePath(targetItems[documentIndex]));
+            if (targetArchiveRoot.Length == 0 ||
+                !armDocumentsByArchiveRoot.TryGetValue(targetArchiveRoot, out LithTechModelDocument? armDocument))
+            {
+                return [];
+            }
+
+            CftPlayerViewRoleSlotMap armRoles = CftPlayerViewRoleSlotResolver.Resolve(
+                [armDocument],
+                hasHandTextureReference: true,
+                hasArmTextureReference: true);
+            if (armRoles.ArmSlots.Count == 0)
+            {
+                return [];
+            }
+
+            IReadOnlyDictionary<int, string>? targetSignatures =
+                CftPlayerViewArmEquivalence.GetConsistentTextureSlotLayoutSignatures([targetDocument]);
+            IReadOnlyDictionary<int, string>? armSignatures =
+                CftPlayerViewArmEquivalence.GetConsistentTextureSlotLayoutSignatures([armDocument]);
+            if (targetSignatures is null || armSignatures is null)
+            {
+                return [];
+            }
+
+            int[] matchingArmSlots = targetSignatures
+                .Where(targetSlot => armRoles.ArmSlots.Any(armSlot =>
+                    armSignatures.TryGetValue(armSlot, out string? armSignature) &&
+                    string.Equals(targetSlot.Value, armSignature, StringComparison.Ordinal)))
+                .Select(targetSlot => targetSlot.Key)
+                .Order()
+                .ToArray();
+            if (matchingArmSlots.Length != 1 ||
+                resolvedSlots is not null && !resolvedSlots.SequenceEqual(matchingArmSlots))
+            {
+                return [];
+            }
+
+            resolvedSlots = matchingArmSlots.ToArray();
         }
 
         return resolvedSlots ?? [];
