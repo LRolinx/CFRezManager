@@ -1002,6 +1002,9 @@ public partial class MainWindow : Window
             Func<string, int, IReadOnlyList<string>>? ltcPreviewVariantTextureSlotResolver = exportRoot is null
                 ? null
                 : await Task.Run(() => LithTechModelTextureConfigIndex.CreateLtcPreviewVariantTextureSlotResolver(exportRoot));
+            Func<string, int, IReadOnlyList<string>>? previewNormalizedBasenameTextureSlotResolver = exportRoot is null
+                ? null
+                : await Task.Run(() => LithTechModelTextureConfigIndex.CreatePreviewNormalizedBasenameTextureSlotResolver(exportRoot));
             Func<string, string, int, string, IReadOnlyList<string>>? meshTextureResolver = exportRoot is null
                 ? null
                 : await Task.Run(() => LithTechModelMeshTextureResolver.CreateResolver(exportRoot));
@@ -1032,6 +1035,7 @@ public partial class MainWindow : Window
                 inferredTextureSlotResolver,
                 weaponPreviewVariantTextureSlotResolver,
                 ltcPreviewVariantTextureSlotResolver,
+                previewNormalizedBasenameTextureSlotResolver,
                 meshTextureResolver,
                 progress));
             SetStatus(
@@ -1066,6 +1070,7 @@ public partial class MainWindow : Window
         Func<string, int, IReadOnlyList<string>>? inferredTextureSlotResolver,
         Func<string, int, IReadOnlyList<string>>? weaponPreviewVariantTextureSlotResolver,
         Func<string, int, IReadOnlyList<string>>? ltcPreviewVariantTextureSlotResolver,
+        Func<string, int, IReadOnlyList<string>>? previewNormalizedBasenameTextureSlotResolver,
         Func<string, string, int, string, IReadOnlyList<string>>? meshTextureResolver,
         IProgress<ModelObjExportProgress> progress)
     {
@@ -1088,7 +1093,8 @@ public partial class MainWindow : Window
                     meshTextureResolver,
                     InferredTextureSlotResolver: inferredTextureSlotResolver,
                     WeaponPreviewVariantTextureSlotResolver: weaponPreviewVariantTextureSlotResolver,
-                    LtcPreviewVariantTextureSlotResolver: ltcPreviewVariantTextureSlotResolver));
+                    LtcPreviewVariantTextureSlotResolver: ltcPreviewVariantTextureSlotResolver,
+                    PreviewNormalizedBasenameTextureSlotResolver: previewNormalizedBasenameTextureSlotResolver));
             }
             else
             {
