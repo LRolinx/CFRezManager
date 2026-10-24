@@ -5140,7 +5140,8 @@ internal static class LithTechModelTextureConfigIndex
         Dictionary<string, Dictionary<int, string?>> previewSlotUvByModelPath,
         HashSet<string> modelsWithSlotSpecificBindings)
     {
-        string[] variantSuffixes = ["_WOMAN_BL", "_WOMAN_GR", "_WOMAN_SP", "_BL", "_GR", "_SP"];
+        // Motion LTBs may reuse the base item's direct texture after the slot/UV checks below.
+        string[] variantSuffixes = ["_M-motion", "_WOMAN_BL", "_WOMAN_GR", "_WOMAN_SP", "_BL", "_GR", "_SP"];
         var baseModelPathsByStem = modelItemsByPlayerViewRolePath.Keys
             .Where(path => !variantSuffixes.Any(suffix => Path.GetFileName(path).EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))
             .GroupBy(path => NormalizeLooseKey(Path.GetFileName(path)), StringComparer.OrdinalIgnoreCase)
@@ -5197,9 +5198,15 @@ internal static class LithTechModelTextureConfigIndex
             }
 
             var candidateTexturesBySlot = new Dictionary<int, HashSet<string>>();
+            const string motionSuffix = "_M-motion";
+            string? exactMotionParentPath = targetModelPath.EndsWith(motionSuffix, StringComparison.OrdinalIgnoreCase)
+                ? NormalizeModelResourcePath(targetModelPath[..^motionSuffix.Length])
+                : null;
             foreach (string donorModelPath in donorModelPaths)
             {
                 if (string.Equals(donorModelPath, targetModelPath, StringComparison.OrdinalIgnoreCase) ||
+                    (exactMotionParentPath is not null &&
+                     !string.Equals(donorModelPath, exactMotionParentPath, StringComparison.OrdinalIgnoreCase)) ||
                     !modelItemsByPlayerViewRolePath.TryGetValue(donorModelPath, out ExplorerItem[]? donorItems) ||
                     !TryDecodeConsistentPlayerViewModelDocuments(donorItems, decodedModels, out List<LithTechModelDocument> donorDocuments) ||
                     !byModelPath.TryGetValue(donorModelPath, out Dictionary<int, string?>? donorDirectSlots))
