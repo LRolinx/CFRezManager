@@ -4994,28 +4994,9 @@ internal static class LithTechModelTextureConfigIndex
                 return false;
             }
 
-            bool hasPairedHandArmSuffixes = document.Meshes.Any(mesh => mesh.Name.EndsWith("_H", StringComparison.OrdinalIgnoreCase)) &&
-                                            document.Meshes.Any(mesh => mesh.Name.EndsWith("_A", StringComparison.OrdinalIgnoreCase));
-            var handArmSlots = new HashSet<int>();
-            foreach (LithTechMesh mesh in document.Meshes)
+            if (!TryGetPlayerViewHandArmTextureSlots(document, out HashSet<int> handArmSlots))
             {
-                string normalizedName = NormalizeLooseKey(mesh.Name);
-                bool isHand = normalizedName.StartsWith("fviewhand", StringComparison.Ordinal) ||
-                              normalizedName == "hand" ||
-                              hasPairedHandArmSuffixes && mesh.Name.EndsWith("_H", StringComparison.OrdinalIgnoreCase);
-                bool isArm = normalizedName.StartsWith("fviewarm", StringComparison.Ordinal) ||
-                             normalizedName.StartsWith("fviewam", StringComparison.Ordinal) ||
-                             normalizedName == "arm" ||
-                             hasPairedHandArmSuffixes && mesh.Name.EndsWith("_A", StringComparison.OrdinalIgnoreCase);
-                if (isHand && isArm)
-                {
-                    return false;
-                }
-
-                if (isHand || isArm)
-                {
-                    handArmSlots.UnionWith(mesh.TextureSlotIndices ?? []);
-                }
+                return false;
             }
 
             int[] nonArmSlots = modelSlots.Except(handArmSlots).Order().ToArray();
@@ -5028,6 +5009,54 @@ internal static class LithTechModelTextureConfigIndex
         }
 
         return slotIndex >= 0;
+    }
+
+    private static bool IsPlayerViewHandOrArmTextureSlot(
+        IReadOnlyList<LithTechModelDocument> documents,
+        int slotIndex)
+    {
+        foreach (LithTechModelDocument document in documents)
+        {
+            if (!TryGetPlayerViewHandArmTextureSlots(document, out HashSet<int> handArmSlots) ||
+                handArmSlots.Contains(slotIndex))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryGetPlayerViewHandArmTextureSlots(
+        LithTechModelDocument document,
+        out HashSet<int> handArmSlots)
+    {
+        handArmSlots = new HashSet<int>();
+        bool hasPairedHandArmSuffixes = document.Meshes.Any(mesh => mesh.Name.EndsWith("_H", StringComparison.OrdinalIgnoreCase)) &&
+                                        document.Meshes.Any(mesh => mesh.Name.EndsWith("_A", StringComparison.OrdinalIgnoreCase));
+        foreach (LithTechMesh mesh in document.Meshes)
+        {
+            string normalizedName = NormalizeLooseKey(mesh.Name);
+            bool isHand = normalizedName.StartsWith("fviewhand", StringComparison.Ordinal) ||
+                          normalizedName == "hand" ||
+                          hasPairedHandArmSuffixes && mesh.Name.EndsWith("_H", StringComparison.OrdinalIgnoreCase);
+            bool isArm = normalizedName.StartsWith("fviewarm", StringComparison.Ordinal) ||
+                         normalizedName.StartsWith("fviewam", StringComparison.Ordinal) ||
+                         normalizedName == "arm" ||
+                         hasPairedHandArmSuffixes && mesh.Name.EndsWith("_A", StringComparison.OrdinalIgnoreCase);
+            if (isHand && isArm)
+            {
+                handArmSlots.Clear();
+                return false;
+            }
+
+            if (isHand || isArm)
+            {
+                handArmSlots.UnionWith(mesh.TextureSlotIndices ?? []);
+            }
+        }
+
+        return true;
     }
 
     private static void AddVerifiedPreviewSlotUvTextureBindings(
@@ -5082,7 +5111,15 @@ internal static class LithTechModelTextureConfigIndex
                 continue;
             }
 
-            IReadOnlyDictionary<int, string>? targetSignatures = GetSlotUvTriangleSignatures(targetModelPath);
+            if (!modelItemsByPlayerViewRolePath.TryGetValue(targetModelPath, out ExplorerItem[]? targetItems) ||
+                !TryDecodeConsistentPlayerViewModelDocuments(targetItems, decodedModels, out List<LithTechModelDocument> targetDocuments) ||
+                targetDocuments.Count == 0)
+            {
+                continue;
+            }
+
+            IReadOnlyDictionary<int, string>? targetSignatures = GetConsistentTextureSlotUvTriangleSignatures(targetDocuments);
+            slotUvTriangleSignaturesByModelPath[targetModelPath] = targetSignatures;
             if (targetSignatures is null)
             {
                 continue;
@@ -5095,6 +5132,7 @@ internal static class LithTechModelTextureConfigIndex
                     !modelItemsByPlayerViewRolePath.TryGetValue(donorModelPath, out ExplorerItem[]? donorItems) ||
                     !TryDecodeConsistentPlayerViewModelDocuments(donorItems, decodedModels, out List<LithTechModelDocument> donorDocuments) ||
                     !TryGetUniquePlayerViewNonArmTextureSlot(donorDocuments, out int donorSlotIndex) ||
+                    IsPlayerViewHandOrArmTextureSlot(targetDocuments, donorSlotIndex) ||
                     !targetSignatures.TryGetValue(donorSlotIndex, out string? targetSignature) ||
                     !byModelPath.TryGetValue(donorModelPath, out Dictionary<int, string?>? donorDirectSlots) ||
                     !donorDirectSlots.TryGetValue(donorSlotIndex, out string? directTexturePath) ||
