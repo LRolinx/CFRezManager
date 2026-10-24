@@ -27,7 +27,9 @@ internal sealed record LithTechObjExportSource(
     Func<string, int, IReadOnlyList<string>>? LtcPreviewVariantTextureSlotResolver = null,
     Func<string, string, int, IReadOnlyList<string>>? LtcPreviewVariantTextureContextSlotResolver = null,
     Func<string, int, IReadOnlyList<string>>? PreviewNormalizedBasenameTextureSlotResolver = null,
-    Func<string, int, IReadOnlyList<string>>? VariantSlotUvTextureSlotResolver = null);
+    Func<string, int, IReadOnlyList<string>>? VariantSlotUvTextureSlotResolver = null,
+    Func<string, int, IReadOnlyList<string>>? MotionParentSlotTextureSlotResolver = null,
+    Func<string, string, int, IReadOnlyList<string>>? MotionParentContextSlotResolver = null);
 
 internal sealed record LithTechObjExportResult(
     string ObjPath,
@@ -409,6 +411,18 @@ internal static class LithTechObjExporter
                 }
             }
 
+            if (references.Count == 0 && useContextBinding)
+            {
+                references = source.MotionParentContextSlotResolver?.Invoke(modelReference, source.TextureContext!, skinSlotIndex) ?? [];
+                if (references.Count > 0) resolverName = "motion-parent-slot-derived";
+            }
+
+            if (references.Count == 0 && !useContextBinding)
+            {
+                references = source.MotionParentSlotTextureSlotResolver?.Invoke(modelReference, skinSlotIndex) ?? [];
+                if (references.Count > 0) resolverName = "motion-parent-slot-derived";
+            }
+
             if (references.Count == 0 && source.MeshTextureResolver is not null)
             {
                 IReadOnlyList<string> meshReferences = source.MeshTextureResolver(
@@ -703,6 +717,13 @@ internal static class LithTechObjExporter
                         source.TextureContext,
                         slotIndex) ?? [];
                 }
+                if (slotTextures.Count == 0)
+                {
+                    slotTextures = source.MotionParentContextSlotResolver?.Invoke(
+                        slotModelReference,
+                        source.TextureContext,
+                        slotIndex) ?? [];
+                }
 
                 foreach (string slotTexture in slotTextures)
                 {
@@ -721,7 +742,9 @@ internal static class LithTechObjExporter
                 }
             }
         }
-        else if (source.TextureSlotResolver is not null || source.WeaponPreviewVariantTextureSlotResolver is not null)
+        else if (source.TextureSlotResolver is not null ||
+                 source.WeaponPreviewVariantTextureSlotResolver is not null ||
+                 source.MotionParentSlotTextureSlotResolver is not null)
         {
             foreach (int slotIndex in (mesh.TextureSlotIndices ?? []).Distinct())
             {
@@ -733,6 +756,10 @@ internal static class LithTechObjExporter
                 if (slotTextures.Count == 0)
                 {
                     slotTextures = source.InferredTextureSlotResolver?.Invoke(slotModelReference, slotIndex) ?? [];
+                }
+                if (slotTextures.Count == 0)
+                {
+                    slotTextures = source.MotionParentSlotTextureSlotResolver?.Invoke(slotModelReference, slotIndex) ?? [];
                 }
 
                 foreach (string slotTexture in slotTextures)
