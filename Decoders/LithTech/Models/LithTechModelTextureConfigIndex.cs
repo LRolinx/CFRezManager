@@ -5224,6 +5224,201 @@ internal static class LithTechModelTextureConfigIndex
             }
         }
 
+        AddExactStemDtxBindingsForIdenticalModelCopies();
+
+        // Skin variants can reuse the exact same model bytes when a table
+        // binding for the source slot points to its same-stem DTX. Bind the
+        // variant's unique same-stem atlas only after the slot UVs agree.
+        void AddExactStemDtxBindingsForIdenticalModelCopies()
+        {
+            var playerViewTexturePathsByBaseName = textureItemsByLogicalPath.Keys
+                .Where(path => path.StartsWith("ModelTextures/PLAYERVIEW/", StringComparison.OrdinalIgnoreCase))
+                .GroupBy(path => Path.GetFileNameWithoutExtension(path), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.OrdinalIgnoreCase);
+            var tableMappedTexturesByModelSlot = new Dictionary<string, Dictionary<int, HashSet<string>>>(StringComparer.OrdinalIgnoreCase);
+            foreach ((string modelPath, Dictionary<int, string?> slots) in byModelPath)
+            {
+                foreach ((int slot, string? texturePath) in slots)
+                {
+                    AddTableMappedTexturePath(modelPath, slot, texturePath);
+                }
+            }
+
+            foreach ((string contextKey, Dictionary<int, string?> slots) in byModelContext)
+            {
+                int separator = contextKey.IndexOf('\0');
+                if (separator <= 0)
+                {
+                    continue;
+                }
+
+                string modelPath = contextKey[..separator];
+                foreach ((int slot, string? texturePath) in slots)
+                {
+                    AddTableMappedTexturePath(modelPath, slot, texturePath);
+                }
+            }
+
+            var candidateDonorsBySlot = new Dictionary<string, Dictionary<int, HashSet<string>>>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (string targetModelPath in modelItemsByPlayerViewRolePath.Keys)
+            {
+                if (!targetModelPath.StartsWith("Models/PLAYERVIEW/PV-", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                string targetStem = Path.GetFileName(targetModelPath);
+                string targetTexturePath = "ModelTextures/PLAYERVIEW/" + targetStem + ".dtx";
+                if (!playerViewTexturePathsByBaseName.TryGetValue(targetStem, out string[]? targetTexturePaths) ||
+                    targetTexturePaths.Length != 1 ||
+                    !string.Equals(targetTexturePaths[0], targetTexturePath, StringComparison.OrdinalIgnoreCase) ||
+                    !HasConsistentDecodableDtxCopies(targetTexturePath, textureItemsByLogicalPath, verifiedTexturePathCache) ||
+                    !modelItemsByPlayerViewRolePath.TryGetValue(targetModelPath, out ExplorerItem[]? targetItems) ||
+                    !TryDecodeConsistentPlayerViewModelDocuments(targetItems, decodedModels, out List<LithTechModelDocument> targetDocuments) ||
+                    targetDocuments.Count == 0)
+                {
+                    continue;
+                }
+
+                string? targetModelHash = GetUniqueArchivedModelHash(targetItems);
+                if (targetModelHash is null)
+                {
+                    continue;
+                }
+
+                IReadOnlyDictionary<int, string>? targetSignatures = GetSlotUvTriangleSignatures(targetModelPath);
+                if (targetSignatures is null)
+                {
+                    continue;
+                }
+
+                string targetDirectory = Path.GetDirectoryName(targetModelPath)?.Replace('\\', '/') ?? string.Empty;
+                int separatorIndex = targetStem.LastIndexOf('_');
+                while (separatorIndex > 0)
+                {
+                    string donorModelPath = targetDirectory + "/" + targetStem[..separatorIndex];
+                    separatorIndex = targetStem.LastIndexOf('_', separatorIndex - 1);
+                    if (!tableMappedTexturesByModelSlot.TryGetValue(donorModelPath, out Dictionary<int, HashSet<string>>? donorBindings) ||
+                        !modelItemsByPlayerViewRolePath.TryGetValue(donorModelPath, out ExplorerItem[]? donorItems) ||
+                        !string.Equals(targetModelHash, GetUniqueArchivedModelHash(donorItems), StringComparison.OrdinalIgnoreCase) ||
+                        !TryDecodeConsistentPlayerViewModelDocuments(donorItems, decodedModels, out List<LithTechModelDocument> donorDocuments) ||
+                        donorDocuments.Count == 0)
+                    {
+                        continue;
+                    }
+
+                    string donorStem = Path.GetFileName(donorModelPath);
+                    string donorTexturePath = "ModelTextures/PLAYERVIEW/" + donorStem + ".dtx";
+                    if (!HasConsistentDecodableDtxCopies(donorTexturePath, textureItemsByLogicalPath, verifiedTexturePathCache))
+                    {
+                        continue;
+                    }
+
+                    int[] donorSlots = donorBindings
+                        .Where(binding => binding.Value.Contains(donorTexturePath))
+                        .Select(binding => binding.Key)
+                        .ToArray();
+                    if (donorSlots.Length == 0)
+                    {
+                        continue;
+                    }
+
+                    IReadOnlyDictionary<int, string>? donorSignatures = GetSlotUvTriangleSignatures(donorModelPath);
+                    if (donorSignatures is null)
+                    {
+                        continue;
+                    }
+
+                    foreach (int slot in donorSlots)
+                    {
+                        if (slot < 0 ||
+                            IsPlayerViewHandOrArmTextureSlot(donorDocuments, slot) ||
+                            IsPlayerViewHandOrArmTextureSlot(targetDocuments, slot) ||
+                            !targetSignatures.TryGetValue(slot, out string? targetSignature) ||
+                            !donorSignatures.TryGetValue(slot, out string? donorSignature) ||
+                            !string.Equals(targetSignature, donorSignature, StringComparison.Ordinal) ||
+                            byModelPath.TryGetValue(targetModelPath, out Dictionary<int, string?>? targetPathSlots) &&
+                            targetPathSlots.ContainsKey(slot) ||
+                            contextTexturesByModelPath.TryGetValue(targetModelPath, out Dictionary<int, HashSet<string?>>? targetContextSlots) &&
+                            targetContextSlots.ContainsKey(slot) ||
+                            previewSlotUvByModelPath.TryGetValue(targetModelPath, out Dictionary<int, string?>? inferredTargetSlots) &&
+                            inferredTargetSlots.ContainsKey(slot))
+                        {
+                            continue;
+                        }
+
+                        if (!candidateDonorsBySlot.TryGetValue(targetModelPath, out Dictionary<int, HashSet<string>>? targetCandidates))
+                        {
+                            candidateDonorsBySlot[targetModelPath] = targetCandidates = [];
+                        }
+
+                        if (!targetCandidates.TryGetValue(slot, out HashSet<string>? donors))
+                        {
+                            targetCandidates[slot] = donors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        }
+
+                        donors.Add(donorModelPath);
+                    }
+                }
+            }
+
+            void AddTableMappedTexturePath(string modelPath, int slot, string? texturePath)
+            {
+                if (string.IsNullOrWhiteSpace(texturePath))
+                {
+                    return;
+                }
+
+                if (!tableMappedTexturesByModelSlot.TryGetValue(modelPath, out Dictionary<int, HashSet<string>>? modelSlots))
+                {
+                    tableMappedTexturesByModelSlot[modelPath] = modelSlots = [];
+                }
+
+                if (!modelSlots.TryGetValue(slot, out HashSet<string>? textures))
+                {
+                    modelSlots[slot] = textures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                }
+
+                textures.Add(NormalizeKey(texturePath));
+            }
+
+            foreach ((string targetModelPath, Dictionary<int, HashSet<string>> slotCandidates) in candidateDonorsBySlot)
+            {
+                foreach ((int slot, HashSet<string> donorPaths) in slotCandidates)
+                {
+                    if (donorPaths.Count != 1)
+                    {
+                        continue;
+                    }
+
+                    string texturePath = "ModelTextures/PLAYERVIEW/" + Path.GetFileName(targetModelPath) + ".dtx";
+                    AddModelTextureSlotMapping(previewSlotUvByModelPath, targetModelPath, slot, texturePath);
+                    modelsWithSlotSpecificBindings.Add(targetModelPath);
+                }
+            }
+
+            static string? GetUniqueArchivedModelHash(IReadOnlyList<ExplorerItem> items)
+            {
+                if (items.Count == 0)
+                {
+                    return null;
+                }
+
+                string?[] hashes = items.Select(item => item.ArchiveFile?.Md5).ToArray();
+                if (hashes.Any(string.IsNullOrWhiteSpace))
+                {
+                    return null;
+                }
+
+                string[] unique = hashes
+                    .Select(hash => hash!)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                return unique.Length == 1 ? unique[0] : null;
+            }
+        }
+
         IReadOnlyDictionary<int, string>? GetSlotUvTriangleSignatures(string modelPath)
         {
             if (slotUvTriangleSignaturesByModelPath.TryGetValue(modelPath, out IReadOnlyDictionary<int, string>? cached))
