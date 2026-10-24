@@ -1005,9 +1005,9 @@ public partial class MainWindow : Window
             Func<string, int, IReadOnlyList<string>>? previewNormalizedBasenameTextureSlotResolver = exportRoot is null
                 ? null
                 : await Task.Run(() => LithTechModelTextureConfigIndex.CreatePreviewNormalizedBasenameTextureSlotResolver(exportRoot));
-            Func<string, int, IReadOnlyList<string>>? previewSlotUvTextureSlotResolver = exportRoot is null
+            Func<string, int, IReadOnlyList<string>>? variantSlotUvTextureSlotResolver = exportRoot is null
                 ? null
-                : await Task.Run(() => LithTechModelTextureConfigIndex.CreatePreviewSlotUvTextureSlotResolver(exportRoot));
+                : await Task.Run(() => LithTechModelTextureConfigIndex.CreateVariantSlotUvTextureSlotResolver(exportRoot));
             Func<string, string, int, string, IReadOnlyList<string>>? meshTextureResolver = exportRoot is null
                 ? null
                 : await Task.Run(() => LithTechModelMeshTextureResolver.CreateResolver(exportRoot));
@@ -1039,7 +1039,7 @@ public partial class MainWindow : Window
                 weaponPreviewVariantTextureSlotResolver,
                 ltcPreviewVariantTextureSlotResolver,
                 previewNormalizedBasenameTextureSlotResolver,
-                previewSlotUvTextureSlotResolver,
+                variantSlotUvTextureSlotResolver,
                 meshTextureResolver,
                 progress));
             SetStatus(
@@ -1075,7 +1075,7 @@ public partial class MainWindow : Window
         Func<string, int, IReadOnlyList<string>>? weaponPreviewVariantTextureSlotResolver,
         Func<string, int, IReadOnlyList<string>>? ltcPreviewVariantTextureSlotResolver,
         Func<string, int, IReadOnlyList<string>>? previewNormalizedBasenameTextureSlotResolver,
-        Func<string, int, IReadOnlyList<string>>? previewSlotUvTextureSlotResolver,
+        Func<string, int, IReadOnlyList<string>>? variantSlotUvTextureSlotResolver,
         Func<string, string, int, string, IReadOnlyList<string>>? meshTextureResolver,
         IProgress<ModelObjExportProgress> progress)
     {
@@ -1100,7 +1100,7 @@ public partial class MainWindow : Window
                     WeaponPreviewVariantTextureSlotResolver: weaponPreviewVariantTextureSlotResolver,
                     LtcPreviewVariantTextureSlotResolver: ltcPreviewVariantTextureSlotResolver,
                     PreviewNormalizedBasenameTextureSlotResolver: previewNormalizedBasenameTextureSlotResolver,
-                    PreviewSlotUvTextureSlotResolver: previewSlotUvTextureSlotResolver));
+                    VariantSlotUvTextureSlotResolver: variantSlotUvTextureSlotResolver));
             }
             else
             {
