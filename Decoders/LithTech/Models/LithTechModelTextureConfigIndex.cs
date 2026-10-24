@@ -5227,8 +5227,8 @@ internal static class LithTechModelTextureConfigIndex
         AddVerifiedSkinDtxBindingsForIdenticalModelCopies();
 
         // Identical skin variants may reuse a table-bound slot from a prefix
-        // model or a same-family sibling when the matching DTX is unique and
-        // the slot UVs agree.
+        // model or same-family sibling when the matching main, numbered, or
+        // skin-suffixed alias DTX is unique and the slot UVs agree.
         void AddVerifiedSkinDtxBindingsForIdenticalModelCopies()
         {
             var playerViewTexturePathsByBaseName = textureItemsByLogicalPath.Keys
@@ -5483,20 +5483,33 @@ internal static class LithTechModelTextureConfigIndex
                         foreach (string sourceTexturePath in sourceTexturePaths)
                         {
                             if (string.Equals(sourceTexturePath, donorTexturePath, StringComparison.OrdinalIgnoreCase) ||
-                                !TryGetSiblingNumberedPartSuffix(sourceTexturePath, familyRootStem, donorStem, out string partSuffix) ||
                                 !HasConsistentDecodableDtxCopies(sourceTexturePath, textureItemsByLogicalPath, verifiedTexturePathCache))
                             {
                                 continue;
                             }
 
-                            string partNumber = partSuffix.TrimStart('_');
-                            var candidateTextureNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                            var candidateTextureNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                            if (TryGetSiblingNumberedPartSuffix(sourceTexturePath, familyRootStem, donorStem, out string partSuffix))
                             {
-                                targetStem + partSuffix,
-                                targetStem + "_" + partNumber,
-                                familyRootStem + partNumber + "_" + targetSkinSuffix,
-                                familyRootStem + "_" + partNumber + "_" + targetSkinSuffix
-                            };
+                                string partNumber = partSuffix.TrimStart('_');
+                                candidateTextureNames.Add(targetStem + partSuffix);
+                                candidateTextureNames.Add(targetStem + "_" + partNumber);
+                                candidateTextureNames.Add(familyRootStem + partNumber + "_" + targetSkinSuffix);
+                                candidateTextureNames.Add(familyRootStem + "_" + partNumber + "_" + targetSkinSuffix);
+                            }
+
+                            if (!string.IsNullOrEmpty(targetSkinSuffix) &&
+                                TryGetSiblingSkinTextureAlias(sourceTexturePath, familyRootStem, donorStem, out string aliasPrefix))
+                            {
+                                // Some skins bind a shared texture alias whose name ends with the skin suffix.
+                                candidateTextureNames.Add(aliasPrefix + "_" + targetSkinSuffix);
+                            }
+
+                            if (candidateTextureNames.Count == 0)
+                            {
+                                continue;
+                            }
+
                             var matchingTexturePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                             foreach (string candidateTextureName in candidateTextureNames)
                             {
@@ -5590,6 +5603,34 @@ internal static class LithTechModelTextureConfigIndex
 
                 partSuffix = remainder[..digitEnd];
                 return true;
+            }
+
+            static bool TryGetSiblingSkinTextureAlias(
+                string texturePath,
+                string familyRootStem,
+                string donorStem,
+                out string aliasPrefix)
+            {
+                aliasPrefix = string.Empty;
+                string textureDirectory = Path.GetDirectoryName(texturePath)?.Replace('\\', '/') ?? string.Empty;
+                string familyPrefix = familyRootStem + "_";
+                if (!string.Equals(textureDirectory, "ModelTextures/PLAYERVIEW", StringComparison.OrdinalIgnoreCase) ||
+                    !donorStem.StartsWith(familyPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
+                string donorSkinSuffix = donorStem[familyPrefix.Length..];
+                string textureStem = Path.GetFileNameWithoutExtension(texturePath);
+                string expectedSuffix = "_" + donorSkinSuffix;
+                if (textureStem.Length <= expectedSuffix.Length ||
+                    !textureStem.EndsWith(expectedSuffix, StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
+                aliasPrefix = textureStem[..^expectedSuffix.Length];
+                return aliasPrefix.Length > 0;
             }
 
             void AddCandidateBinding(string targetModelPath, int slot, string donorModelPath, string texturePath)
