@@ -5483,7 +5483,7 @@ internal static class LithTechModelTextureConfigIndex
                         foreach (string sourceTexturePath in sourceTexturePaths)
                         {
                             if (string.Equals(sourceTexturePath, donorTexturePath, StringComparison.OrdinalIgnoreCase) ||
-                                !TryGetNumberedPartSuffix(sourceTexturePath, donorStem, out string partSuffix) ||
+                                !TryGetSiblingNumberedPartSuffix(sourceTexturePath, familyRootStem, donorStem, out string partSuffix) ||
                                 !HasConsistentDecodableDtxCopies(sourceTexturePath, textureItemsByLogicalPath, verifiedTexturePathCache))
                             {
                                 continue;
@@ -5543,6 +5543,53 @@ internal static class LithTechModelTextureConfigIndex
                 }
 
                 return null;
+            }
+
+            static bool TryGetSiblingNumberedPartSuffix(
+                string texturePath,
+                string familyRootStem,
+                string donorStem,
+                out string partSuffix)
+            {
+                if (TryGetNumberedPartSuffix(texturePath, donorStem, out partSuffix))
+                {
+                    return true;
+                }
+
+                partSuffix = string.Empty;
+                string textureDirectory = Path.GetDirectoryName(texturePath)?.Replace('\\', '/') ?? string.Empty;
+                string familyPrefix = familyRootStem + "_";
+                if (!string.Equals(textureDirectory, "ModelTextures/PLAYERVIEW", StringComparison.OrdinalIgnoreCase) ||
+                    !donorStem.StartsWith(familyPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
+                string donorSkinSuffix = donorStem[familyPrefix.Length..];
+                string textureStem = Path.GetFileNameWithoutExtension(texturePath);
+                if (!textureStem.StartsWith(familyRootStem, StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
+                string remainder = textureStem[familyRootStem.Length..];
+                int digitStart = remainder.StartsWith('_') ? 1 : 0;
+                int digitEnd = digitStart;
+                while (digitEnd < remainder.Length && char.IsAsciiDigit(remainder[digitEnd]))
+                {
+                    digitEnd++;
+                }
+
+                if (digitEnd == digitStart ||
+                    digitEnd >= remainder.Length ||
+                    remainder[digitEnd] != '_' ||
+                    !string.Equals(remainder[(digitEnd + 1)..], donorSkinSuffix, StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
+                partSuffix = remainder[..digitEnd];
+                return true;
             }
 
             void AddCandidateBinding(string targetModelPath, int slot, string donorModelPath, string texturePath)
