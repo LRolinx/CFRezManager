@@ -24,6 +24,12 @@ internal static class LithTechModelTextureConfigIndex
         int SourceSlotIndex,
         string MeshName);
 
+    private sealed record VerifiedSceneModelTextureSlotAlias(
+        string TargetModelPath,
+        int TargetSlotIndex,
+        string TexturePath,
+        IReadOnlyList<string> MeshNames);
+
     private const int MaxConfigBytes = 1024 * 1024;
     private const int MaxCftBytes = 4 * 1024 * 1024;
     private const int MaxLtcBytes = 16 * 1024 * 1024;
@@ -111,6 +117,20 @@ internal static class LithTechModelTextureConfigIndex
             "Models/Character/AIMode/AI1_EvilDen/AI_BOSS_FireSandDragon", 0, "Dark_SandDragon_02"),
         new("Models/Character/AIMode/AI1_EvilDen/AI_EvilDen_CutScene02_Fire_M-motion", 2,
             "Models/Character/AIMode/AI1_EvilDen/AI_BOSS_FireSandDragon", 1, "Dark_SandDragon_03")
+    ];
+
+    // The EvilDen cutscene's three stone meshes share slot 4. Their UV layouts
+    // are consistent across physical model copies and sample the scene's stone-gate DTX.
+    private static readonly VerifiedSceneModelTextureSlotAlias[] VerifiedSceneModelTextureSlotAliases =
+    [
+        new("Models/Character/AIMode/AI1_EvilDen/AI_EvilDen_CutScene02_Dark", 4,
+            "ModelTextures/Character/AIMode/AI1_EvilDen/AI_Stone.dtx", ["stone01", "stone02", "stone03"]),
+        new("Models/Character/AIMode/AI1_EvilDen/AI_EvilDen_CutScene02_Dark_M-motion", 4,
+            "ModelTextures/Character/AIMode/AI1_EvilDen/AI_Stone.dtx", ["stone01", "stone02", "stone03"]),
+        new("Models/Character/AIMode/AI1_EvilDen/AI_EvilDen_CutScene02_Fire", 4,
+            "ModelTextures/Character/AIMode/AI1_EvilDen/AI_Stone.dtx", ["stone01", "stone02", "stone03"]),
+        new("Models/Character/AIMode/AI1_EvilDen/AI_EvilDen_CutScene02_Fire_M-motion", 4,
+            "ModelTextures/Character/AIMode/AI1_EvilDen/AI_Stone.dtx", ["stone01", "stone02", "stone03"])
     ];
 
     public static Func<IEnumerable<string>, IReadOnlyList<string>>? CreateResolver(ExplorerItem root)
@@ -4433,6 +4453,13 @@ internal static class LithTechModelTextureConfigIndex
             byModelPath,
             modelsWithSlotSpecificBindings);
 
+        AddVerifiedSceneModelTextureSlotAliases(
+            resourceItems,
+            modelItemsByPath,
+            decodedModels,
+            byModelPath,
+            modelsWithSlotSpecificBindings);
+
         return new ModelTextureSlotDictionary(
             byModelPath,
             byModelContext,
@@ -5698,6 +5725,100 @@ internal static class LithTechModelTextureConfigIndex
             }
 
             return layoutCache[cacheKey] = expectedLayouts;
+        }
+    }
+
+    private static void AddVerifiedSceneModelTextureSlotAliases(
+        IReadOnlyList<ExplorerItem> resourceItems,
+        IReadOnlyDictionary<string, ExplorerItem[]> modelItemsByPath,
+        Dictionary<string, LithTechModelDocument?> decodedModels,
+        Dictionary<string, Dictionary<int, string?>> byModelPath,
+        HashSet<string> modelsWithSlotSpecificBindings)
+    {
+        foreach (VerifiedSceneModelTextureSlotAlias alias in VerifiedSceneModelTextureSlotAliases)
+        {
+            string targetModelPath = NormalizeExtensionlessModelReference(alias.TargetModelPath);
+            string targetKey = GetLogicalModelResourcePath(targetModelPath + ".ltb");
+            string[] expectedMeshNames = alias.MeshNames.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            if (targetModelPath.Length == 0 || expectedMeshNames.Length != alias.MeshNames.Count ||
+                !modelItemsByPath.TryGetValue(targetKey, out ExplorerItem[]? targetCopies) || targetCopies.Length == 0 ||
+                byModelPath.TryGetValue(targetModelPath, out Dictionary<int, string?>? targetSlots) &&
+                targetSlots.ContainsKey(alias.TargetSlotIndex) ||
+                !HasConsistentPhysicalResourceCopies(resourceItems, alias.TexturePath))
+            {
+                continue;
+            }
+
+            var expectedNames = expectedMeshNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            string[]? expectedLayouts = null;
+            foreach (ExplorerItem copy in targetCopies)
+            {
+                LithTechModelDocument? document = TryDecodeSlotInheritanceModel(
+                    copy,
+                    GetModelResourcePath(copy),
+                    decodedModels);
+                if (document is null)
+                {
+                    expectedLayouts = null;
+                    break;
+                }
+
+                LithTechMesh[] slotMeshes = document.Meshes
+                    .Where(mesh => (mesh.TextureSlotIndices ?? []).Contains(alias.TargetSlotIndex))
+                    .ToArray();
+                if (slotMeshes.Length != expectedMeshNames.Length)
+                {
+                    expectedLayouts = null;
+                    break;
+                }
+
+                var observedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var layouts = new List<string>(slotMeshes.Length);
+                foreach (LithTechMesh mesh in slotMeshes)
+                {
+                    if (!mesh.HasAuthoritativeTextureBindings ||
+                        mesh.TextureSlotIndices is not { Count: 1 } meshSlots || meshSlots[0] != alias.TargetSlotIndex ||
+                        mesh.RenderStyleIndex is not int renderStyleIndex ||
+                        !string.IsNullOrWhiteSpace(mesh.TexturePath) ||
+                        !expectedNames.Contains(mesh.Name) || !observedNames.Add(mesh.Name))
+                    {
+                        layouts.Clear();
+                        break;
+                    }
+
+                    string? uvSignature = GetVerifiedTextureUvTriangleSignature(mesh);
+                    if (uvSignature is null)
+                    {
+                        layouts.Clear();
+                        break;
+                    }
+
+                    layouts.Add($"{mesh.Name.Trim().ToUpperInvariant()}\0{renderStyleIndex}\0{uvSignature}");
+                }
+
+                if (layouts.Count != slotMeshes.Length || observedNames.Count != expectedMeshNames.Length)
+                {
+                    expectedLayouts = null;
+                    break;
+                }
+
+                string[] currentLayouts = layouts.Order(StringComparer.Ordinal).ToArray();
+                if (expectedLayouts is not null && !expectedLayouts.SequenceEqual(currentLayouts, StringComparer.Ordinal))
+                {
+                    expectedLayouts = null;
+                    break;
+                }
+
+                expectedLayouts ??= currentLayouts;
+            }
+
+            if (expectedLayouts is null || expectedLayouts.Length != expectedMeshNames.Length)
+            {
+                continue;
+            }
+
+            AddModelTextureSlotMapping(byModelPath, targetModelPath, alias.TargetSlotIndex, alias.TexturePath);
+            modelsWithSlotSpecificBindings.Add(targetModelPath);
         }
     }
 
