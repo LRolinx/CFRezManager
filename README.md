@@ -254,6 +254,7 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
   | 1997 | 1997 | `PV-AN94_SpaceShip` | 2：`PV-AN94_SpaceShip.DTX` |
 
   某些模型的其他槽仍未解析。LTC 贴图路径若在多个归档层有同名实体副本，只有副本均能解码、且 SHA-256 一致时才选择确定的物理路径；否则保持未映射。
+- 模型组 `3000000` 的道具 `812` 有预览编号冲突：唯一的 `WeaponModel.ItemId` 行关联 `ModelId:812` 和 LTC `WeaponIndex:812`，但 `WeaponPreview` 记录的 `ModelId` 是 `1255`。`item:812` 聚焦导出确认 `PV-AWM_A_InfernalDragon` 槽 2、3 分别使用 `PV-AWM_A_InfernalDragon.DTX`、`PV-AWM_A_InfernalDragon01.DTX`；LTC 预览模型 `QV-AWM_InfernalDragon_preview` 槽 0 使用前一张 PV 贴图。BF005.LTC 为 QV 男、女世界模型槽 0 指定 `QV-AWM_A_InfernalDragon.DTX`，但当前 `rez`、`rez2` 的同路径 DTX 内容哈希不同，槽位报告保持未解析；OBJ 中由文件名推断出的贴图不算已确认绑定。`preview:3000000:812` 也保持未解析。手、臂槽仍未解析；六份目标 LTB 均成功解码，无几何跳过。报告位于 `artifacts/mapping-audit/item-812-focused-20261025/`。
 - 模型组 `3000000` 的 CowRifle 两个道具共用 `PV-CowRifle_MOS_AK47`，但贴图身份不同：`item:2554` 经 `WeaponModel.ModelId:4555` / LTC `WeaponIndex:4555` 使用 `QV-CowRifle_MOS_AK47_NobleGold.DTX` 和 `PV-CowRifle_MOS_AK47_NobleGold.DTX`；`item:2575` 经 `ModelId:4554` / `WeaponIndex:4554` 使用不带 `NobleGold` 的两张 DTX。两者的 QV 男、女世界模型槽 0 均已聚焦导出验证；2554 的 `QV-CowRifle_MOS_AK47_NobleGold_preview` 槽 0 使用 PV NobleGold DTX。PView 基模槽 2 直接映射各自 DTX，BL 变体槽 2 按 LTC 规则推导同一贴图；GR、WOMAN_BL、WOMAN_GR 变体尚未通过完整副本和槽位布局校验，保持未映射。五个 PView 模型的 10 份物理副本均已解码，无几何跳过；世界模型导出及 `item:2554` 的 NobleGold 预览模型导出均无缺失贴图。报告位于 `artifacts/mapping-audit/item-1399-flashbang-focused-20261025/`。
 - 模型组 `3000000` 的 HuluXiongdi 道具经同组 `WeaponModel` 关联到以下 LTC 武器记录：
 
