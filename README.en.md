@@ -262,6 +262,16 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
   | 200 | 3022 | `PV-AK47_Knife_SteelEmpire_NobleGRN.DTX` | `PV-AK47_Knife_SteelEmpire_NobleGRN01.DTX` |
 
   Each context exports 13 meshes, resolving texture mappings on all 11 weapon meshes; the two hand/arm slots remain unbound. All six DTX files exist in the current install and decoded during export.
+- M4A1-S UnderTech mappings in model group `2000000` were checked against the current `WeaponPreview`, `WeaponModel`, and LTC records:
+
+  | Item IDs | Table link | PView model | World model slot 0 | PView slot 2 |
+  | --- | --- | --- | --- | --- |
+  | 2190, 2192, 2194, 2195 | `WeaponModel.ModelId`: 3419, 3423, 3425, 3426 | `PV-M4A1_S_UnderTech` | `QV-M4A1_S_UnderTech_IvoryRed.DTX` | `PV-M4A1_S_UnderTech_IvoryRed.DTX` |
+  | 2191, 2193, 2196 | `WeaponModel.ModelId`: 3421, 3424, 3427 | `PV-M4A1_S_UnderTech_Chg` | `QV-M4A1_S_UnderTech_IvoryRed.DTX` | `PV-M4A1_S_UnderTech_IvoryRed.DTX` |
+  | 3746 | Preview model/`WeaponIndex`: 7404; use `preview:2000000:3746` because there is no matching `WeaponModel.ItemId` row | `PV-M4A1_S_UnderTech` | `QV-M4A1_S_UnderTech_Gold.DTX` | `PV-M4A1_S_UnderTech_Gold.DTX` |
+  | 3749 | Preview model/`WeaponIndex`: 7406; use `preview:2000000:3749` because there is no matching `WeaponModel.ItemId` row | `PV-M4A1_S_UnderTech_Chg` | `QV-M4A1_S_UnderTech_Gold.DTX` | `PV-M4A1_S_UnderTech_Gold.DTX` |
+
+  Items 2190–2196 use `item:<id>` contexts. BL, GR, and WOMAN_BL variants derive slot-2 textures from their LTC records. WOMAN_GR has no matching model record in the current LTC set, so slot 2 remains unresolved; hand and arm slots are also unbound. All four focused exports decoded the QV and PV DTX files.
 - Native LTB decoding retains per-mesh RenderStyle indices and distinguishes file-declared texture slots from inferred slots. OBJ export still writes a diffuse texture rather than recreating all RenderStyle effects.
 - If a character alias is ambiguous, use `row:rez\RF100\Table\CharacterType.CFT#701:BL` to select a skin by zero-based CFT row and side. When the table has a valid `RecordId`, use `recordid:rez\RF100\Table\CharacterType.CFT#<id>`; the two number domains stay separate.
 - `--scan-cfg`: scan CFG files, extract texture references, and write TXT/CSV reports.

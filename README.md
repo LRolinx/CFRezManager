@@ -263,6 +263,16 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
   | 200 | 3022 | `PV-AK47_Knife_SteelEmpire_NobleGRN.DTX` | `PV-AK47_Knife_SteelEmpire_NobleGRN01.DTX` |
 
   三种上下文各导出 13 个网格，11 个武器网格成功解析贴图；两个手臂槽仍未绑定。三组 DTX 均在当前安装中找到并成功导出。
+- 模型组 `2000000` 的 M4A1-S UnderTech 贴图已按当前 `WeaponPreview`、`WeaponModel` 和 LTC 记录核对：
+
+  | 道具编号 | 表关联 | PView 模型 | 世界模型槽 0 | PView 槽 2 |
+  | --- | --- | --- | --- | --- |
+  | 2190、2192、2194、2195 | `WeaponModel.ModelId`：3419、3423、3425、3426 | `PV-M4A1_S_UnderTech` | `QV-M4A1_S_UnderTech_IvoryRed.DTX` | `PV-M4A1_S_UnderTech_IvoryRed.DTX` |
+  | 2191、2193、2196 | `WeaponModel.ModelId`：3421、3424、3427 | `PV-M4A1_S_UnderTech_Chg` | `QV-M4A1_S_UnderTech_IvoryRed.DTX` | `PV-M4A1_S_UnderTech_IvoryRed.DTX` |
+  | 3746 | 预览模型/`WeaponIndex`：7404；用 `preview:2000000:3746`，无匹配的 `WeaponModel.ItemId` 行 | `PV-M4A1_S_UnderTech` | `QV-M4A1_S_UnderTech_Gold.DTX` | `PV-M4A1_S_UnderTech_Gold.DTX` |
+  | 3749 | 预览模型/`WeaponIndex`：7406；用 `preview:2000000:3749`，无匹配的 `WeaponModel.ItemId` 行 | `PV-M4A1_S_UnderTech_Chg` | `QV-M4A1_S_UnderTech_Gold.DTX` | `PV-M4A1_S_UnderTech_Gold.DTX` |
+
+  2190–2196 使用 `item:<编号>` 上下文。BL、GR、WOMAN_BL 变体会从对应 LTC 记录推导槽 2 贴图；WOMAN_GR 在当前 LTC 中没有对应模型记录，槽 2 保持未解析。手、臂槽也未绑定。四组聚焦导出均成功解码 QV 与 PV DTX。
 - 原生 LTB 解码保留每个网格的 RenderStyle 编号，并区分文件声明的材质槽与推测槽。OBJ 仍只导出漫反射贴图，不重建全部 RenderStyle 效果。
 - 角色别名有冲突时，可用 `row:rez\RF100\Table\CharacterType.CFT#701:BL` 按零基 CFT 行和阵营精确选择皮肤；表内存在有效 `RecordId` 时可用 `recordid:rez\RF100\Table\CharacterType.CFT#<编号>`，两种编号域互不混用。
 - `--scan-cfg`：扫描 CFG，提取贴图引用，输出 TXT/CSV 报告。
