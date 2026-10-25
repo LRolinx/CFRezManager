@@ -257,7 +257,7 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
   | 1997 | 1997 | `PV-AN94_SpaceShip` | 2：`PV-AN94_SpaceShip.DTX` |
 
   某些模型的其他槽仍未解析。LTC 贴图路径若在多个归档层有同名实体副本，DTX 副本均解码为相同尺寸和像素时可选择该路径；其他格式仍要求 SHA-256 一致。无法确认内容时保持未映射。
-- 模型组 `3000000` 的道具 `812` 有预览编号冲突：唯一的 `WeaponModel.ItemId` 行关联 `ModelId:812` 和 LTC `WeaponIndex:812`，但 `WeaponPreview` 记录的 `ModelId` 是 `1255`。`item:812` 聚焦导出确认 `PV-AWM_A_InfernalDragon` 槽 2、3 分别使用 `PV-AWM_A_InfernalDragon.DTX`、`PV-AWM_A_InfernalDragon01.DTX`；LTC 预览模型 `QV-AWM_InfernalDragon_preview` 槽 0 使用前一张 PV 贴图。BF005.LTC 为 QV 男、女世界模型槽 0 指定 `QV-AWM_A_InfernalDragon.DTX`，但 `rez`、`rez2` 的同路径 DTX 分别解码为 1024×1024 和 256×256、像素也不同，槽位报告保持未解析；OBJ 中由文件名推断出的贴图不算已确认绑定。`preview:3000000:812` 也保持未解析。手、臂槽仍未解析；六份目标 LTB 均成功解码，无几何跳过。报告位于 `artifacts/mapping-audit/item-812-focused-20261025/`。
+- 模型组 `3000000` 的道具 `812` 有预览编号冲突：唯一的 `WeaponModel.ItemId` 行关联 `ModelId:812` 和 LTC `WeaponIndex:812`，但 `WeaponPreview` 记录的 `ModelId` 是 `1255`。`item:812` 聚焦导出确认 `PV-AWM_A_InfernalDragon` 槽 2、3 分别使用 `PV-AWM_A_InfernalDragon.DTX`、`PV-AWM_A_InfernalDragon01.DTX`；LTC 预览模型 `QV-AWM_InfernalDragon_preview` 槽 0 使用前一张 PV 贴图。BF005.LTC 为 QV 男、女世界模型槽 0 指定 `QV-AWM_A_InfernalDragon.DTX`，但 `rez`、`rez2` 的同路径 DTX 分别解码为 1024×1024 和 256×256、像素也不同，槽位报告保持未解析；OBJ 中由文件名推断出的贴图不算已确认绑定。`preview:3000000:812` 下的 `PV-AWM_A_InfernalDragon` 仍未映射；同一上下文对 `PV-BrokenKukri_RedCrystal` 槽 2 有独立 LTC 绑定，不会套用到 AWM 模型。手、臂槽仍未解析；六份目标 LTB 均成功解码，无几何跳过。报告位于 `artifacts/mapping-audit/item-812-focused-20261025/`。
 - 道具 `856`、`1111`、`2164` 的 `WeaponModel.ItemId` 分别关联同号 ModelId 与 LTC WeaponIndex；其 `WeaponPreview.ModelId` 则分别是 `1298`、`1650`、`3320`。使用 `item:<道具编号>` 可取得以下 LTC 映射：
 
   | 道具编号 | PView 贴图槽 | LTC 预览模型槽 0 | QV 世界模型槽 0 |
