@@ -281,6 +281,7 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
   | 1896 | 3051 | `PV-M4A1_S_RedRifleBeast` | `QV-M4A1_S_RedRifleBeast.DTX` | `PV-M4A1_S_RedRifleBeast.DTX` |
 
   LTC 将 RedKnifeBeast 世界/PView 模型绑定到 RedRifleBeast 贴图。`QV-M4A1_S_RedRifleBeast_preview` 的槽 0 也使用 PV DTX。两种 PView 基模的 BL、GR、WOMAN_BL 变体均推导出槽 2 贴图；WOMAN_GR 保持未解析。`QV-M4A1_S_RedKnifeBeast_preview` 及手、臂槽未解析。聚焦导出成功解码 QV 和 PV 两张 DTX。
+- 道具 `1002` 在模型组 `6000000`、`8000000`、`10000000` 的预览记录都指向 LTC `WeaponIndex:1535`，没有可用的同组 `WeaponModel.ModelId` 关联。分别使用 `preview:6000000:1002`、`preview:8000000:1002`、`preview:10000000:1002` 时，`PV-GangsiHook_Devil_UP` 的 `Left` 与 `hook` 网格槽 0 均映射到 `ModelTextures/PlayerView/PV-NanoHook_Devil.DTX`，三组聚焦导出都成功解码并导出贴图。当前两份 PV DTX 副本 SHA-256 相同。`PV-GangsiHook_Devil_UP_BL` 的 `left` 槽 0 按 LTC 变体规则映射到同一贴图；`headusOBJexport001` 槽 1 暂无可验证来源，保持未解析。记录和导出报告位于 `artifacts/mapping-audit/item-1002-nanohook-focused-20261025/`。
 - 原生 LTB 解码保留每个网格的 RenderStyle 编号，并区分文件声明的材质槽与推测槽。OBJ 仍只导出漫反射贴图，不重建全部 RenderStyle 效果。
 - 角色别名有冲突时，可用 `row:rez\RF100\Table\CharacterType.CFT#701:BL` 按零基 CFT 行和阵营精确选择皮肤；表内存在有效 `RecordId` 时可用 `recordid:rez\RF100\Table\CharacterType.CFT#<编号>`，两种编号域互不混用。
 - `--scan-cfg`：扫描 CFG，提取贴图引用，输出 TXT/CSV 报告。
