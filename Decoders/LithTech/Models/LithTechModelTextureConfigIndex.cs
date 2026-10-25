@@ -71,6 +71,7 @@ internal static class LithTechModelTextureConfigIndex
     private const int MaxUccMapBytes = 4 * 1024 * 1024;
     private const int MaxClientShellBytes = 192 * 1024 * 1024;
     private const int MaxInferredTextureBytes = 64 * 1024 * 1024;
+    private const int MaxCachedSlotMappingModelDocuments = 128;
     private const int MaxTextureSlotIndex = byte.MaxValue;
     private static readonly ConditionalWeakTable<ExplorerItem, TextureConfigIndex> TextureConfigIndexCache = new();
 
@@ -3937,7 +3938,7 @@ internal static class LithTechModelTextureConfigIndex
                         LithTechModelDecoder.TryDecode(modelData, modelPath, "ltb", out document, out _);
                     }
 
-                    decodedModels[decodeCacheKey] = document;
+                    CacheDecodedModelDocument(decodedModels, decodeCacheKey, document);
                 }
 
                 if (document is null)
@@ -10434,8 +10435,23 @@ internal static class LithTechModelTextureConfigIndex
             LithTechModelDecoder.TryDecode(modelData, modelPath, "ltb", out document, out _);
         }
 
-        decodedModels[cacheKey] = document;
+        CacheDecodedModelDocument(decodedModels, cacheKey, document);
         return document;
+    }
+
+    private static void CacheDecodedModelDocument(
+        Dictionary<string, LithTechModelDocument?> decodedModels,
+        string cacheKey,
+        LithTechModelDocument? document)
+    {
+        if (decodedModels.Count >= MaxCachedSlotMappingModelDocuments)
+        {
+            // Global mapping indexes inspect the full model catalog. Evict one
+            // decoded document at a time to keep their model cache bounded.
+            decodedModels.Remove(decodedModels.Keys.First());
+        }
+
+        decodedModels[cacheKey] = document;
     }
 
     private static IReadOnlyList<string> ResolveModelTextureSlot(
