@@ -255,6 +255,18 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 
   某些模型的其他槽仍未解析。LTC 贴图路径若在多个归档层有同名实体副本，只有副本均能解码、且 SHA-256 一致时才选择确定的物理路径；否则保持未映射。
 - 模型组 `3000000` 的 CowRifle 两个道具共用 `PV-CowRifle_MOS_AK47`，但贴图身份不同：`item:2554` 经 `WeaponModel.ModelId:4555` / LTC `WeaponIndex:4555` 使用 `QV-CowRifle_MOS_AK47_NobleGold.DTX` 和 `PV-CowRifle_MOS_AK47_NobleGold.DTX`；`item:2575` 经 `ModelId:4554` / `WeaponIndex:4554` 使用不带 `NobleGold` 的两张 DTX。两者的 QV 男、女世界模型槽 0 均已聚焦导出验证；2554 的 `QV-CowRifle_MOS_AK47_NobleGold_preview` 槽 0 使用 PV NobleGold DTX。PView 基模槽 2 直接映射各自 DTX，BL 变体槽 2 按 LTC 规则推导同一贴图；GR、WOMAN_BL、WOMAN_GR 变体尚未通过完整副本和槽位布局校验，保持未映射。五个 PView 模型的 10 份物理副本均已解码，无几何跳过；世界模型导出及 `item:2554` 的 NobleGold 预览模型导出均无缺失贴图。报告位于 `artifacts/mapping-audit/item-1399-flashbang-focused-20261025/`。
+- 模型组 `3000000` 的 HuluXiongdi 道具经同组 `WeaponModel` 关联到以下 LTC 武器记录：
+
+  | 道具编号 | WeaponIndex | QV 世界槽 0 | PView 贴图槽 |
+  | --- | ---: | --- | --- |
+  | 2589 | 4534 | `QV-HuluXiongdi_Chg.DTX` | `PV-HuluXiongdi_chg` 槽 2：`PV-HuluXiongdi_Chg.DTX` |
+  | 2595 | 4533 | `QV-HuluXiongdi.DTX` | `PV-HuluXiongdi_chg` 槽 2：`PV-HuluXiongdi.DTX` |
+  | 2591、2602 | 4532、4530 | `QV-HuluXiongdi_Chg.DTX` | `PV-HuluXiongdi` 槽 2：`PV-HuluXiongdi_Chg.DTX`；槽 3：`PV-HuluXiongdi01.DTX` |
+  | 2612、2626 | 4531、4529 | `QV-HuluXiongdi.DTX` | `PV-HuluXiongdi` 槽 2：`PV-HuluXiongdi.DTX`；槽 3：`PV-HuluXiongdi01.DTX` |
+  | 2705 | 4573 | `QV-Grenade_HuluXiongdi.DTX` | `PV-Grenade_HuluXiongdi` 槽 2：`PV-Grenade_HuluXiongdi.DTX` |
+
+  `PV-HuluXiongdi` 的 BL、GR、WOMAN_BL、WOMAN_GR 变体均以 UV 推导槽 3 的 `PV-HuluXiongdi01.DTX`；槽 2 仅 BL、GR、WOMAN_BL 通过 LTC 变体规则映射，WOMAN_GR 保持未解析。`PV-HuluXiongdi_chg` 的 BL、GR、WOMAN_BL 变体槽 2 按上下文推导贴图；WOMAN_GR 槽 2 以及 `Hulu01`、`Hulu02` 槽 3 未解析。`PV-Grenade_HuluXiongdi` 的四个阵营/性别变体槽 2 均按 UV 推导。手、臂槽保持未解析。定向提取扫描了当前全部 482 个 REZ 归档索引；所有目标模型均已解码，无几何跳过。报告位于 `artifacts/mapping-audit/item-2589-hulu-xiongdi-focused-20261025/`。
+- 模型组 `2000000` 的 HuluXiongdi 道具 `2681`、`2686` 经 `WeaponModel.ModelId` 4570、4571 关联到 LTC `WeaponIndex` 4570、4571。`QV-M4A1_S_IronBeast_HuluXiongdi` 槽 0 使用同名 QV DTX；`QV-M4A1_S_IronBeast_HuluXiongdi_Preview` 槽 0 使用 `PV-M4A1_S_IronBeast_HuluXiongdi.DTX`。PView 基模槽 2 使用该 PV DTX；BL、GR、WOMAN_BL 变体槽 2 继承同一贴图，槽 3 映射 `PV-M4A1_S_IronBeast_HuluXiongdi_01.DTX`。WOMAN_GR、手臂及其他无唯一来源的网格槽仍未解析。七个目标 LTB 均成功解码，无几何跳过；报告位于同一 HuluXiongdi 聚焦目录。
 - 模型组 `2000000` 的 `WeaponPreview` 记录 35、92、200 分别经同组 `WeaponModel` 指向 `ModelId` 3020、3021、3022；三者共用 `PV-AK47_Knife_SteelEmpire`。当前安装的聚焦导出验证了每个身份的两个物品槽：
 
   | 道具编号 | WeaponModel.ModelId | 槽 2 | 槽 3 |
