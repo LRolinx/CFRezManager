@@ -4759,7 +4759,9 @@ internal static class LithTechModelTextureConfigIndex
                     string? existingTexturePath = ResolveExistingTextureReference(
                         textureReference.Path,
                         resourcePaths,
-                        texturePathsByBaseName);
+                        texturePathsByBaseName,
+                        textureItemsByLogicalPath,
+                        verifiedTexturePathCache);
 
                     int[] mappedSlots = ResolveLtcPlayerViewTextureSlots(
                         modelDocuments,
@@ -4924,7 +4926,9 @@ internal static class LithTechModelTextureConfigIndex
                     string? existingTexturePath = ResolveExistingTextureReference(
                         textureReferences[index].Path,
                         resourcePaths,
-                        texturePathsByBaseName);
+                        texturePathsByBaseName,
+                        textureItemsByLogicalPath,
+                        verifiedTexturePathCache);
                     string texturePath = existingTexturePath ?? textureReferences[index].Path;
                     int slotIndex = mappedSlots[index];
                     foreach (string contextKey in contextKeys)
@@ -10139,7 +10143,9 @@ internal static class LithTechModelTextureConfigIndex
     private static string? ResolveExistingTextureReference(
         string textureReference,
         IReadOnlySet<string> resourcePaths,
-        IReadOnlyDictionary<string, IReadOnlyList<string>> texturePathsByBaseName)
+        IReadOnlyDictionary<string, IReadOnlyList<string>> texturePathsByBaseName,
+        IReadOnlyDictionary<string, ExplorerItem[]>? textureItemsByLogicalPath = null,
+        Dictionary<string, bool>? verifiedTexturePathCache = null)
     {
         string normalized = NormalizeKey(textureReference);
         if (normalized.Length == 0 || resourcePaths.Contains(normalized))
@@ -10167,6 +10173,30 @@ internal static class LithTechModelTextureConfigIndex
             if (suffixMatches.Length == 1)
             {
                 return suffixMatches[0];
+            }
+
+            if (suffixMatches.Length > 1 &&
+                textureItemsByLogicalPath is not null &&
+                verifiedTexturePathCache is not null)
+            {
+                // Archive roots can expose the same logical DTX path more than once.
+                // Collapse those copies only after every physical copy decodes and hashes identically.
+                string[] logicalPaths = suffixMatches
+                    .Select(GetLogicalTextureResourcePath)
+                    .Where(path => path.Length > 0)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                if (logicalPaths.Length == 1 &&
+                    HasConsistentDecodableDtxCopies(
+                        logicalPaths[0],
+                        textureItemsByLogicalPath,
+                        verifiedTexturePathCache))
+                {
+                    return suffixMatches
+                        .Order(StringComparer.OrdinalIgnoreCase)
+                        .ThenBy(path => path, StringComparer.Ordinal)
+                        .First();
+                }
             }
         }
 

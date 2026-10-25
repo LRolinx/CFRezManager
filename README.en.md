@@ -238,6 +238,21 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 - `PV-SU_MP5_Silencer` models have no direct LTC/CFT binding. Some slot UVs match MP5 silencer models, but the available MP5 textures represent several different skins; the SU models remain unresolved until a table record identifies their skin.
 - Verified SixEyed Sword LTC entries share the same PView model and identity, while spelling the Gold texture as both `PV-SixEyedSword_Gold` and `PV-SixEyed_Sword_Gold`; the latter links only when the no-underscore basename has one physical path.
 - `WeaponAttachItemDoll.CFT` bindings are verified for Joy, TropicalOcean, and PartyDoggy: Joy PV/QV use `PV-ACC_Baihu.dtx` / `QV-ACC_Baihu.DTX` with `item:13869`, and QV Joy also uses `QV-ACC_Baihu.DTX` with `item:18107`; both TropicalOcean models use the same pair with `item:16279`, and both PartyDoggy models use it with `item:13451`. All six focused exports resolved one texture with none missing. The current install has one physical copy of each PV/QV Baihu DTX path, with MD5 hashes `A4990BD4A7482FA304C5D7AD6961EDAC` and `C9096544DB5FD886D1A963D841E5F16E`.
+- The current install has 31 `WeaponPreview` records with `ModelId=0` in model group `3000000`, covering nine items. Each item has one matching `WeaponModel` row in that group. Focused `item:<id>` exports verified these LTC-to-PView texture slots:
+
+  | Item ID | WeaponModel.ModelId | PView model | Resolved slots and textures |
+  | ---: | ---: | --- | --- |
+  | 730 | 730 | `PV-AK-47-Beast` | 2: `PV_AK47-Beast.DTX` |
+  | 813 | 813 | `PV-RPK_Infernal_Dragon` | 2: `PV-RPK_Infernal_Dragon.DTX` |
+  | 1269 | 1269 | `PV-AK47_K_IronBeast` | 2: `PV-AK47_K_IronBeast.DTX` |
+  | 1508 | 1508 | `PV-M4A1_Silencer_Predator` | 2: `PV-M4A1_Silencer_Predator01.DTX`; 3: `PV-M4A1_Silencer_Predator.DTX` |
+  | 1616 | 1616 | `PV-AK47_Knife_BornBeast` | 2: `PV-AK47_Knife_BornBeast.DTX`; 3: `PV-AK47_Knife_BornBeast_02.DTX` |
+  | 1919 | 1919 | `PV-AK12_K_IronSpider` | 2: `PV-AK12_K_IronSpider.DTX` |
+  | 1939 | 1111 | `PV-M82A1_S_BornBeast` | 1: `PV-M82A1_S_BornBeast.DTX`; 2: `PV-M82A1_S_BornBeast01.DTX` |
+  | 1945 | 1298 | `pv-AWM_UltimateGold` | 2: `PV-AWM_UltimateSiversmith.DTX` |
+  | 1997 | 1997 | `PV-AN94_SpaceShip` | 2: `PV-AN94_SpaceShip.DTX` |
+
+  Other slots remain unresolved where the tables do not provide a binding. When an LTC texture reference matches multiple physical copies across archive roots, the resolver selects one only if every copy decodes and has the same SHA-256; conflicting or unreadable copies stay unmapped.
 - Native LTB decoding retains per-mesh RenderStyle indices and distinguishes file-declared texture slots from inferred slots. OBJ export still writes a diffuse texture rather than recreating all RenderStyle effects.
 - If a character alias is ambiguous, use `row:rez\RF100\Table\CharacterType.CFT#701:BL` to select a skin by zero-based CFT row and side. When the table has a valid `RecordId`, use `recordid:rez\RF100\Table\CharacterType.CFT#<id>`; the two number domains stay separate.
 - `--scan-cfg`: scan CFG files, extract texture references, and write TXT/CSV reports.

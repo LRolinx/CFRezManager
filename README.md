@@ -239,6 +239,21 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 - `PV-SU_MP5_Silencer` 系列没有 LTC/CFT 直接绑定。其槽 UV 与 MP5 消音器模型部分相同，但现有 MP5 贴图包含多种不同皮肤；在缺少表记录确认皮肤身份时保持未映射。
 - LTC 已验证的 SixEyed Sword 条目使用相同 PView 模型和身份，但贴图名分别写作 `PV-SixEyedSword_Gold` 与 `PV-SixEyed_Sword_Gold`；后者只在无下划线 basename 对应唯一物理路径时回链。
 - `WeaponAttachItemDoll.CFT` 的 Joy、TropicalOcean 与 PartyDoggy 配件身份已验证：Joy 的 PV/QV 模型在 `item:13869` 下使用 `PV-ACC_Baihu.dtx` / `QV-ACC_Baihu.DTX`，QV Joy 在 `item:18107` 下也使用 `QV-ACC_Baihu.DTX`；TropicalOcean 的 PV/QV 模型在 `item:16279` 下使用同一对贴图；PartyDoggy 的 PV/QV 模型在 `item:13451` 下使用同一对贴图。六个聚焦导出各解析一张贴图且无缺失。当前安装包中 PV/QV Baihu DTX 路径各有一个物理副本，MD5 分别为 `A4990BD4A7482FA304C5D7AD6961EDAC` 和 `C9096544DB5FD886D1A963D841E5F16E`。
+- 当前安装的 `WeaponPreview` 在模型组 `3000000` 有 31 条 `ModelId=0` 记录，涉及 9 个道具；每个道具均对应唯一同组 `WeaponModel` 行。`item:<道具编号>` 聚焦导出验证了以下 LTC→PView 贴图槽：
+
+  | 道具编号 | WeaponModel.ModelId | PView 模型 | 已解析槽位与贴图 |
+  | --- | ---: | --- | --- |
+  | 730 | 730 | `PV-AK-47-Beast` | 2：`PV_AK47-Beast.DTX` |
+  | 813 | 813 | `PV-RPK_Infernal_Dragon` | 2：`PV-RPK_Infernal_Dragon.DTX` |
+  | 1269 | 1269 | `PV-AK47_K_IronBeast` | 2：`PV-AK47_K_IronBeast.DTX` |
+  | 1508 | 1508 | `PV-M4A1_Silencer_Predator` | 2：`PV-M4A1_Silencer_Predator01.DTX`；3：`PV-M4A1_Silencer_Predator.DTX` |
+  | 1616 | 1616 | `PV-AK47_Knife_BornBeast` | 2：`PV-AK47_Knife_BornBeast.DTX`；3：`PV-AK47_Knife_BornBeast_02.DTX` |
+  | 1919 | 1919 | `PV-AK12_K_IronSpider` | 2：`PV-AK12_K_IronSpider.DTX` |
+  | 1939 | 1111 | `PV-M82A1_S_BornBeast` | 1：`PV-M82A1_S_BornBeast.DTX`；2：`PV-M82A1_S_BornBeast01.DTX` |
+  | 1945 | 1298 | `pv-AWM_UltimateGold` | 2：`PV-AWM_UltimateSiversmith.DTX` |
+  | 1997 | 1997 | `PV-AN94_SpaceShip` | 2：`PV-AN94_SpaceShip.DTX` |
+
+  某些模型的其他槽仍未解析。LTC 贴图路径若在多个归档层有同名实体副本，只有副本均能解码、且 SHA-256 一致时才选择确定的物理路径；否则保持未映射。
 - 原生 LTB 解码保留每个网格的 RenderStyle 编号，并区分文件声明的材质槽与推测槽。OBJ 仍只导出漫反射贴图，不重建全部 RenderStyle 效果。
 - 角色别名有冲突时，可用 `row:rez\RF100\Table\CharacterType.CFT#701:BL` 按零基 CFT 行和阵营精确选择皮肤；表内存在有效 `RecordId` 时可用 `recordid:rez\RF100\Table\CharacterType.CFT#<编号>`，两种编号域互不混用。
 - `--scan-cfg`：扫描 CFG，提取贴图引用，输出 TXT/CSV 报告。
