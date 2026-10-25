@@ -276,8 +276,17 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 - 道具 `1003` 的唯一 `WeaponModel` 行没有 `ModelId`，`item:1003` 聚焦导出未解析贴图。预览记录 `3-1003.bin` 的 `ModelId:1536` 对应 LTC `WeaponIndex:1536`；`preview:3000000:1003` 聚焦导出确认 `QV-PoliceBaton_UltimateGold` 槽 0 使用 `QV-PoliceBaton_Ultimatesilver.DTX`，`PV-PoliceBaton_UltimateGold` 槽 2 使用 `PV-PoliceBaton_UltimateSilver.DTX`。两张 DTX 均成功导出；手、臂槽未解析，4 个网格均无几何跳过。报告位于 `artifacts/mapping-audit/item-mismatch-1003-1536-20261025/`。
 - 道具 `2573` 的 `WeaponModel.ModelId:4553` 与 `WeaponPreview.ModelId:4553` 均对应 LTC `WeaponIndex:4553`。其 `ProjectileModelFileName` 指向 `QV-DualDaphneSaber_Projectile`，`ProjectileSkinFileName` 将槽 0 映射到 `QV-ThrowDagger.DTX`；`item:2573` 和 `preview:3000000:2573` 两个上下文的聚焦导出均成功，单个网格无缺失贴图且无几何跳过。报告位于 `artifacts/mapping-audit/item-mismatch-2573-projectile-20261025/`。
 - 模型组 `2000000` 的道具 `56`、`1918`、`1938` 各自的 `WeaponModel.ModelId` 与预览 `ModelId` 相同，并对应同号 LTC `WeaponIndex`：`item:56` 和 `preview:2000000:56` 均将 `QV-knuckle2_F_R`、`QV-knuckle2_M_R` 槽 0 映射到 `QV-Knuckle2.DTX`；`item:1918` 将 H_NVGHelmet 男、女模型槽 0 映射到 `H_NVGHelmet.DTX`；`item:1938` 将 `QV-MultiTool_Defuser` 槽 0 映射到 `QV-MultiTool_Defuser.DTX`。所有聚焦导出均无缺失贴图、无几何跳过。报告位于 `artifacts/mapping-audit/utility-item-56-knuckle2-20261025/` 和 `artifacts/mapping-audit/utility-items-1918-1938-20261025/`。
-- 道具 `3638` 没有 `WeaponModel` 关联，`item:3638` 聚焦导出无法解析；模型组 `3000000` 的预览记录则以 `ModelId:6903` 对应 LTC `WeaponIndex:6903`。`preview:3000000:3638` 将 `QV_NANO_KNIFE` 槽 0 映射到 `QV_NANO_KNIFE.DTX`，单网格成功导出且无几何跳过。报告位于 `artifacts/mapping-audit/item-3638-nanoknife-20261025/`。
+- 道具 `3638` 没有 `WeaponModel` 关联，`item:3638` 聚焦导出无法解析；模型组 `3000000`、`8000000`、`10000000` 的预览记录都以 `ModelId:6903` 对应 LTC `WeaponIndex:6903`。三个预览上下文均将 `QV_NANO_KNIFE` 槽 0 映射到 `QV_NANO_KNIFE.DTX`，单网格成功导出贴图且无几何跳过。报告位于 `artifacts/mapping-audit/item-3638-nanoknife-20261025/`。
 - 道具 `3080` 没有 `WeaponModel` 关联，`item:3080` 聚焦导出未解析；模型组 `3000000`、`8000000` 的预览记录均以 `ModelId:5422` 对应 LTC `WeaponIndex:5422`。两个预览上下文都将 LTC `LeftHandModelFileName` 指向的 `QV-D.E_DemonicBeast_L` 槽 0 映射到 `PV-D.E_DemonicBeast.DTX`。LTC 为 `QV-D.E_DemonicBeast_R` 列出 `QV-D.E_DemonicBeast.DTX` 和 `QV-D.E_DemonicBeast01.DTX`，但该 LTB 没有原生槽声明，槽 0 保持未解析；OBJ 中按文件名推断出的 QV 贴图不算已确认映射。左右手模型都没有为 LTC 列出的编号贴图提供可验证槽位。两个预览导出均无几何跳过。报告位于 `artifacts/mapping-audit/item-3080-demonicbeast-20261025/`。
+- `WeaponAttachItemDoll.CFT` 的记录 6、22、31 分别为道具 `3459` MysteryBoy、`4743` KnitPengu 和 `5409` Djehuti BL。解析器现将 CFT 中明确的道具编号关联到同道具的预览上下文：`3459`、`5409` 的模型组为 `6000000`，`4743` 的模型组为 `3000000`、`8000000`。
+
+  | 道具 | 模型组 | PV 槽 0 | QV 槽 0 |
+  | --- | --- | --- | --- |
+  | 3459 | 6000000 | `PV-ACC_SD_MYSTERYBOY.DTX` | `QV-ACC_SD_MYSTERYBOY.DTX` |
+  | 4743 | 3000000、8000000 | `PV_ACC_KNITPENGU.DTX` | `QV_ACC_KNITPENGU.DTX` |
+  | 5409 | 6000000 | `PV-ACC_SD_Djehuti_BL.DTX` | `QV-ACC_SD_Djehuti_BL.DTX` |
+
+  `4743` 的 `ModelId:9834` 在 LTC 中无匹配记录，另外两件的 `ModelId` 为 0。所有道具和预览上下文的聚焦导出均成功导出两张贴图，无缺失贴图或几何跳过。报告位于 `artifacts/mapping-audit/cft-attachments-3459-5409-20261025/` 和 `artifacts/mapping-audit/item-4743-acc-knitpengu-20261025/`。
 - 模型组 `3000000` 的 CowRifle 两个道具共用 `PV-CowRifle_MOS_AK47`，但贴图身份不同：`item:2554` 经 `WeaponModel.ModelId:4555` / LTC `WeaponIndex:4555` 使用 `QV-CowRifle_MOS_AK47_NobleGold.DTX` 和 `PV-CowRifle_MOS_AK47_NobleGold.DTX`；`item:2575` 经 `ModelId:4554` / `WeaponIndex:4554` 使用不带 `NobleGold` 的两张 DTX。两者的 QV 男、女世界模型槽 0 均已聚焦导出验证；2554 的 `QV-CowRifle_MOS_AK47_NobleGold_preview` 槽 0 使用 PV NobleGold DTX。PView 基模槽 2 直接映射各自 DTX，BL 变体槽 2 按 LTC 规则推导同一贴图；GR、WOMAN_BL、WOMAN_GR 变体尚未通过完整副本和槽位布局校验，保持未映射。五个 PView 模型的 10 份物理副本均已解码，无几何跳过；世界模型导出及 `item:2554` 的 NobleGold 预览模型导出均无缺失贴图。报告位于 `artifacts/mapping-audit/item-1399-flashbang-focused-20261025/`。
 - 模型组 `3000000` 的 HuluXiongdi 道具经同组 `WeaponModel` 关联到以下 LTC 武器记录：
 

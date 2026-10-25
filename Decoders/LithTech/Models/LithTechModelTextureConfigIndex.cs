@@ -3956,6 +3956,8 @@ internal static class LithTechModelTextureConfigIndex
                 group => group.Key,
                 group => group.Select(pair => pair.Item).ToArray(),
                 StringComparer.OrdinalIgnoreCase);
+        IReadOnlyDictionary<uint, IReadOnlyList<string>> weaponPreviewContextsByItemId =
+            BuildWeaponPreviewContextsByItemId(crossFireScriptItems);
         var verifiedTexturePathCache = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
         var decodedModels = new Dictionary<string, LithTechModelDocument?>(StringComparer.OrdinalIgnoreCase);
         foreach (TextureConfigItem configItem in configItems.Where(configItem =>
@@ -3985,6 +3987,18 @@ internal static class LithTechModelTextureConfigIndex
                 }
 
                 string[] contextKeys = GetCftContextKeys(configItem.Path, mapping);
+                if (string.Equals(
+                        Path.GetFileName(configItem.Path),
+                        "WeaponAttachItemDoll.CFT",
+                        StringComparison.OrdinalIgnoreCase) &&
+                    (string.Equals(mapping.ModelColumn, "_PVItemModelFile", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(mapping.ModelColumn, "_QVItemModelFile", StringComparison.OrdinalIgnoreCase)))
+                {
+                    contextKeys = contextKeys
+                        .Concat(GetWeaponAttachPreviewContexts(mapping.IdentityAliases, weaponPreviewContextsByItemId))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToArray();
+                }
 
                 foreach (CftTextureReference texture in mapping.TextureReferences)
                 {
@@ -7839,6 +7853,75 @@ internal static class LithTechModelTextureConfigIndex
             .Where(context => NormalizeLooseKey(context).Length > 0)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private static IReadOnlyDictionary<uint, IReadOnlyList<string>> BuildWeaponPreviewContextsByItemId(
+        IReadOnlyList<ExplorerItem> crossFireScriptItems)
+    {
+        var contextsByItemId = new Dictionary<uint, HashSet<string>>();
+        foreach (ExplorerItem item in crossFireScriptItems)
+        {
+            string resourcePath = item.ArchiveFile?.FullPath ?? item.OutputRelativePath;
+            string normalizedResourcePath = resourcePath.Replace('\\', '/');
+            if (!normalizedResourcePath.Contains("/WeaponPreview/", StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(Path.GetExtension(normalizedResourcePath), ".bin", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            byte[]? data = TryReadItemBytes(item, 8 * 1024 * 1024);
+            if (data is null ||
+                !CrossFireWeaponPreviewModelIndexDecoder.TryDecodePreview(data, resourcePath, out CrossFireWeaponPreviewEntry? preview) ||
+                preview is null || preview.ItemId == 0 || preview.ModelGroupId == 0)
+            {
+                continue;
+            }
+
+            if (!contextsByItemId.TryGetValue(preview.ItemId, out HashSet<string>? contexts))
+            {
+                contexts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                contextsByItemId.Add(preview.ItemId, contexts);
+            }
+
+            contexts.Add(string.Create(
+                CultureInfo.InvariantCulture,
+                $"preview:{preview.ModelGroupId}:{preview.ItemId}"));
+        }
+
+        return contextsByItemId.ToDictionary(
+            pair => pair.Key,
+            pair => (IReadOnlyList<string>)pair.Value.Order(StringComparer.OrdinalIgnoreCase).ToArray());
+    }
+
+    private static string[] GetWeaponAttachPreviewContexts(
+        IReadOnlyList<string>? identityAliases,
+        IReadOnlyDictionary<uint, IReadOnlyList<string>> previewContextsByItemId)
+    {
+        if (identityAliases is not { Count: > 0 })
+        {
+            return [];
+        }
+
+        var contexts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string alias in identityAliases)
+        {
+            const string itemPrefix = "item:";
+            if (!alias.StartsWith(itemPrefix, StringComparison.OrdinalIgnoreCase) ||
+                !uint.TryParse(
+                    alias[itemPrefix.Length..],
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out uint itemId) ||
+                itemId == 0 ||
+                !previewContextsByItemId.TryGetValue(itemId, out IReadOnlyList<string>? itemContexts))
+            {
+                continue;
+            }
+
+            contexts.UnionWith(itemContexts);
+        }
+
+        return contexts.Order(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
     private static string[] GetCftSideContextKeys(
