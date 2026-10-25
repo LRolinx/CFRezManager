@@ -123,7 +123,8 @@ internal static class CrossFireWeaponPreviewModelIndexDecoder
         IEnumerable<CrossFireWeaponPreviewEntry> previews,
         IEnumerable<CrossFireWeaponModelEntry> models,
         IReadOnlySet<uint> ltcWeaponIndexIds,
-        IReadOnlySet<uint> ltcWeaponLegacyMappingIndexIds)
+        IReadOnlySet<uint> ltcWeaponLegacyMappingIndexIds,
+        IReadOnlyDictionary<uint, IReadOnlySet<uint>> ltcWeaponIndexIdsByLegacyMappingIndex)
     {
         CrossFireWeaponPreviewEntry[] previewEntries = previews.ToArray();
         CrossFireWeaponModelEntry[] modelEntries = models.ToArray();
@@ -162,6 +163,22 @@ internal static class CrossFireWeaponPreviewModelIndexDecoder
             aliases.Add(alias);
         }
 
+        void AddLegacyMappingAlias(uint legacyMappingIndex, string alias)
+        {
+            AddAlias(aliasesByLtcLegacyMappingIndex, legacyMappingIndex, alias);
+            if (!ltcWeaponIndexIdsByLegacyMappingIndex.TryGetValue(
+                    legacyMappingIndex,
+                    out IReadOnlySet<uint>? weaponIndexIds))
+            {
+                return;
+            }
+
+            foreach (uint weaponIndex in weaponIndexIds)
+            {
+                AddAlias(aliasesByWeaponIndex, weaponIndex, alias);
+            }
+        }
+
         static string ItemAlias(uint itemId) =>
             "item:" + itemId.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
@@ -185,7 +202,7 @@ internal static class CrossFireWeaponPreviewModelIndexDecoder
             }
             else if (ltcWeaponLegacyMappingIndexIds.Contains(modelId))
             {
-                AddAlias(aliasesByLtcLegacyMappingIndex, modelId, alias);
+                AddLegacyMappingAlias(modelId, alias);
             }
         }
 
@@ -226,15 +243,15 @@ internal static class CrossFireWeaponPreviewModelIndexDecoder
                     AddAlias(aliasesByWeaponIndex, preview.ItemId, ItemAlias(preview.ItemId));
                     if (addPreviewAliasToWeaponModel)
                     {
-                        AddAlias(aliasesByLtcLegacyMappingIndex, modelId, PreviewAlias(preview.ModelGroupId, preview.ItemId));
+                        AddLegacyMappingAlias(modelId, PreviewAlias(preview.ModelGroupId, preview.ItemId));
                     }
                 }
                 else
                 {
-                    AddAlias(aliasesByLtcLegacyMappingIndex, modelId, ItemAlias(preview.ItemId));
+                    AddLegacyMappingAlias(modelId, ItemAlias(preview.ItemId));
                     if (addPreviewAliasToWeaponModel)
                     {
-                        AddAlias(aliasesByLtcLegacyMappingIndex, modelId, PreviewAlias(preview.ModelGroupId, preview.ItemId));
+                        AddLegacyMappingAlias(modelId, PreviewAlias(preview.ModelGroupId, preview.ItemId));
                     }
                 }
             }

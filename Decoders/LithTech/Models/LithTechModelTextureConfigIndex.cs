@@ -8634,11 +8634,14 @@ internal static class LithTechModelTextureConfigIndex
         }
 
         IReadOnlySet<uint> ltcWeaponLegacyMappingIndexIds = GetUnambiguousWeaponLtcLegacyMappingIndices(ltcTables);
+        IReadOnlyDictionary<uint, IReadOnlySet<uint>> ltcWeaponIndexIdsByLegacyMappingIndex =
+            BuildLtcWeaponIndexIdsByLegacyMappingIndex(ltcTables);
         CrossFireWeaponPreviewItemAliasIndex aliases = CrossFireWeaponPreviewModelIndexDecoder.BuildItemAliases(
             previews,
             models,
             ltcWeaponIndexIds,
-            ltcWeaponLegacyMappingIndexIds);
+            ltcWeaponLegacyMappingIndexIds,
+            ltcWeaponIndexIdsByLegacyMappingIndex);
         return (aliases, skinAssets);
     }
 
@@ -9208,6 +9211,45 @@ internal static class LithTechModelTextureConfigIndex
 
         triangles.Sort(StringComparer.Ordinal);
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('\n', triangles))));
+    }
+
+    private static IReadOnlyDictionary<uint, IReadOnlySet<uint>> BuildLtcWeaponIndexIdsByLegacyMappingIndex(
+        IEnumerable<IReadOnlyList<CrossFireLtcModelTextureMapping>> ltcTables)
+    {
+        var weaponIndexIdsByLegacyMappingIndex = new Dictionary<uint, HashSet<uint>>();
+        foreach (CrossFireLtcModelTextureMapping mapping in ltcTables.SelectMany(table => table)
+                     .Where(mapping => mapping.LegacyMappingIndex >= 0 &&
+                                       string.Equals(mapping.RowType, "Weapon", StringComparison.OrdinalIgnoreCase)))
+        {
+            uint legacyMappingIndex = (uint)mapping.LegacyMappingIndex;
+            foreach (string identityAlias in mapping.IdentityAliases)
+            {
+                const string weaponIndexPrefix = "WeaponIndex:";
+                if (!identityAlias.StartsWith(weaponIndexPrefix, StringComparison.OrdinalIgnoreCase) ||
+                    !uint.TryParse(
+                        identityAlias[weaponIndexPrefix.Length..],
+                        NumberStyles.None,
+                        CultureInfo.InvariantCulture,
+                        out uint weaponIndex))
+                {
+                    continue;
+                }
+
+                if (!weaponIndexIdsByLegacyMappingIndex.TryGetValue(
+                        legacyMappingIndex,
+                        out HashSet<uint>? weaponIndexIds))
+                {
+                    weaponIndexIds = [];
+                    weaponIndexIdsByLegacyMappingIndex.Add(legacyMappingIndex, weaponIndexIds);
+                }
+
+                weaponIndexIds.Add(weaponIndex);
+            }
+        }
+
+        return weaponIndexIdsByLegacyMappingIndex.ToDictionary(
+            pair => pair.Key,
+            pair => (IReadOnlySet<uint>)pair.Value);
     }
 
     private static IReadOnlySet<uint> GetUnambiguousWeaponLtcLegacyMappingIndices(
