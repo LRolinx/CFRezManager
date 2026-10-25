@@ -4650,6 +4650,9 @@ internal static class LithTechModelTextureConfigIndex
                 resourcePaths,
                 texturePathsByBaseName,
                 decodedModels);
+        var weaponIdentityContextAliasesByLtc = new Dictionary<
+            string,
+            IReadOnlyDictionary<string, IReadOnlyList<string>>>(StringComparer.OrdinalIgnoreCase);
         foreach (ExplorerItem ltcItem in ltcItems)
         {
             string cacheKey = ltcItem.ArchiveFile?.Md5 is { Length: > 0 } archiveHash
@@ -4669,6 +4672,12 @@ internal static class LithTechModelTextureConfigIndex
                 ltcMappingCache[cacheKey] = mappings;
             }
 
+            if (!weaponIdentityContextAliasesByLtc.TryGetValue(cacheKey, out IReadOnlyDictionary<string, IReadOnlyList<string>>? weaponIdentityContextAliases))
+            {
+                weaponIdentityContextAliases = BuildWeaponIdentityContextAliases(mappings, itemAliases);
+                weaponIdentityContextAliasesByLtc.Add(cacheKey, weaponIdentityContextAliases);
+            }
+
             foreach (CrossFireLtcModelTextureMapping mapping in mappings)
             {
                 string modelPath = NormalizeExtensionlessModelReference(mapping.ModelReference);
@@ -4679,7 +4688,7 @@ internal static class LithTechModelTextureConfigIndex
                 }
 
                 string[] contextKeys = GetLtcContextKeys(ltcItem, mapping)
-                    .Concat(GetWeaponItemContextAliases(mapping, itemAliases))
+                    .Concat(GetWeaponItemContextAliases(mapping, itemAliases, weaponIdentityContextAliases))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToArray();
                 AddModelTextureContextKeys(ltcContextKeysByModelPath, modelPath, contextKeys);
@@ -4915,6 +4924,12 @@ internal static class LithTechModelTextureConfigIndex
                 continue;
             }
 
+            if (!weaponIdentityContextAliasesByLtc.TryGetValue(cacheKey, out IReadOnlyDictionary<string, IReadOnlyList<string>>? weaponIdentityContextAliases))
+            {
+                weaponIdentityContextAliases = BuildWeaponIdentityContextAliases(mappings, itemAliases);
+                weaponIdentityContextAliasesByLtc.Add(cacheKey, weaponIdentityContextAliases);
+            }
+
             foreach (CrossFireLtcModelTextureMapping mapping in mappings)
             {
                 if (mapping.TextureFieldReferences.Count == 0 ||
@@ -4936,7 +4951,7 @@ internal static class LithTechModelTextureConfigIndex
                 }
 
                 string[] contextKeys = GetLtcContextKeys(ltcItem, mapping)
-                    .Concat(GetWeaponItemContextAliases(mapping, itemAliases))
+                    .Concat(GetWeaponItemContextAliases(mapping, itemAliases, weaponIdentityContextAliases))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToArray();
                 if (!modelItemsByPath.TryGetValue(logicalModelPath, out ExplorerItem[]? modelItems) ||
@@ -8701,6 +8716,66 @@ internal static class LithTechModelTextureConfigIndex
         }
 
         return aliases.Order(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    private static IReadOnlyDictionary<string, IReadOnlyList<string>> BuildWeaponIdentityContextAliases(
+        IReadOnlyList<CrossFireLtcModelTextureMapping> mappings,
+        CrossFireWeaponPreviewItemAliasIndex itemAliases)
+    {
+        var contextsByIdentity = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        var playerViewMappingsByIdentity = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (CrossFireLtcModelTextureMapping mapping in mappings.Where(mapping =>
+                     string.Equals(mapping.RowType, "Weapon", StringComparison.OrdinalIgnoreCase) &&
+                     mapping.ModelField.StartsWith("PViewModelFileName", StringComparison.OrdinalIgnoreCase)))
+        {
+            string[] contextAliases = GetWeaponItemContextAliases(mapping, itemAliases).ToArray();
+            foreach (string identityAlias in mapping.IdentityAliases.Where(IsWeaponTextIdentityAlias))
+            {
+                if (!contextsByIdentity.TryGetValue(identityAlias, out HashSet<string>? identityContexts))
+                {
+                    identityContexts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    contextsByIdentity.Add(identityAlias, identityContexts);
+                    playerViewMappingsByIdentity.Add(identityAlias, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+                }
+
+                playerViewMappingsByIdentity[identityAlias].Add(mapping.LegacyDeduplicationKey);
+                identityContexts.UnionWith(contextAliases);
+            }
+        }
+
+        return contextsByIdentity
+            .Where(pair => playerViewMappingsByIdentity[pair.Key].Count == 1 && pair.Value.Count > 0)
+            .ToDictionary(
+                pair => pair.Key,
+                pair => (IReadOnlyList<string>)pair.Value.Order(StringComparer.OrdinalIgnoreCase).ToArray(),
+                StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static IReadOnlyList<string> GetWeaponItemContextAliases(
+        CrossFireLtcModelTextureMapping mapping,
+        CrossFireWeaponPreviewItemAliasIndex itemAliases,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> weaponIdentityContextAliases)
+    {
+        var aliases = new HashSet<string>(GetWeaponItemContextAliases(mapping, itemAliases), StringComparer.OrdinalIgnoreCase);
+        if (string.Equals(mapping.RowType, "Weapon", StringComparison.OrdinalIgnoreCase))
+        {
+            foreach (string identityAlias in mapping.IdentityAliases.Where(IsWeaponTextIdentityAlias))
+            {
+                if (weaponIdentityContextAliases.TryGetValue(identityAlias, out IReadOnlyList<string>? identityAliases))
+                {
+                    aliases.UnionWith(identityAliases);
+                }
+            }
+        }
+
+        return aliases.Order(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    private static bool IsWeaponTextIdentityAlias(string identityAlias)
+    {
+        return !string.IsNullOrWhiteSpace(identityAlias) &&
+               !identityAlias.StartsWith("WeaponIndex:", StringComparison.OrdinalIgnoreCase) &&
+               !uint.TryParse(identityAlias, NumberStyles.None, CultureInfo.InvariantCulture, out _);
     }
 
     private static (CrossFireWeaponPreviewItemAliasIndex Aliases, IReadOnlyList<WeaponPreviewSkinAsset> SkinAssets) BuildWeaponPreviewItemAliases(
