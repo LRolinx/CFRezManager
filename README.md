@@ -238,7 +238,7 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 - BF005.LTC 的 `WeaponIndex:2473` 将 `PV-Glock18C-DigitalCamo_BR` 槽 2 的三个网格映射到 `ModelTextures/PlayerView/pv-Glock18C_DigitalCamo.dtx`。`_BR_BL`、`_BR_GR`、`_BR_WOMAN_BL` 及内容完全相同的反序命名 `_BL_BR`、`_GR_BR`、`_WOMAN_BL_BR` 均在该上下文中恢复三个槽 2 网格；反序名称只有在两种命名下的所有 LTB 副本 SHA-256 一致时才继承。WOMAN_GR 的两种名称顺序均未通过当前槽位判定，手、臂槽仍需角色上下文。
 - `PV-SU_MP5_Silencer` 系列没有 LTC/CFT 直接绑定。其槽 UV 与 MP5 消音器模型部分相同，但现有 MP5 贴图包含多种不同皮肤；在缺少表记录确认皮肤身份时保持未映射。
 - LTC 已验证的 SixEyed Sword 条目使用相同 PView 模型和身份，但贴图名分别写作 `PV-SixEyedSword_Gold` 与 `PV-SixEyed_Sword_Gold`；后者只在无下划线 basename 对应唯一物理路径时回链。
-- `WeaponAttachItemDoll.CFT` 多条记录共用 Joy QV 模型，PV 侧指向 `PV-ACC_Baihu`；Joy、TropicalOcean 和 PartyDoggy 的 PV/QV 模型 UV 布局一致。缺失的 `QV-ACC_Interaction_Joy` 与 `QV-ACC_Interaction_PartyDoggy` 贴图名仅在 `QV-ACC_Baihu` 对应唯一物理 DTX 时回链。
+- `WeaponAttachItemDoll.CFT` 的 Joy、TropicalOcean 与 PartyDoggy 配件身份已验证：Joy 的 PV/QV 模型在 `item:13869` 下使用 `PV-ACC_Baihu.dtx` / `QV-ACC_Baihu.DTX`，QV Joy 在 `item:18107` 下也使用 `QV-ACC_Baihu.DTX`；TropicalOcean 的 PV/QV 模型在 `item:16279` 下使用同一对贴图；PartyDoggy 的 PV/QV 模型在 `item:13451` 下使用同一对贴图。六个聚焦导出各解析一张贴图且无缺失。当前安装包中 PV/QV Baihu DTX 路径各有一个物理副本，MD5 分别为 `A4990BD4A7482FA304C5D7AD6961EDAC` 和 `C9096544DB5FD886D1A963D841E5F16E`。
 - 原生 LTB 解码保留每个网格的 RenderStyle 编号，并区分文件声明的材质槽与推测槽。OBJ 仍只导出漫反射贴图，不重建全部 RenderStyle 效果。
 - 角色别名有冲突时，可用 `row:rez\RF100\Table\CharacterType.CFT#701:BL` 按零基 CFT 行和阵营精确选择皮肤；表内存在有效 `RecordId` 时可用 `recordid:rez\RF100\Table\CharacterType.CFT#<编号>`，两种编号域互不混用。
 - `--scan-cfg`：扫描 CFG，提取贴图引用，输出 TXT/CSV 报告。
