@@ -30,7 +30,8 @@ internal sealed record LithTechObjExportSource(
     Func<string, int, IReadOnlyList<string>>? VariantSlotUvTextureSlotResolver = null,
     Func<string, int, IReadOnlyList<string>>? MotionParentSlotTextureSlotResolver = null,
     Func<string, string, int, IReadOnlyList<string>>? MotionParentContextSlotResolver = null,
-    Func<string, string, int, IReadOnlyList<string>>? CftPlayerViewRoleTextureContextSlotResolver = null);
+    Func<string, string, int, IReadOnlyList<string>>? CftPlayerViewRoleTextureContextSlotResolver = null,
+    Func<string, string, int, IReadOnlyList<string>>? CftIdentityModelAliasTextureContextSlotResolver = null);
 
 internal sealed record LithTechObjExportResult(
     string ObjPath,
@@ -515,6 +516,9 @@ internal static class LithTechObjExporter
         IReadOnlyList<string> references = source.TextureContextSlotResolver?.Invoke(modelReference, textureContext, slotIndex) ?? [];
         if (references.Count > 0) return new(references, "context-slot", false);
 
+        references = source.CftIdentityModelAliasTextureContextSlotResolver?.Invoke(modelReference, textureContext, slotIndex) ?? [];
+        if (references.Count > 0) return new(references, "cft-identity-model-alias-derived", false);
+
         references = source.WeaponPreviewVariantTextureContextSlotResolver?.Invoke(modelReference, textureContext, slotIndex) ?? [];
         if (references.Count > 0) return new(references, "weapon-preview-variant-derived", false);
 
@@ -547,13 +551,14 @@ internal static class LithTechObjExporter
         return resolverName switch
         {
             "context-slot" => 0,
-            "weapon-preview-variant-derived" => 1,
-            "cft-player-view-role-derived" => 2,
-            "cft-equivalent-arm-derived" => 3,
-            "ltc-preview-variant-same-name-derived" => 4,
-            "cft-body-face-derived" => 4,
-            "motion-parent-slot-derived" => 5,
-            _ => 6
+            "cft-identity-model-alias-derived" => 1,
+            "weapon-preview-variant-derived" => 2,
+            "cft-player-view-role-derived" => 3,
+            "cft-equivalent-arm-derived" => 4,
+            "ltc-preview-variant-same-name-derived" => 5,
+            "cft-body-face-derived" => 5,
+            "motion-parent-slot-derived" => 6,
+            _ => 7
         };
     }
 

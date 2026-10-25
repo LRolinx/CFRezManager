@@ -503,6 +503,41 @@ internal static class LithTechModelTextureConfigIndex
         };
     }
 
+    public static Func<string, string, int, IReadOnlyList<string>>? CreateCftIdentityModelAliasTextureContextSlotResolver(ExplorerItem root)
+    {
+        TextureConfigIndex index = TextureConfigIndexCache.GetValue(root, BuildIndex);
+        if (index.IsEmpty)
+        {
+            return null;
+        }
+
+        return (modelReference, context, slotIndex) =>
+        {
+            string modelPath = NormalizeModelResourcePath(modelReference);
+            string contextKey = NormalizeLooseKey(context);
+            if (modelPath.Length == 0 || contextKey.Length == 0 || slotIndex is < 0 or > MaxTextureSlotIndex)
+            {
+                return [];
+            }
+
+            ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index);
+            string key = $"{NormalizeExtensionlessModelReference(modelPath)}\0{contextKey}";
+            if (dictionary.ByModelContext.TryGetValue(key, out Dictionary<int, string?>? directSlots) &&
+                directSlots.ContainsKey(slotIndex))
+            {
+                return [];
+            }
+
+            return dictionary.CftIdentityModelAliasByModelContext.TryGetValue(
+                       key,
+                       out Dictionary<int, string?>? slots) &&
+                   slots.TryGetValue(slotIndex, out string? texture) &&
+                   !string.IsNullOrWhiteSpace(texture)
+                ? [texture]
+                : [];
+        };
+    }
+
     public static Func<string, bool>? CreateModelTextureSlotMappingPresenceResolver(ExplorerItem root)
     {
         TextureConfigIndex index = TextureConfigIndexCache.GetValue(root, BuildIndex);
@@ -525,6 +560,8 @@ internal static class LithTechModelTextureConfigIndex
                     dictionary.PreviewNormalizedBasenameByModelPath.ContainsKey(modelPath) ||
                     dictionary.VariantSlotUvByModelPath.ContainsKey(modelPath) ||
                     dictionary.MotionParentSlotByModelPath.ContainsKey(modelPath) ||
+                    dictionary.CftIdentityModelAliasByModelContext.Keys.Any(key =>
+                        key.StartsWith(NormalizeExtensionlessModelReference(modelPath) + "\0", StringComparison.OrdinalIgnoreCase)) ||
                     dictionary.EquivalentArmByModelContext.Keys.Any(key =>
                         key.StartsWith(modelPath + "\0", StringComparison.OrdinalIgnoreCase)) ||
                     dictionary.LtcPreviewVariantByModelContext.Keys.Any(key =>
@@ -1037,6 +1074,7 @@ internal static class LithTechModelTextureConfigIndex
                      .Concat(dictionary.EquivalentArmByModelContext.Keys)
                      .Concat(dictionary.LtcPreviewVariantByModelContext.Keys)
                      .Concat(dictionary.MotionParentSlotByModelContext.Keys)
+                     .Concat(dictionary.CftIdentityModelAliasByModelContext.Keys)
                      .Concat(dictionary.WeaponPreviewVariantByModelContext.Keys))
         {
             int separator = contextKey.IndexOf('\0');
@@ -1067,6 +1105,7 @@ internal static class LithTechModelTextureConfigIndex
         WriteSlotDictionary(dictionary.VariantSlotUvByModelPath, "model", string.Empty, "variant-slot-uv-derived", isInferred: true);
         WriteSlotDictionary(dictionary.MotionParentSlotByModelPath, "model", string.Empty, "motion-parent-slot-derived", isInferred: true);
         WriteContextDictionary(dictionary.MotionParentSlotByModelContext, "context", "motion-parent-slot-derived", isInferred: true);
+        WriteContextDictionary(dictionary.CftIdentityModelAliasByModelContext, "context", "cft-identity-model-alias-derived", isInferred: true);
         WriteContextDictionary(dictionary.EquivalentArmByModelContext, "context", "cft-equivalent-arm-derived", isInferred: true);
         WriteContextDictionary(dictionary.WeaponPreviewVariantByModelContext, "context", "weapon-preview-variant-derived", isInferred: true);
         WriteRenderStyleContextDictionary(dictionary.RenderStyleByModelContext);
@@ -3732,11 +3771,13 @@ internal static class LithTechModelTextureConfigIndex
         var variantSlotUvByModelPath = new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase);
         var motionParentSlotByModelPath = new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase);
         var motionParentSlotByModelContext = new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase);
+        var cftIdentityModelAliasByModelContext = new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase);
         var weaponPreviewVariantByModelContext = new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase);
         var renderStyleByModelContext = new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase);
         var ltcTextureByModelContext = new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase);
         var modelsWithSlotSpecificBindings = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var deferredCftMotionSkinBindings = new List<DeferredCftMotionSkinBinding>();
+        var deferredCftIdentityModelAliasBindings = new List<DeferredCftIdentityModelAliasBinding>();
         var cftPlayerViewRoleTextureCandidates = new Dictionary<
             string,
             Dictionary<CftPlayerViewTextureRole, HashSet<string>>>(StringComparer.OrdinalIgnoreCase);
@@ -4165,6 +4206,31 @@ internal static class LithTechModelTextureConfigIndex
                                 rowSlotTextures[slotIndex] = null;
                             }
                         }
+                    }
+                }
+
+                if (string.Equals(
+                        Path.GetFileName(configItem.Path),
+                        "WeaponAttachItemDoll.CFT",
+                        StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(mapping.ModelColumn, "_PVItemModelFile", StringComparison.OrdinalIgnoreCase) &&
+                    modelPath.StartsWith("Models/PLAYERVIEW/", StringComparison.OrdinalIgnoreCase) &&
+                    modelPath.Contains("/ACC_SD/", StringComparison.OrdinalIgnoreCase) &&
+                    mapping.IdentityAliases is { Count: > 0 })
+                {
+                    foreach ((int slotIndex, string? texturePath) in rowSlotTextures)
+                    {
+                        if (!exactCftTextureSlots.Contains(slotIndex) || string.IsNullOrWhiteSpace(texturePath))
+                        {
+                            continue;
+                        }
+
+                        deferredCftIdentityModelAliasBindings.Add(new DeferredCftIdentityModelAliasBinding(
+                            modelPath,
+                            mapping.IdentityAliases,
+                            slotIndex,
+                            texturePath,
+                            contextKeys));
                     }
                 }
 
@@ -4875,6 +4941,23 @@ internal static class LithTechModelTextureConfigIndex
             motionParentSlotByModelContext,
             modelsWithSlotSpecificBindings);
 
+        AddVerifiedCftIdentityModelAliasTextureBindings(
+            deferredCftIdentityModelAliasBindings,
+            modelItemsByPlayerViewRolePath,
+            textureItemsByLogicalPath,
+            verifiedTexturePathCache,
+            decodedModels,
+            byModelPath,
+            byModelContext,
+            [inferredByModelPath, ltcPreviewVariantByModelPath, previewNormalizedBasenameByModelPath,
+                variantSlotUvByModelPath, motionParentSlotByModelPath, weaponPreviewVariantByModelPath,
+                equivalentArmByModelPath],
+            [inferredByModelContext, ltcPreviewVariantByModelContext, motionParentSlotByModelContext,
+                renderStyleByModelContext, ltcTextureByModelContext, weaponPreviewVariantByModelContext,
+                equivalentArmByModelContext],
+            cftIdentityModelAliasByModelContext,
+            modelsWithSlotSpecificBindings);
+
         Dictionary<string, CftPlayerViewRoleSlotLayouts> cftPlayerViewRoleSlotsByModelPath =
             BuildCftPlayerViewRoleSlotLayouts(
                 typedLtcPlayerViewModels,
@@ -4892,6 +4975,7 @@ internal static class LithTechModelTextureConfigIndex
             variantSlotUvByModelPath,
             motionParentSlotByModelPath,
             motionParentSlotByModelContext,
+            cftIdentityModelAliasByModelContext,
             renderStyleByModelContext,
             ltcTextureByModelContext,
             weaponPreviewVariantByModelContext,
@@ -6169,6 +6253,208 @@ internal static class LithTechModelTextureConfigIndex
                 modelsWithSlotSpecificBindings.Add(targetModelPath);
             }
         }
+    }
+
+    private static void AddVerifiedCftIdentityModelAliasTextureBindings(
+        IReadOnlyList<DeferredCftIdentityModelAliasBinding> bindings,
+        IReadOnlyDictionary<string, ExplorerItem[]> modelItemsByPlayerViewRolePath,
+        IReadOnlyDictionary<string, ExplorerItem[]> textureItemsByLogicalPath,
+        Dictionary<string, bool> verifiedTexturePathCache,
+        Dictionary<string, LithTechModelDocument?> decodedModels,
+        IReadOnlyDictionary<string, Dictionary<int, string?>> byModelPath,
+        IReadOnlyDictionary<string, Dictionary<int, string?>> byModelContext,
+        IReadOnlyList<IReadOnlyDictionary<string, Dictionary<int, string?>>> otherPathMappings,
+        IReadOnlyList<IReadOnlyDictionary<string, Dictionary<int, string?>>> otherContextMappings,
+        Dictionary<string, Dictionary<int, string?>> cftIdentityModelAliasByModelContext,
+        HashSet<string> modelsWithSlotSpecificBindings)
+    {
+        var candidates = new List<(string ModelPath, string Context, int Slot, string SourceModelPath, string TexturePath)>();
+
+        foreach (DeferredCftIdentityModelAliasBinding binding in bindings)
+        {
+            string sourceModelPath = NormalizeExtensionlessModelReference(binding.SourceModelPath);
+            string sourceDirectory = NormalizeModelResourcePath(Path.GetDirectoryName(sourceModelPath) ?? string.Empty);
+            string texturePath = NormalizeKey(binding.TexturePath);
+            if (sourceModelPath.Length == 0 || sourceDirectory.Length == 0 ||
+                !texturePath.StartsWith("ModelTextures/PLAYERVIEW/", StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(Path.GetExtension(texturePath), ".dtx", StringComparison.OrdinalIgnoreCase) ||
+                !HasConsistentDecodableDtxCopies(texturePath, textureItemsByLogicalPath, verifiedTexturePathCache))
+            {
+                continue;
+            }
+
+            string[] identityAliases = binding.IdentityAliases
+                .Select(NormalizeCftIdentityModelAlias)
+                .Where(alias => alias.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (identityAliases.Length == 0)
+            {
+                continue;
+            }
+
+            string[] targetModelPaths = modelItemsByPlayerViewRolePath.Keys
+                .Where(path => IsAccSdPreviewModelPath(path) &&
+                               string.Equals(
+                                   NormalizeModelResourcePath(Path.GetDirectoryName(path) ?? string.Empty),
+                                   sourceDirectory,
+                                   StringComparison.OrdinalIgnoreCase) &&
+                               !string.Equals(
+                                   NormalizeExtensionlessModelReference(path),
+                                   sourceModelPath,
+                                   StringComparison.OrdinalIgnoreCase) &&
+                               identityAliases.Contains(NormalizeCftIdentityModelAlias(path), StringComparer.OrdinalIgnoreCase))
+                .Select(NormalizeExtensionlessModelReference)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (targetModelPaths.Length != 1 ||
+                !modelItemsByPlayerViewRolePath.TryGetValue(targetModelPaths[0], out ExplorerItem[]? targetModelItems) ||
+                !modelItemsByPlayerViewRolePath.TryGetValue(sourceModelPath, out ExplorerItem[]? sourceModelItems) ||
+                !TryDecodeConsistentPlayerViewModelDocuments(sourceModelItems, decodedModels, out List<LithTechModelDocument> sourceDocuments) ||
+                !TryDecodeConsistentPlayerViewModelDocuments(targetModelItems, decodedModels, out List<LithTechModelDocument> targetDocuments) ||
+                !HaveIdenticalAuthoritativePlayerViewLayouts(sourceDocuments, targetDocuments) ||
+                IsPlayerViewHandOrArmTextureSlot(sourceDocuments, binding.SlotIndex) ||
+                IsPlayerViewHandOrArmTextureSlot(targetDocuments, binding.SlotIndex) ||
+                !HasAuthoritativePlayerViewTextureSlot(sourceDocuments, binding.SlotIndex) ||
+                !HasAuthoritativePlayerViewTextureSlot(targetDocuments, binding.SlotIndex))
+            {
+                continue;
+            }
+
+            string targetModelPath = targetModelPaths[0];
+            foreach (string context in binding.ContextKeys
+                         .Select(NormalizeLooseKey)
+                         .Where(context => context.Length > 0)
+                         .Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                string contextKey = $"{targetModelPath}\0{context}";
+                if (HasSlot(byModelPath, targetModelPath, binding.SlotIndex) ||
+                    HasSlotInAnyMapping(otherPathMappings, targetModelPath, binding.SlotIndex) ||
+                    HasSlot(byModelContext, contextKey, binding.SlotIndex) ||
+                    HasSlotInAnyMapping(otherContextMappings, contextKey, binding.SlotIndex) ||
+                    HasSlot(cftIdentityModelAliasByModelContext, contextKey, binding.SlotIndex))
+                {
+                    continue;
+                }
+
+                candidates.Add((targetModelPath, context, binding.SlotIndex, sourceModelPath, texturePath));
+            }
+        }
+
+        foreach (IGrouping<string, (string ModelPath, string Context, int Slot, string SourceModelPath, string TexturePath)> group in
+                 candidates.GroupBy(
+                     candidate => $"{candidate.ModelPath}\0{candidate.Context}\0{candidate.Slot.ToString(CultureInfo.InvariantCulture)}",
+                     StringComparer.OrdinalIgnoreCase))
+        {
+            var firstCandidate = group.First();
+            string modelPath = firstCandidate.ModelPath;
+            string context = firstCandidate.Context;
+            int slot = firstCandidate.Slot;
+            string[] sourceModels = group.Select(candidate => candidate.SourceModelPath)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            string[] textures = group.Select(candidate => candidate.TexturePath)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            string contextKey = $"{modelPath}\0{context}";
+            if (sourceModels.Length != 1 || textures.Length != 1 ||
+                HasSlot(byModelPath, modelPath, slot) ||
+                HasSlotInAnyMapping(otherPathMappings, modelPath, slot) ||
+                HasSlot(byModelContext, contextKey, slot) ||
+                HasSlotInAnyMapping(otherContextMappings, contextKey, slot) ||
+                HasSlot(cftIdentityModelAliasByModelContext, contextKey, slot))
+            {
+                continue;
+            }
+
+            AddModelTextureContextSlotMapping(
+                cftIdentityModelAliasByModelContext,
+                modelPath,
+                context,
+                slot,
+                textures[0]);
+            modelsWithSlotSpecificBindings.Add(modelPath);
+        }
+
+        static bool IsAccSdPreviewModelPath(string path) =>
+            path.StartsWith("Models/PLAYERVIEW/", StringComparison.OrdinalIgnoreCase) &&
+            path.Contains("/ACC_SD/", StringComparison.OrdinalIgnoreCase);
+
+        static string NormalizeCftIdentityModelAlias(string value)
+        {
+            string stem = Path.GetFileNameWithoutExtension(NormalizeKey(value));
+            if (stem.StartsWith("PV-", StringComparison.OrdinalIgnoreCase) ||
+                stem.StartsWith("PV_", StringComparison.OrdinalIgnoreCase))
+            {
+                stem = stem[3..];
+            }
+
+            return NormalizeLooseKey(stem);
+        }
+
+        static bool HasAuthoritativePlayerViewTextureSlot(
+            IReadOnlyList<LithTechModelDocument> documents,
+            int slotIndex)
+        {
+            if (slotIndex is < 0 or > MaxTextureSlotIndex)
+            {
+                return false;
+            }
+
+            foreach (LithTechModelDocument document in documents)
+            {
+                LithTechMesh[] slotMeshes = document.Meshes
+                    .Where(mesh => (mesh.TextureSlotIndices ?? []).Contains(slotIndex))
+                    .ToArray();
+                if (slotMeshes.Length == 0 || slotMeshes.Any(mesh =>
+                        !mesh.HasAuthoritativeTextureBindings ||
+                        mesh.RenderStyleIndex is null ||
+                        !string.IsNullOrWhiteSpace(mesh.TexturePath)))
+                {
+                    return false;
+                }
+            }
+
+            return documents.Count > 0;
+        }
+
+        static bool HaveIdenticalAuthoritativePlayerViewLayouts(
+            IReadOnlyList<LithTechModelDocument> sourceDocuments,
+            IReadOnlyList<LithTechModelDocument> targetDocuments)
+        {
+            if (sourceDocuments.Count == 0 || targetDocuments.Count == 0)
+            {
+                return false;
+            }
+
+            foreach (LithTechModelDocument sourceDocument in sourceDocuments)
+            {
+                foreach (LithTechModelDocument targetDocument in targetDocuments)
+                {
+                    if (!LithTechModelMeshTextureResolver.HaveIdenticalMeshLayouts(sourceDocument, targetDocument) ||
+                        sourceDocument.Meshes.Where((mesh, index) =>
+                            mesh.RenderStyleIndex != targetDocument.Meshes[index].RenderStyleIndex ||
+                            mesh.HasAuthoritativeTextureBindings != targetDocument.Meshes[index].HasAuthoritativeTextureBindings)
+                            .Any())
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        static bool HasSlot(
+            IReadOnlyDictionary<string, Dictionary<int, string?>> mappings,
+            string key,
+            int slotIndex) => mappings.TryGetValue(key, out Dictionary<int, string?>? slots) &&
+                              slots.ContainsKey(slotIndex);
+
+        static bool HasSlotInAnyMapping(
+            IReadOnlyList<IReadOnlyDictionary<string, Dictionary<int, string?>>> mappings,
+            string key,
+            int slotIndex) => mappings.Any(mapping => HasSlot(mapping, key, slotIndex));
     }
 
     private static void AddVerifiedMotionParentSlotTextureBindings(
@@ -10048,6 +10334,13 @@ internal static class LithTechModelTextureConfigIndex
         string TexturePath,
         IReadOnlyList<string> ContextKeys);
 
+    private sealed record DeferredCftIdentityModelAliasBinding(
+        string SourceModelPath,
+        IReadOnlyList<string> IdentityAliases,
+        int SlotIndex,
+        string TexturePath,
+        IReadOnlyList<string> ContextKeys);
+
     private sealed record ModelTextureDictionary(
         IReadOnlyDictionary<string, IReadOnlyList<string>> ByName,
         IReadOnlyDictionary<string, IReadOnlyList<string>> ByModelPath,
@@ -10072,6 +10365,7 @@ internal static class LithTechModelTextureConfigIndex
         IReadOnlyDictionary<string, Dictionary<int, string?>> VariantSlotUvByModelPath,
         IReadOnlyDictionary<string, Dictionary<int, string?>> MotionParentSlotByModelPath,
         IReadOnlyDictionary<string, Dictionary<int, string?>> MotionParentSlotByModelContext,
+        IReadOnlyDictionary<string, Dictionary<int, string?>> CftIdentityModelAliasByModelContext,
         IReadOnlyDictionary<string, Dictionary<int, string?>> RenderStyleByModelContext,
         IReadOnlyDictionary<string, Dictionary<int, string?>> LtcTextureByModelContext,
         IReadOnlyDictionary<string, Dictionary<int, string?>> WeaponPreviewVariantByModelContext,
@@ -10083,6 +10377,7 @@ internal static class LithTechModelTextureConfigIndex
         IReadOnlyDictionary<string, CftPlayerViewRoleSlotLayouts> CftPlayerViewRoleSlotsByModelPath)
     {
         public static ModelTextureSlotDictionary Empty { get; } = new(
+            new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase),
