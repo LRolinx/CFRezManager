@@ -264,6 +264,15 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
   | 2164 | `PV-GatlingGun_InfernalDragon.DTX`（槽 2） | `QV-GatlingGun_InfernalDragon_preview` → 同名 PV DTX | `QV-GatlingGun_InfernalDragon.DTX` |
 
   道具 `1939` 也使用 LTC `WeaponIndex:1111`。三项 `preview:3000000:<道具编号>` 聚焦导出均未解析贴图；不能用预览编号替代道具身份。13 份目标 LTB 均成功解码，无几何跳过；手、臂槽仍未解析，`item:1111` 的 PView 槽 3 也未解析。报告位于 `artifacts/mapping-audit/item-mismatch-856-1111-2164-20261025/`。
+- 道具 `1394`、`1620`、`1690` 的 `item:` 与 `preview:` 指向不同的 LTC 武器记录，需按上下文分别查询：
+
+  | 道具编号 | `item:` 身份和映射 | `preview:` 身份和映射 |
+  | ---: | --- | --- |
+  | 1394 | `WeaponIndex:1394` 为 M82A1 IronShark；PView 槽 2、3 分别用 `PV-M82A1-IronShark.DTX`、`PV-M82A1-IronShark_01.DTX`。QV 世界贴图 `QV-M82A1-IronShark.DTX` 路径存在，但 `rez` 与 `rez2` 副本哈希不同，槽 0 未解析。 | `ModelId:2013` 为 COP357 GoldPhoenix；`preview:3000000:1394` 的 QV 槽 0 用 `QV-COP357_GoldPhoenix.DTX`，PView 槽 2 用 `PV-COP357_GoldPhoenix.DTX`。 |
+  | 1620 | `WeaponIndex:1620` 为 Shovel BornBeast；PView 槽 2 用 `PV-Shovel_BornBeast.DTX`。QV 世界贴图 `QV-Shovel_BornBeast.DTX` 在 `rez`、`rez2`、`rez4` 的副本哈希不一致，槽 0 未解析。 | `ModelId:2390` 为 AWM-A Infernal Dragon Punk；`preview:3000000:1620` 的男、女 QV 模型槽 0 用 `QV-AWM_A_InfernalDragon_Punk.DTX`，PView 槽 2、3 用 `PV-AWM_A_InfernalDragon_Punk.DTX`、`PV-AWM_A_InfernalDragon_Punk_01.DTX`。 |
+  | 1690 | `WeaponIndex:1690` 为 Knuckle2 Infernal Dragon。LTC 将 M_R/F_R 世界模型槽 0 关联到 `QV-Knuckle2_InfernalDragon.DTX`，将 M_L/F_L 左手模型及预览模型关联到 `PV-Knuckle2_InfernalDragon.DTX`；PView 基模槽 2 也用该 PV 贴图。QV DTX 的 `rez`、`rez2` 副本哈希不同，因此右手世界模型槽 0 未解析。 | `ModelId:2508` 为 MP5KA4 Halloween2016；`preview:3000000:1690` 的 QV 槽 0 用 `QV-MP5KA4_darkgray.DTX`，PView 槽 2 用 `PV-MP5KA4_darkgray.DTX`。 |
+
+  三项 `item:` 与 `preview:` 聚焦导出中的手、臂槽均未解析，所有目标 LTB 均成功解码且无几何跳过。报告位于 `artifacts/mapping-audit/item-mismatch-1394-1620-1690-20261025/`。
 - 模型组 `3000000` 的 CowRifle 两个道具共用 `PV-CowRifle_MOS_AK47`，但贴图身份不同：`item:2554` 经 `WeaponModel.ModelId:4555` / LTC `WeaponIndex:4555` 使用 `QV-CowRifle_MOS_AK47_NobleGold.DTX` 和 `PV-CowRifle_MOS_AK47_NobleGold.DTX`；`item:2575` 经 `ModelId:4554` / `WeaponIndex:4554` 使用不带 `NobleGold` 的两张 DTX。两者的 QV 男、女世界模型槽 0 均已聚焦导出验证；2554 的 `QV-CowRifle_MOS_AK47_NobleGold_preview` 槽 0 使用 PV NobleGold DTX。PView 基模槽 2 直接映射各自 DTX，BL 变体槽 2 按 LTC 规则推导同一贴图；GR、WOMAN_BL、WOMAN_GR 变体尚未通过完整副本和槽位布局校验，保持未映射。五个 PView 模型的 10 份物理副本均已解码，无几何跳过；世界模型导出及 `item:2554` 的 NobleGold 预览模型导出均无缺失贴图。报告位于 `artifacts/mapping-audit/item-1399-flashbang-focused-20261025/`。
 - 模型组 `3000000` 的 HuluXiongdi 道具经同组 `WeaponModel` 关联到以下 LTC 武器记录：
 
