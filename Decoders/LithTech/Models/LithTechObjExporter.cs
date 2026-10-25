@@ -29,7 +29,8 @@ internal sealed record LithTechObjExportSource(
     Func<string, int, IReadOnlyList<string>>? PreviewNormalizedBasenameTextureSlotResolver = null,
     Func<string, int, IReadOnlyList<string>>? VariantSlotUvTextureSlotResolver = null,
     Func<string, int, IReadOnlyList<string>>? MotionParentSlotTextureSlotResolver = null,
-    Func<string, string, int, IReadOnlyList<string>>? MotionParentContextSlotResolver = null);
+    Func<string, string, int, IReadOnlyList<string>>? MotionParentContextSlotResolver = null,
+    Func<string, string, int, IReadOnlyList<string>>? CftPlayerViewRoleTextureContextSlotResolver = null);
 
 internal sealed record LithTechObjExportResult(
     string ObjPath,
@@ -517,6 +518,9 @@ internal static class LithTechObjExporter
         references = source.WeaponPreviewVariantTextureContextSlotResolver?.Invoke(modelReference, textureContext, slotIndex) ?? [];
         if (references.Count > 0) return new(references, "weapon-preview-variant-derived", false);
 
+        references = source.CftPlayerViewRoleTextureContextSlotResolver?.Invoke(modelReference, textureContext, slotIndex) ?? [];
+        if (references.Count > 0) return new(references, "cft-player-view-role-derived", false);
+
         references = source.EquivalentArmTextureContextSlotResolver?.Invoke(modelReference, textureContext, slotIndex) ?? [];
         if (references.Count > 0) return new(references, "cft-equivalent-arm-derived", false);
 
@@ -544,11 +548,12 @@ internal static class LithTechObjExporter
         {
             "context-slot" => 0,
             "weapon-preview-variant-derived" => 1,
-            "cft-equivalent-arm-derived" => 2,
-            "ltc-preview-variant-same-name-derived" => 3,
-            "cft-body-face-derived" => 3,
-            "motion-parent-slot-derived" => 4,
-            _ => 5
+            "cft-player-view-role-derived" => 2,
+            "cft-equivalent-arm-derived" => 3,
+            "ltc-preview-variant-same-name-derived" => 4,
+            "cft-body-face-derived" => 4,
+            "motion-parent-slot-derived" => 5,
+            _ => 6
         };
     }
 

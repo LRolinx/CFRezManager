@@ -233,6 +233,9 @@ internal static class LithTechObjExportCommand
         Func<string, string, int, IReadOnlyList<string>>? equivalentArmTextureContextSlotResolver = string.IsNullOrWhiteSpace(options.TextureContext)
             ? null
             : LithTechModelTextureConfigIndex.CreateEquivalentArmTextureContextSlotResolver(root);
+        Func<string, string, int, IReadOnlyList<string>>? cftPlayerViewRoleTextureContextSlotResolver = string.IsNullOrWhiteSpace(options.TextureContext)
+            ? null
+            : LithTechModelTextureConfigIndex.CreateCftPlayerViewRoleTextureContextSlotResolver(root);
         Func<string, string, int, IReadOnlyList<string>>? weaponPreviewVariantTextureContextSlotResolver = string.IsNullOrWhiteSpace(options.TextureContext)
             ? null
             : LithTechModelTextureConfigIndex.CreateWeaponPreviewVariantTextureContextSlotResolver(root);
@@ -276,7 +279,8 @@ internal static class LithTechObjExportCommand
                     previewNormalizedBasenameTextureSlotResolver,
                     variantSlotUvTextureSlotResolver,
                     motionParentSlotTextureSlotResolver,
-                    motionParentContextSlotResolver));
+                    motionParentContextSlotResolver,
+                    cftPlayerViewRoleTextureContextSlotResolver));
             }
             else
             {

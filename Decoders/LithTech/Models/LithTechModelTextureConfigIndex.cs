@@ -37,6 +37,20 @@ internal static class LithTechModelTextureConfigIndex
         string TexturePath,
         IReadOnlyList<string> MeshNames);
 
+    private sealed record CftPlayerViewRoleSlotLayouts(
+        CftPlayerViewRoleSlotMap HandOnly,
+        CftPlayerViewRoleSlotMap ArmOnly,
+        CftPlayerViewRoleSlotMap HandAndArm)
+    {
+        public CftPlayerViewRoleSlotMap ForReferences(bool hasHand, bool hasArm) => (hasHand, hasArm) switch
+        {
+            (true, true) => HandAndArm,
+            (true, false) => HandOnly,
+            (false, true) => ArmOnly,
+            _ => CftPlayerViewRoleSlotMap.Empty
+        };
+    }
+
     private const int MaxConfigBytes = 1024 * 1024;
     private const int MaxCftBytes = 4 * 1024 * 1024;
     private const int MaxLtcBytes = 16 * 1024 * 1024;
@@ -505,6 +519,7 @@ internal static class LithTechModelTextureConfigIndex
                    (dictionary.ModelsWithSlotSpecificBindings.Contains(modelPath) ||
                     dictionary.ByModelPath.TryGetValue(modelPath, out Dictionary<int, string?>? slots) &&
                     slots.Count > 0 ||
+                    dictionary.CftPlayerViewRoleSlotsByModelPath.ContainsKey(modelPath) ||
                     dictionary.EquivalentArmByModelPath.ContainsKey(modelPath) ||
                     dictionary.LtcPreviewVariantByModelPath.ContainsKey(modelPath) ||
                     dictionary.PreviewNormalizedBasenameByModelPath.ContainsKey(modelPath) ||
@@ -543,6 +558,29 @@ internal static class LithTechModelTextureConfigIndex
             return dictionary.EquivalentArmByModelPath.TryGetValue(modelPath, out Dictionary<int, string?>? pathSlots) &&
                    pathSlots.TryGetValue(slotIndex, out string? pathTexture) && !string.IsNullOrWhiteSpace(pathTexture)
                 ? [pathTexture] : [];
+        };
+    }
+
+    public static Func<string, string, int, IReadOnlyList<string>>? CreateCftPlayerViewRoleTextureContextSlotResolver(ExplorerItem root)
+    {
+        TextureConfigIndex index = TextureConfigIndexCache.GetValue(root, BuildIndex);
+        if (index.IsEmpty) return null;
+        return (modelReference, context, slotIndex) =>
+        {
+            string modelPath = NormalizeModelResourcePath(modelReference);
+            string contextKey = NormalizeLooseKey(context);
+            if (modelPath.Length == 0 || contextKey.Length == 0 || slotIndex is < 0 or > MaxTextureSlotIndex)
+                return [];
+
+            ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index);
+            string key = $"{modelPath}\0{contextKey}";
+            if (dictionary.ByModelContext.TryGetValue(key, out Dictionary<int, string?>? directSlots) &&
+                directSlots.ContainsKey(slotIndex))
+            {
+                return [];
+            }
+
+            return ResolveCftPlayerViewRoleTextureContextSlot(dictionary, modelPath, contextKey, slotIndex);
         };
     }
 
@@ -3699,6 +3737,9 @@ internal static class LithTechModelTextureConfigIndex
         var ltcTextureByModelContext = new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase);
         var modelsWithSlotSpecificBindings = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var deferredCftMotionSkinBindings = new List<DeferredCftMotionSkinBinding>();
+        var cftPlayerViewRoleTextureCandidates = new Dictionary<
+            string,
+            Dictionary<CftPlayerViewTextureRole, HashSet<string>>>(StringComparer.OrdinalIgnoreCase);
         var directPlayerViewModels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var typedLtcPlayerViewModels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var modelItemsByPath = modelResourceItems
@@ -3778,6 +3819,41 @@ internal static class LithTechModelTextureConfigIndex
                 }
 
                 string[] contextKeys = GetCftContextKeys(configItem.Path, mapping);
+
+                foreach (CftTextureReference texture in mapping.TextureReferences)
+                {
+                    if (!CftPlayerViewRoleSlotResolver.TryGetTextureRole(
+                            texture.Column,
+                            out CftPlayerViewTextureRole role) ||
+                        !TryGetCftPlayerViewTextureSide(texture.Column, out string textureSide))
+                    {
+                        continue;
+                    }
+
+                    string? existingTexturePath = ResolveExistingCftTextureReference(
+                        modelResourcePath,
+                        texture.Path,
+                        resourceItems,
+                        resourcePaths,
+                        texturePathsByBaseName);
+                    bool hasConsistentTextureCopies = existingTexturePath is not null &&
+                        HasConsistentPhysicalResourceCopies(resourceItems, existingTexturePath);
+                    string candidate = hasConsistentTextureCopies
+                        ? NormalizeKey(existingTexturePath!)
+                        : "\u0001" + NormalizeKey(texture.Path);
+
+                    foreach (string contextKey in GetCftSideContextKeys(
+                                 configItem.Path,
+                                 mapping,
+                                 textureSide))
+                    {
+                        AddCftPlayerViewRoleTextureCandidate(
+                            cftPlayerViewRoleTextureCandidates,
+                            contextKey,
+                            role,
+                            candidate);
+                    }
+                }
 
                 if (string.Equals(
                         Path.GetFileName(configItem.Path),
@@ -4799,6 +4875,12 @@ internal static class LithTechModelTextureConfigIndex
             motionParentSlotByModelContext,
             modelsWithSlotSpecificBindings);
 
+        Dictionary<string, CftPlayerViewRoleSlotLayouts> cftPlayerViewRoleSlotsByModelPath =
+            BuildCftPlayerViewRoleSlotLayouts(
+                typedLtcPlayerViewModels,
+                modelItemsByPlayerViewRolePath,
+                decodedModels);
+
         return new ModelTextureSlotDictionary(
             byModelPath,
             byModelContext,
@@ -4816,7 +4898,9 @@ internal static class LithTechModelTextureConfigIndex
             weaponPreviewVariantByModelPath,
             modelsWithSlotSpecificBindings,
             equivalentArmByModelContext,
-            equivalentArmByModelPath);
+            equivalentArmByModelPath,
+            cftPlayerViewRoleTextureCandidates,
+            cftPlayerViewRoleSlotsByModelPath);
     }
 
     private static void AddLtcPreviewVariantSameNameTextureBindings(
@@ -6742,6 +6826,186 @@ internal static class LithTechModelTextureConfigIndex
             .Append($"record:{NormalizeKey(tablePath)}#{mapping.RowIndex.ToString(CultureInfo.InvariantCulture)}:{side}")
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private static bool TryGetCftPlayerViewTextureSide(string columnName, out string side)
+    {
+        side = string.Empty;
+        if (!CftPlayerViewRoleSlotResolver.TryGetTextureRole(columnName, out CftPlayerViewTextureRole role))
+        {
+            return false;
+        }
+
+        string normalizedColumn = columnName.TrimStart('_');
+        string roleField = role == CftPlayerViewTextureRole.Hand
+            ? "PVHandTextureFile"
+            : "PVArmTextureFile";
+        int roleFieldIndex = normalizedColumn.IndexOf(roleField, StringComparison.OrdinalIgnoreCase);
+        if (roleFieldIndex <= 0)
+        {
+            return false;
+        }
+
+        string prefix = normalizedColumn[..roleFieldIndex].TrimEnd('_');
+        foreach (string candidateSide in new[] { "BL", "GR" })
+        {
+            if (string.Equals(prefix, candidateSide, StringComparison.OrdinalIgnoreCase) ||
+                prefix.EndsWith("_" + candidateSide, StringComparison.OrdinalIgnoreCase))
+            {
+                side = candidateSide;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static void AddCftPlayerViewRoleTextureCandidate(
+        Dictionary<string, Dictionary<CftPlayerViewTextureRole, HashSet<string>>> candidatesByContext,
+        string context,
+        CftPlayerViewTextureRole role,
+        string candidate)
+    {
+        string contextKey = NormalizeLooseKey(context);
+        if (contextKey.Length == 0)
+        {
+            return;
+        }
+
+        if (!candidatesByContext.TryGetValue(contextKey, out Dictionary<CftPlayerViewTextureRole, HashSet<string>>? roleCandidates))
+        {
+            roleCandidates = new Dictionary<CftPlayerViewTextureRole, HashSet<string>>();
+            candidatesByContext.Add(contextKey, roleCandidates);
+        }
+
+        if (!roleCandidates.TryGetValue(role, out HashSet<string>? textureCandidates))
+        {
+            textureCandidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            roleCandidates.Add(role, textureCandidates);
+        }
+
+        textureCandidates.Add(candidate);
+    }
+
+    private static Dictionary<string, CftPlayerViewRoleSlotLayouts> BuildCftPlayerViewRoleSlotLayouts(
+        IReadOnlySet<string> typedLtcPlayerViewModels,
+        IReadOnlyDictionary<string, ExplorerItem[]> modelItemsByPlayerViewRolePath,
+        Dictionary<string, LithTechModelDocument?> decodedModels)
+    {
+        var layoutsByModelPath = new Dictionary<string, CftPlayerViewRoleSlotLayouts>(StringComparer.OrdinalIgnoreCase);
+        foreach (string modelReference in typedLtcPlayerViewModels)
+        {
+            string modelPath = NormalizeModelResourcePath(modelReference);
+            if (!modelPath.StartsWith("Models/PLAYERVIEW/PV-", StringComparison.OrdinalIgnoreCase) ||
+                !modelItemsByPlayerViewRolePath.TryGetValue(modelPath, out ExplorerItem[]? modelItems) ||
+                modelItems.Length == 0)
+            {
+                continue;
+            }
+
+            var documents = new List<LithTechModelDocument>(modelItems.Length);
+            foreach (ExplorerItem modelItem in modelItems)
+            {
+                LithTechModelDocument? document = TryDecodeSlotInheritanceModel(
+                    modelItem,
+                    GetModelResourcePath(modelItem),
+                    decodedModels);
+                if (document is null)
+                {
+                    documents.Clear();
+                    break;
+                }
+
+                documents.Add(document);
+            }
+
+            if (documents.Count != modelItems.Length ||
+                !documents.SelectMany(document => document.Meshes).Any(mesh =>
+                    mesh.Name.Contains("hand", StringComparison.OrdinalIgnoreCase) ||
+                    mesh.Name.Contains("arm", StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            CftPlayerViewRoleSlotMap handOnly = CftPlayerViewRoleSlotResolver.Resolve(documents, true, false);
+            CftPlayerViewRoleSlotMap armOnly = CftPlayerViewRoleSlotResolver.Resolve(documents, false, true);
+            CftPlayerViewRoleSlotMap handAndArm = CftPlayerViewRoleSlotResolver.Resolve(documents, true, true);
+            if (handOnly.HandSlots.Count == 0 && handOnly.ArmSlots.Count == 0 &&
+                armOnly.HandSlots.Count == 0 && armOnly.ArmSlots.Count == 0 &&
+                handAndArm.HandSlots.Count == 0 && handAndArm.ArmSlots.Count == 0)
+            {
+                continue;
+            }
+
+            layoutsByModelPath[modelPath] = new CftPlayerViewRoleSlotLayouts(handOnly, armOnly, handAndArm);
+        }
+
+        return layoutsByModelPath;
+    }
+
+    private static IReadOnlyList<string> ResolveCftPlayerViewRoleTextureContextSlot(
+        ModelTextureSlotDictionary dictionary,
+        string modelPath,
+        string contextKey,
+        int slotIndex)
+    {
+        if (!dictionary.CftPlayerViewRoleSlotsByModelPath.TryGetValue(
+                modelPath,
+                out CftPlayerViewRoleSlotLayouts? layouts) ||
+            !dictionary.CftPlayerViewRoleTexturesByContext.TryGetValue(
+                contextKey,
+                out Dictionary<CftPlayerViewTextureRole, HashSet<string>>? roleCandidates))
+        {
+            return [];
+        }
+
+        bool hasHand = TryGetUniqueCftPlayerViewRoleTextureCandidate(
+            roleCandidates,
+            CftPlayerViewTextureRole.Hand,
+            out string handTexture);
+        bool hasArm = TryGetUniqueCftPlayerViewRoleTextureCandidate(
+            roleCandidates,
+            CftPlayerViewTextureRole.Arm,
+            out string armTexture);
+        if (!hasHand && !hasArm)
+        {
+            return [];
+        }
+
+        CftPlayerViewRoleSlotMap roleSlots = layouts.ForReferences(hasHand, hasArm);
+        var matches = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (hasHand && roleSlots.HandSlots.Contains(slotIndex))
+        {
+            matches.Add(handTexture);
+        }
+
+        if (hasArm && roleSlots.ArmSlots.Contains(slotIndex))
+        {
+            matches.Add(armTexture);
+        }
+
+        return matches.Count == 1 ? matches.ToArray() : [];
+    }
+
+    private static bool TryGetUniqueCftPlayerViewRoleTextureCandidate(
+        IReadOnlyDictionary<CftPlayerViewTextureRole, HashSet<string>> candidates,
+        CftPlayerViewTextureRole role,
+        out string texturePath)
+    {
+        texturePath = string.Empty;
+        if (!candidates.TryGetValue(role, out HashSet<string>? roleCandidates) || roleCandidates.Count != 1)
+        {
+            return false;
+        }
+
+        string candidate = roleCandidates.Single();
+        if (candidate.StartsWith("\u0001", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        texturePath = candidate;
+        return true;
     }
 
     private static bool TryGetCharacterCftBodySide(
@@ -9814,7 +10078,9 @@ internal static class LithTechModelTextureConfigIndex
         IReadOnlyDictionary<string, Dictionary<int, string?>> WeaponPreviewVariantByModelPath,
         IReadOnlySet<string> ModelsWithSlotSpecificBindings,
         IReadOnlyDictionary<string, Dictionary<int, string?>> EquivalentArmByModelContext,
-        IReadOnlyDictionary<string, Dictionary<int, string?>> EquivalentArmByModelPath)
+        IReadOnlyDictionary<string, Dictionary<int, string?>> EquivalentArmByModelPath,
+        IReadOnlyDictionary<string, Dictionary<CftPlayerViewTextureRole, HashSet<string>>> CftPlayerViewRoleTexturesByContext,
+        IReadOnlyDictionary<string, CftPlayerViewRoleSlotLayouts> CftPlayerViewRoleSlotsByModelPath)
     {
         public static ModelTextureSlotDictionary Empty { get; } = new(
             new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase),
@@ -9833,7 +10099,9 @@ internal static class LithTechModelTextureConfigIndex
             new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase),
             new HashSet<string>(StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase),
-            new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase));
+            new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase),
+            new Dictionary<string, Dictionary<CftPlayerViewTextureRole, HashSet<string>>>(StringComparer.OrdinalIgnoreCase),
+            new Dictionary<string, CftPlayerViewRoleSlotLayouts>(StringComparer.OrdinalIgnoreCase));
     }
 
     private sealed record ModelTextureMapping(string ModelReference, IReadOnlyList<string> TextureReferences);
