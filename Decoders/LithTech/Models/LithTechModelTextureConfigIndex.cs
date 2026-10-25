@@ -9182,8 +9182,15 @@ internal static class LithTechModelTextureConfigIndex
                 continue;
             }
 
-            string armModelPath = $"ArmModel/Arm_{nameParts[index]}_{side}";
-            if (modelItemsByPlayerViewRolePath.ContainsKey(armModelPath))
+            string armModelName = $"Arm_{nameParts[index]}_{side}";
+            string[] armModelPaths =
+            [
+                $"ArmModel/{armModelName}",
+                $"Models/PLAYERVIEW/ArmModel/{armModelName}",
+                $"Models/PLAYERVIEW/{armModelName}"
+            ];
+            string? armModelPath = armModelPaths.FirstOrDefault(modelItemsByPlayerViewRolePath.ContainsKey);
+            if (armModelPath is not null)
             {
                 return armModelPath;
             }
