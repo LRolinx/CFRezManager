@@ -399,7 +399,7 @@ internal static class LithTechObjExporter
                         resolverName = matchesPreviewCharacterRole
                             ? "preview-character-role-derived"
                             : matchesLtcPreviewVariant
-                            ? "ltc-preview-variant-same-name-derived"
+                            ? "ltc-preview-variant-derived"
                             : matchesVariantSlotUv
                                 ? "variant-slot-uv-derived"
                                 : matchesPreviewNormalizedBasename
@@ -546,7 +546,7 @@ internal static class LithTechObjExporter
             bool matchesLtcPreviewVariant = ltcPreviewVariantReferences.Count > 0 &&
                                             inferredReferences.SequenceEqual(ltcPreviewVariantReferences, StringComparer.OrdinalIgnoreCase);
             return new(inferredReferences, matchesLtcPreviewVariant
-                ? "ltc-preview-variant-same-name-derived"
+                ? "ltc-preview-variant-derived"
                 : "cft-body-face-derived", false);
         }
 
@@ -565,7 +565,7 @@ internal static class LithTechObjExporter
             "weapon-preview-variant-derived" => 2,
             "cft-player-view-role-derived" => 3,
             "cft-equivalent-arm-derived" => 4,
-            "ltc-preview-variant-same-name-derived" => 5,
+            "ltc-preview-variant-derived" => 5,
             "preview-character-role-derived" => 5,
             "cft-body-face-derived" => 5,
             "motion-parent-slot-derived" => 6,

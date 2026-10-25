@@ -1206,8 +1206,8 @@ internal static class LithTechModelTextureConfigIndex
         WriteSlotDictionary(dictionary.InferredByModelPath, "model", string.Empty, "cft-body-face-derived", isInferred: true);
         WriteContextDictionary(dictionary.InferredByModelContext, "context", "cft-body-face-derived", isInferred: true);
         WriteSlotDictionary(dictionary.PreviewCharacterRoleByModelPath, "model", string.Empty, "preview-character-role-derived", isInferred: true);
-        WriteSlotDictionary(dictionary.LtcPreviewVariantByModelPath, "model", string.Empty, "ltc-preview-variant-same-name-derived", isInferred: true);
-        WriteContextDictionary(dictionary.LtcPreviewVariantByModelContext, "context", "ltc-preview-variant-same-name-derived", isInferred: true);
+        WriteSlotDictionary(dictionary.LtcPreviewVariantByModelPath, "model", string.Empty, "ltc-preview-variant-derived", isInferred: true);
+        WriteContextDictionary(dictionary.LtcPreviewVariantByModelContext, "context", "ltc-preview-variant-derived", isInferred: true);
         WriteSlotDictionary(dictionary.PreviewNormalizedBasenameByModelPath, "model", string.Empty, "preview-normalized-basename-derived", isInferred: true);
         WriteSlotDictionary(dictionary.VariantSlotUvByModelPath, "model", string.Empty, "variant-slot-uv-derived", isInferred: true);
         WriteSlotDictionary(
@@ -4772,7 +4772,7 @@ internal static class LithTechModelTextureConfigIndex
                         mappedSlots.Length == 1 &&
                         mapping.ModelField.StartsWith("PViewModelFileName", StringComparison.OrdinalIgnoreCase))
                     {
-                        AddLtcPreviewVariantSameNameTextureBindings(
+                        AddLtcPreviewVariantTextureBindings(
                             modelPath,
                             mapping.ModelField,
                             existingTexturePath,
@@ -5140,7 +5140,7 @@ internal static class LithTechModelTextureConfigIndex
             cftPlayerViewRoleSlotsByModelPath);
     }
 
-    private static void AddLtcPreviewVariantSameNameTextureBindings(
+    private static void AddLtcPreviewVariantTextureBindings(
         string modelPath,
         string modelField,
         string textureReferencePath,
@@ -5171,22 +5171,20 @@ internal static class LithTechModelTextureConfigIndex
             return;
         }
 
-        string textureExtension = Path.GetExtension(textureReferencePath);
-        string textureDirectory = Path.GetDirectoryName(NormalizeKey(textureReferencePath)) ?? string.Empty;
-        if (!string.Equals(textureExtension, ".dtx", StringComparison.OrdinalIgnoreCase) ||
-            textureDirectory.Length == 0)
+        string texturePath = GetLogicalTextureResourcePath(textureReferencePath);
+        if (!string.Equals(Path.GetExtension(textureReferencePath), ".dtx", StringComparison.OrdinalIgnoreCase) ||
+            texturePath.Length == 0)
         {
             return;
         }
 
-        string sameNameTexturePath = NormalizeKey(Path.Combine(textureDirectory, modelStem + textureExtension));
         string sourceModelPath = NormalizeModelResourcePath(modelPath);
         int sourceSlotIndex = sourceMappedSlots[0];
-        // Do not let a same-name fallback replace a different texture bound to the source slot.
+        // Do not let the variant inference replace a different texture bound to the source slot.
         if (byModelPath.TryGetValue(sourceModelPath, out Dictionary<int, string?>? sourceDirectSlots) &&
             sourceDirectSlots.TryGetValue(sourceSlotIndex, out string? sourceDirectTexture) &&
             !string.IsNullOrWhiteSpace(sourceDirectTexture) &&
-            !string.Equals(NormalizeKey(sourceDirectTexture), sameNameTexturePath, StringComparison.OrdinalIgnoreCase))
+            !string.Equals(NormalizeTextureReferencePath(sourceDirectTexture), texturePath, StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
@@ -5199,14 +5197,14 @@ internal static class LithTechModelTextureConfigIndex
                 byModelContext.TryGetValue(sourceContextKey, out Dictionary<int, string?>? sourceContextSlots) &&
                 sourceContextSlots.TryGetValue(sourceSlotIndex, out string? sourceContextTexture) &&
                 !string.IsNullOrWhiteSpace(sourceContextTexture) &&
-                !string.Equals(NormalizeKey(sourceContextTexture), sameNameTexturePath, StringComparison.OrdinalIgnoreCase))
+                !string.Equals(NormalizeTextureReferencePath(sourceContextTexture), texturePath, StringComparison.OrdinalIgnoreCase))
             {
                 return;
             }
         }
 
         if (!HasConsistentDecodableDtxCopies(
-                sameNameTexturePath,
+                texturePath,
                 textureItemsByLogicalPath,
                 verifiedTexturePathCache))
         {
@@ -5269,7 +5267,7 @@ internal static class LithTechModelTextureConfigIndex
                 continue;
             }
 
-            AddModelTextureSlotMapping(ltcPreviewVariantByModelPath, targetPath, slotIndex, sameNameTexturePath);
+            AddModelTextureSlotMapping(ltcPreviewVariantByModelPath, targetPath, slotIndex, texturePath);
             foreach (string contextKey in contextKeys)
             {
                 string normalizedContext = NormalizeLooseKey(contextKey);
@@ -5286,7 +5284,7 @@ internal static class LithTechModelTextureConfigIndex
                     targetPath,
                     normalizedContext,
                     slotIndex,
-                    sameNameTexturePath);
+                    texturePath);
             }
 
             modelsWithSlotSpecificBindings.Add(targetPath);
@@ -5298,7 +5296,7 @@ internal static class LithTechModelTextureConfigIndex
         IReadOnlyDictionary<string, ExplorerItem[]> textureItemsByLogicalPath,
         Dictionary<string, bool> verifiedTexturePathCache)
     {
-        string normalizedPath = NormalizeKey(texturePath);
+        string normalizedPath = NormalizeTextureReferencePath(texturePath);
         if (verifiedTexturePathCache.TryGetValue(normalizedPath, out bool cached))
         {
             return cached;
@@ -5332,6 +5330,12 @@ internal static class LithTechModelTextureConfigIndex
 
         verifiedTexturePathCache[normalizedPath] = expectedHash is not null;
         return expectedHash is not null;
+    }
+
+    private static string NormalizeTextureReferencePath(string texturePath)
+    {
+        string logicalPath = GetLogicalTextureResourcePath(texturePath);
+        return logicalPath.Length > 0 ? logicalPath : NormalizeKey(texturePath);
     }
 
     private static bool TryGetContentEquivalentDecodableDtxPaths(
