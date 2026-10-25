@@ -176,6 +176,7 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 - 同表第 320 行的身份别名 `ACC_Interaction_BlueLotus` 对应独立模型 `PV-ACC_Interaction_BlueLotus`。只有当别名在同目录 ACC_SD 预览模型中唯一、Joy 与目标模型的所有副本网格布局/UV/槽位/RenderStyle 和权威绑定完全相同、精确 DTX 的所有副本均可解码且 SHA-256 一致，并且目标槽没有直接或冲突映射时，才把 Baihu 贴图推导到该行上下文。`item:21765` 聚焦导出中，Joy 与 BlueLotus 的 `Box002` 槽 0 均导出 `PV-ACC_Baihu.dtx`；BlueLotus 报告为 `cft-identity-model-alias-derived`。该推导不用于无上下文导出。
 - 两个 CFT 引用诊断命令的“已解码内容数”只统计成功读取全部声明行的表；部分表中已提取的行仍保留在引用报告中。逐文件失败和尾部情况用 `--audit-table-decode` 检查。
 - 完整读取声明行且紧接标准 `END` 尾标时，CFT 的路径候选扫描在尾标前结束，防止旧数据残留混入其他模型的贴图候选；尾标后的内容仍由解码审计列为未解释数据。没有完整行/尾标证据的表保留原有部分解析路径。
+- 2026-10-23 的完整解码审计发现 70 份唯一 CFT 内容含 `END` 后数据；其中只有 `KingsMissionObjectInfo.CFT` 尾部能识别出模型/贴图路径。`CharacterType.CFT` 的 449 字节尾部没有路径，尾部数据不用于建立行级映射。
 - `--inspect-ltc-model-texture-links`：输出 LTC 强类型模型行、纹理字段、辅助贴图引用和身份别名，用于检查武器与玩家视角模型的对应关系。
 - `--inspect-texture-resource-paths --contains <文本>`：列出路径包含指定文本的贴图逻辑路径、物理副本和 MD5，用于核对同名 DTX 是否存在冲突。
 - CFT 动作引用即使未写扩展名，也只有在完整逻辑路径对应单一资源扩展名、父子模型均解码成功且实际槽位交集非空时才继承贴图。
@@ -231,7 +232,7 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 - `PV-M82A1_DemonicBeast_PVE` 基模两份 LTB 副本共映射 14 个槽 2 项和 4 个槽 3 项。BL、GR、WOMAN_BL、WOMAN_GR 变体也按 LTC 贴图序号恢复这 18 项；每份 24 行导出报告剩下 6 项，即双副本中的手、臂和 `clanmark` 网格。
 - `PV-M82A1_S_BornBeast_Winter` 基模槽 2 使用 `ModelTextures/PlayerView/PV-M82A1_S_BornBeast_Winter.dtx`，槽 3 使用 `ModelTextures/PlayerView/PV-M82A1_S_BornBeast_Winter_01.dtx`。四个阵营/性别变体保留 LTC 推导的槽 2 贴图，并在 `dsdsdsfs` 网格 UV 完全一致时将槽 3 映射到 `_01.dtx`。每个聚焦导出均恢复两张贴图，只留下两条手/臂项未解析。
 - `WeaponPreview/Skin` 变体只有在预览 BIN 唯一对应同名 PV 模型、基模有直接槽位贴图、目标武器网格名与基模名相同且所有模型副本的几何/UV 签名一致时，才会绑定唯一同名 DTX；贴图副本的 MD5 也必须一致。绑定使用 `preview:<模型组号>:<道具编号>`，不据此生成可能与 LTC `WeaponIndex` 冲突的 `item:` 身份。若某模型槽只有一个变体上下文，且该槽没有直接路径或身份上下文映射，CLI 和 GUI 无上下文导出也会按模型路径使用该 DTX。BCAxe 的 Chs/YOD 槽 2 是已验证样例，审计标记为 `weapon-preview-variant-derived`。
-- `Arm_SwatElite_Renewal_GR` 的手/臂网格带有明确的角色和阵营后缀，可按 CFT A0017 中登记的 SWAT-ELITE 手/臂贴图名解析；仅当对应玩家视角 DTX 路径唯一且归档副本哈希一致时绑定。当前归档导出已验证：A0017 的手槽 0 使用 `FVIEW_HAND_SWAT-ELITE_BL.DTX`，臂槽 1 使用 `FVIEW_ARM_SWAT-ELITE_GR.DTX`，两张贴图均成功解码和导出。`Arm_WildWest_SP` 仍无可验证的角色表贴图关联；其槽 UV 签名与 CFT 登记的 WildWest BLGR、Santa 臂模供体均不匹配，因此保持未映射。
+- `Arm_SwatElite_Renewal_GR` 的手/臂网格带有明确的角色和阵营后缀，可按 CharacterType.CFT 中登记的 SWAT-ELITE 手/臂贴图名解析；仅当对应玩家视角 DTX 路径唯一且归档副本哈希一致时绑定。A0017 与 A0074 的聚焦导出均验证手槽 0 使用 `FVIEW_HAND_SWAT-ELITE_BL.DTX`、臂槽 1 使用 `FVIEW_ARM_SWAT-ELITE_GR.DTX`，两张贴图均成功解码和导出。`Arm_WildWest_SP` 仍无可验证的角色表贴图关联；其槽 UV 签名与 CFT 登记的 WildWest BLGR、Santa 臂模供体均不匹配，因此保持未映射。
 - LTC 已验证的 SixEyed Sword 条目使用相同 PView 模型和身份，但贴图名分别写作 `PV-SixEyedSword_Gold` 与 `PV-SixEyed_Sword_Gold`；后者只在无下划线 basename 对应唯一物理路径时回链。
 - `WeaponAttachItemDoll.CFT` 多条记录共用 Joy QV 模型，PV 侧指向 `PV-ACC_Baihu`；Joy、TropicalOcean 和 PartyDoggy 的 PV/QV 模型 UV 布局一致。缺失的 `QV-ACC_Interaction_Joy` 与 `QV-ACC_Interaction_PartyDoggy` 贴图名仅在 `QV-ACC_Baihu` 对应唯一物理 DTX 时回链。
 - 原生 LTB 解码保留每个网格的 RenderStyle 编号，并区分文件声明的材质槽与推测槽。OBJ 仍只导出漫反射贴图，不重建全部 RenderStyle 效果。
