@@ -191,6 +191,7 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 - `preview:<模型组号>:<道具编号>` 优先采用同组预览记录中唯一且能对应 LTC 的非零 `ModelId`；预览 `ModelId` 为 0 时，才从唯一的同组 `WeaponModel` 关系恢复。非零预览 `ModelId` 与 `WeaponModel.ModelId` 不同且没有直接 LTC 目标，或存在多个预览候选时，预览上下文保持未映射。`item:<道具编号>` 按唯一的同组 `WeaponModel` 关系解析。
 - 已验证跨行映射：`preview:2000000:3149` 的 LTC 旧编号 `5741` 通过 `WeaponIndex:4712` 关联到另一行编号 `5743`，将 `PV-9A91_WildEagle_ExtendMag` 槽 0 映射为 `PV-9A91_WildEagle_NG.DTX`；聚焦导出的 10 个网格全部成功绑定贴图。
 - 同路径 DTX 副本可按解码图像校验：`PV-BrokenKukri_RedCrystal.DTX` 在 `rez` 与 `rez2` 的原始 MD5 不同，但两份均解码为 512×512，像素 SHA-256 相同。五个预览上下文中的 `PV-BrokenKukri_RedCrystal` 槽 2 均映射到该贴图路径。
+- 2026-10-26 聚焦预览审计从当前安装的 481 个 REZ 归档复测了 217 个预览上下文/模型组合；全部组合均有映射，258 条槽位结果全部命中 LTC 预期贴图路径。
 - `ArmModel/Arm_*`、`Models/PLAYERVIEW/Arm_*` 和 `Models/PLAYERVIEW/ArmModel/Arm_*` 下的第一人称臂模按手/臂网格名、模型家族名和 BL/GR/SP 变体匹配 `ModelTextures/PLAYERVIEW` DTX；优先使用精确变体，女性模型的 `_WOMAN_BL/GR` 可对应贴图的 `_BL/GR` 后缀。候选贴图必须在玩家视角目录内唯一，且同一路径的归档副本 MD5 一致；角色或路径有歧义时不绑定。同一模型被多个角色皮肤复用时，用 `--texture-context` 选择对应 CFT 身份，不跨上下文套用贴图。
 - 对没有直接 CFT 手/臂绑定的旧版臂模，显式指定 `--texture-context` 后，可使用同阵营、同家族扩展版本的角色皮肤。只有源/目标所有物理模型副本均解码成功，且网格名、顶点、三角形索引、UV、文件声明材质槽和 RenderStyle 编号完全一致时才建立关联；嵌入贴图、缺失 UV、无效几何或副本冲突均不适用。该关联只存在于身份上下文中，不生成默认皮肤，报告标为 `cft-equivalent-arm-derived`，不视为游戏表直接引用。例如 `Arm_WildWest_BL` 用 `A9887` 选择 BLGR 皮肤，用 `A9350` 选择 Santa 皮肤；`Arm_Butcher_BL/GR` 可用 `A0202` 选择已在 CFT 中登记的 CN 皮肤。
 - 嵌入式 PV 道具模型在严格几何匹配未命中时，可按完整 UV 三角布局继承 CFT 臂模贴图。网格名、声明槽位、RenderStyle、UV 通道来源及每个 UV 三角（含重复项）必须一致，所有物理副本一致，且目标槽无直接绑定、候选贴图唯一；报告仍标为 `cft-equivalent-arm-derived`。该规则将 `PV-AK-47-Beast` 的槽 1 映射到 `Arm_MAN_BL` 关联的臂贴图。
@@ -256,13 +257,13 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
   | 1997 | 1997 | `PV-AN94_SpaceShip` | 2：`PV-AN94_SpaceShip.DTX` |
 
   某些模型的其他槽仍未解析。LTC 贴图路径若在多个归档层有同名实体副本，DTX 副本均解码为相同尺寸和像素时可选择该路径；其他格式仍要求 SHA-256 一致。无法确认内容时保持未映射。
-- 模型组 `3000000` 的道具 `812` 有预览编号冲突：唯一的 `WeaponModel.ItemId` 行关联 `ModelId:812` 和 LTC `WeaponIndex:812`，但 `WeaponPreview` 记录的 `ModelId` 是 `1255`。`item:812` 聚焦导出确认 `PV-AWM_A_InfernalDragon` 槽 2、3 分别使用 `PV-AWM_A_InfernalDragon.DTX`、`PV-AWM_A_InfernalDragon01.DTX`；LTC 预览模型 `QV-AWM_InfernalDragon_preview` 槽 0 使用前一张 PV 贴图。BF005.LTC 为 QV 男、女世界模型槽 0 指定 `QV-AWM_A_InfernalDragon.DTX`，但当前 `rez`、`rez2` 的同路径 DTX 内容哈希不同，槽位报告保持未解析；OBJ 中由文件名推断出的贴图不算已确认绑定。`preview:3000000:812` 也保持未解析。手、臂槽仍未解析；六份目标 LTB 均成功解码，无几何跳过。报告位于 `artifacts/mapping-audit/item-812-focused-20261025/`。
+- 模型组 `3000000` 的道具 `812` 有预览编号冲突：唯一的 `WeaponModel.ItemId` 行关联 `ModelId:812` 和 LTC `WeaponIndex:812`，但 `WeaponPreview` 记录的 `ModelId` 是 `1255`。`item:812` 聚焦导出确认 `PV-AWM_A_InfernalDragon` 槽 2、3 分别使用 `PV-AWM_A_InfernalDragon.DTX`、`PV-AWM_A_InfernalDragon01.DTX`；LTC 预览模型 `QV-AWM_InfernalDragon_preview` 槽 0 使用前一张 PV 贴图。BF005.LTC 为 QV 男、女世界模型槽 0 指定 `QV-AWM_A_InfernalDragon.DTX`，但 `rez`、`rez2` 的同路径 DTX 分别解码为 1024×1024 和 256×256、像素也不同，槽位报告保持未解析；OBJ 中由文件名推断出的贴图不算已确认绑定。`preview:3000000:812` 也保持未解析。手、臂槽仍未解析；六份目标 LTB 均成功解码，无几何跳过。报告位于 `artifacts/mapping-audit/item-812-focused-20261025/`。
 - 道具 `856`、`1111`、`2164` 的 `WeaponModel.ItemId` 分别关联同号 ModelId 与 LTC WeaponIndex；其 `WeaponPreview.ModelId` 则分别是 `1298`、`1650`、`3320`。使用 `item:<道具编号>` 可取得以下 LTC 映射：
 
   | 道具编号 | PView 贴图槽 | LTC 预览模型槽 0 | QV 世界模型槽 0 |
   | ---: | --- | --- | --- |
-  | 856 | `PV-M4A1_S_Transformers.DTX`（槽 2） | `QV-M4A1_S_IronBeast_preview` → 同名 PV DTX | `QV-M4A1_S_Transformers.DTX` 路径明确，但 `rez`、`rez2` 副本哈希不同，仍未解析 |
-  | 1111 | `PV-M82A1_S_BornBeast.DTX`（槽 1）；`PV-M82A1_S_BornBeast01.DTX`（槽 2） | `QV-M82A1_S_BornBeast_preview` → `PV-M82A1_S_BornBeast.DTX` | `QV-M82A1_S_BornBeast.DTX` 路径明确，但 `rez`、`rez2` 副本哈希不同，仍未解析 |
+  | 856 | `PV-M4A1_S_Transformers.DTX`（槽 2） | `QV-M4A1_S_IronBeast_preview` → 同名 PV DTX | `QV-M4A1_S_Transformers.DTX` 路径明确，但 `rez`、`rez2` 副本解码后的尺寸和像素不同，仍未解析 |
+  | 1111 | `PV-M82A1_S_BornBeast.DTX`（槽 1）；`PV-M82A1_S_BornBeast01.DTX`（槽 2） | `QV-M82A1_S_BornBeast_preview` → `PV-M82A1_S_BornBeast.DTX` | `QV-M82A1_S_BornBeast.DTX` 路径明确，但 `rez`、`rez2` 副本解码后的尺寸和像素不同，仍未解析 |
   | 2164 | `PV-GatlingGun_InfernalDragon.DTX`（槽 2） | `QV-GatlingGun_InfernalDragon_preview` → 同名 PV DTX | `QV-GatlingGun_InfernalDragon.DTX` |
 
   道具 `1939` 也使用 LTC `WeaponIndex:1111`。三项 `preview:3000000:<道具编号>` 聚焦导出均未解析贴图；不能用预览编号替代道具身份。13 份目标 LTB 均成功解码，无几何跳过；手、臂槽仍未解析，`item:1111` 的 PView 槽 3 也未解析。报告位于 `artifacts/mapping-audit/item-mismatch-856-1111-2164-20261025/`。
@@ -270,9 +271,9 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 
   | 道具编号 | `item:` 身份和映射 | `preview:` 身份和映射 |
   | ---: | --- | --- |
-  | 1394 | `WeaponIndex:1394` 为 M82A1 IronShark；PView 槽 2、3 分别用 `PV-M82A1-IronShark.DTX`、`PV-M82A1-IronShark_01.DTX`。QV 世界贴图 `QV-M82A1-IronShark.DTX` 路径存在，但 `rez` 与 `rez2` 副本哈希不同，槽 0 未解析。 | `ModelId:2013` 为 COP357 GoldPhoenix；`preview:3000000:1394` 的 QV 槽 0 用 `QV-COP357_GoldPhoenix.DTX`，PView 槽 2 用 `PV-COP357_GoldPhoenix.DTX`。 |
-  | 1620 | `WeaponIndex:1620` 为 Shovel BornBeast；PView 槽 2 用 `PV-Shovel_BornBeast.DTX`。QV 世界贴图 `QV-Shovel_BornBeast.DTX` 在 `rez`、`rez2`、`rez4` 的副本哈希不一致，槽 0 未解析。 | `ModelId:2390` 为 AWM-A Infernal Dragon Punk；`preview:3000000:1620` 的男、女 QV 模型槽 0 用 `QV-AWM_A_InfernalDragon_Punk.DTX`，PView 槽 2、3 用 `PV-AWM_A_InfernalDragon_Punk.DTX`、`PV-AWM_A_InfernalDragon_Punk_01.DTX`。 |
-  | 1690 | `WeaponIndex:1690` 为 Knuckle2 Infernal Dragon。LTC 将 M_R/F_R 世界模型槽 0 关联到 `QV-Knuckle2_InfernalDragon.DTX`，将 M_L/F_L 左手模型及预览模型关联到 `PV-Knuckle2_InfernalDragon.DTX`；PView 基模槽 2 也用该 PV 贴图。QV DTX 的 `rez`、`rez2` 副本哈希不同，因此右手世界模型槽 0 未解析。 | `ModelId:2508` 为 MP5KA4 Halloween2016；`preview:3000000:1690` 的 QV 槽 0 用 `QV-MP5KA4_darkgray.DTX`，PView 槽 2 用 `PV-MP5KA4_darkgray.DTX`。 |
+  | 1394 | `WeaponIndex:1394` 为 M82A1 IronShark；PView 槽 2、3 分别用 `PV-M82A1-IronShark.DTX`、`PV-M82A1-IronShark_01.DTX`。QV 世界贴图 `QV-M82A1-IronShark.DTX` 路径存在，但 `rez` 与 `rez2` 副本解码后的尺寸和像素不同，槽 0 未解析。 | `ModelId:2013` 为 COP357 GoldPhoenix；`preview:3000000:1394` 的 QV 槽 0 用 `QV-COP357_GoldPhoenix.DTX`，PView 槽 2 用 `PV-COP357_GoldPhoenix.DTX`。 |
+  | 1620 | `WeaponIndex:1620` 为 Shovel BornBeast；PView 槽 2 用 `PV-Shovel_BornBeast.DTX`。QV 世界贴图 `QV-Shovel_BornBeast.DTX` 的 `rez2`、`rez4` 副本均为 1024×1024 且像素相同，`rez` 副本为 256×256 且像素不同，因此全路径副本仍冲突，槽 0 未解析。 | `ModelId:2390` 为 AWM-A Infernal Dragon Punk；`preview:3000000:1620` 的男、女 QV 模型槽 0 用 `QV-AWM_A_InfernalDragon_Punk.DTX`，PView 槽 2、3 用 `PV-AWM_A_InfernalDragon_Punk.DTX`、`PV-AWM_A_InfernalDragon_Punk_01.DTX`。 |
+  | 1690 | `WeaponIndex:1690` 为 Knuckle2 Infernal Dragon。LTC 将 M_R/F_R 世界模型槽 0 关联到 `QV-Knuckle2_InfernalDragon.DTX`，将 M_L/F_L 左手模型及预览模型关联到 `PV-Knuckle2_InfernalDragon.DTX`；PView 基模槽 2 也用该 PV 贴图。QV DTX 的 `rez`、`rez2` 副本解码后的尺寸和像素不同，因此右手世界模型槽 0 未解析。 | `ModelId:2508` 为 MP5KA4 Halloween2016；`preview:3000000:1690` 的 QV 槽 0 用 `QV-MP5KA4_darkgray.DTX`，PView 槽 2 用 `PV-MP5KA4_darkgray.DTX`。 |
 
   三项 `item:` 与 `preview:` 聚焦导出中的手、臂槽均未解析，所有目标 LTB 均成功解码且无几何跳过。报告位于 `artifacts/mapping-audit/item-mismatch-1394-1620-1690-20261025/`。
 - 道具 `1003` 的唯一 `WeaponModel` 行没有 `ModelId`，`item:1003` 聚焦导出未解析贴图。预览记录 `3-1003.bin` 的 `ModelId:1536` 对应 LTC `WeaponIndex:1536`；`preview:3000000:1003` 聚焦导出确认 `QV-PoliceBaton_UltimateGold` 槽 0 使用 `QV-PoliceBaton_Ultimatesilver.DTX`，`PV-PoliceBaton_UltimateGold` 槽 2 使用 `PV-PoliceBaton_UltimateSilver.DTX`。两张 DTX 均成功导出；手、臂槽未解析，4 个网格均无几何跳过。报告位于 `artifacts/mapping-audit/item-mismatch-1003-1536-20261025/`。
