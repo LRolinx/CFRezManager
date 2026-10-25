@@ -3907,6 +3907,7 @@ internal static class LithTechModelTextureConfigIndex
             Dictionary<CftPlayerViewTextureRole, HashSet<string>>>(StringComparer.OrdinalIgnoreCase);
         var directPlayerViewModels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var typedLtcPlayerViewModels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var playerViewModelContentHashByPath = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         var modelItemsByPath = modelResourceItems
             .Where(item => string.Equals(item.FileExtension, "ltb", StringComparison.OrdinalIgnoreCase))
             .Select(item => (Item: item, ResourcePath: GetModelResourcePath(item)))
@@ -4684,16 +4685,37 @@ internal static class LithTechModelTextureConfigIndex
                     // A typed LTC player-view role is direct evidence that this
                     // model and its side/gender variants can carry CFT hand/arm skins.
                     typedLtcPlayerViewModels.Add(modelPath);
-                    foreach (string variantSuffix in new[]
-                             {
-                                 "_BL", "_GR", "_SP",
-                                 "_WOMAN_BL", "_WOMAN_GR", "_WOMAN_SP"
-                             })
+                    string[] playerViewVariantSuffixes =
+                    [
+                        "_BL", "_GR", "_SP",
+                        "_WOMAN_BL", "_WOMAN_GR", "_WOMAN_SP"
+                    ];
+                    foreach (string variantSuffix in playerViewVariantSuffixes)
                     {
                         string variantPath = modelPath + variantSuffix;
                         if (modelItemsByPlayerViewRolePath.ContainsKey(NormalizeModelResourcePath(variantPath)))
                         {
                             typedLtcPlayerViewModels.Add(variantPath);
+                        }
+                    }
+
+                    const string trailingBrSuffix = "_BR";
+                    if (modelPath.EndsWith(trailingBrSuffix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        string modelPrefix = modelPath[..^trailingBrSuffix.Length];
+                        foreach (string variantSuffix in playerViewVariantSuffixes)
+                        {
+                            string standardOrderPath = NormalizeModelResourcePath(modelPath + variantSuffix);
+                            string alternateOrderPath = NormalizeModelResourcePath(modelPrefix + variantSuffix + trailingBrSuffix);
+                            if (modelItemsByPlayerViewRolePath.ContainsKey(standardOrderPath) &&
+                                HaveIdenticalPlayerViewModelCopies(
+                                    standardOrderPath,
+                                    alternateOrderPath,
+                                    modelItemsByPlayerViewRolePath,
+                                    playerViewModelContentHashByPath))
+                            {
+                                typedLtcPlayerViewModels.Add(alternateOrderPath);
+                            }
                         }
                     }
                 }
@@ -5235,9 +5257,25 @@ internal static class LithTechModelTextureConfigIndex
             return;
         }
 
-        foreach (string suffix in variantSuffixes)
+        var targetPaths = variantSuffixes
+            .Select(suffix => NormalizeModelResourcePath(sourceModelPath + suffix))
+            .ToList();
+        const string trailingBrSuffix = "_BR";
+        if (sourceModelPath.EndsWith(trailingBrSuffix, StringComparison.OrdinalIgnoreCase))
         {
-            string targetPath = NormalizeModelResourcePath(modelPath + suffix);
+            string modelPrefix = sourceModelPath[..^trailingBrSuffix.Length];
+            foreach (string suffix in variantSuffixes)
+            {
+                string alternateOrderPath = NormalizeModelResourcePath(modelPrefix + suffix + trailingBrSuffix);
+                if (typedLtcPlayerViewModels.Contains(alternateOrderPath))
+                {
+                    targetPaths.Add(alternateOrderPath);
+                }
+            }
+        }
+
+        foreach (string targetPath in targetPaths.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
             if (!typedLtcPlayerViewModels.Contains(targetPath) ||
                 !modelItemsByPlayerViewRolePath.TryGetValue(targetPath, out ExplorerItem[]? targetItems) ||
                 targetItems.Length == 0)
@@ -5322,6 +5360,56 @@ internal static class LithTechModelTextureConfigIndex
             }
 
             modelsWithSlotSpecificBindings.Add(targetPath);
+        }
+    }
+
+    private static bool HaveIdenticalPlayerViewModelCopies(
+        string firstModelPath,
+        string secondModelPath,
+        IReadOnlyDictionary<string, ExplorerItem[]> modelItemsByPlayerViewRolePath,
+        Dictionary<string, string?> contentHashByModelPath)
+    {
+        string? firstHash = GetConsistentPlayerViewModelContentHash(firstModelPath);
+        string? secondHash = GetConsistentPlayerViewModelContentHash(secondModelPath);
+        return firstHash is not null &&
+               string.Equals(firstHash, secondHash, StringComparison.Ordinal);
+
+        string? GetConsistentPlayerViewModelContentHash(string modelPath)
+        {
+            string normalizedPath = NormalizeModelResourcePath(modelPath);
+            if (contentHashByModelPath.TryGetValue(normalizedPath, out string? cachedHash))
+            {
+                return cachedHash;
+            }
+
+            if (!modelItemsByPlayerViewRolePath.TryGetValue(normalizedPath, out ExplorerItem[]? copies) || copies.Length == 0)
+            {
+                contentHashByModelPath[normalizedPath] = null;
+                return null;
+            }
+
+            string? expectedHash = null;
+            foreach (ExplorerItem copy in copies)
+            {
+                byte[]? data = TryReadItemBytes(copy, 64 * 1024 * 1024);
+                if (data is null || data.Length == 0)
+                {
+                    contentHashByModelPath[normalizedPath] = null;
+                    return null;
+                }
+
+                string hash = Convert.ToHexString(SHA256.HashData(data));
+                if (expectedHash is not null && !string.Equals(expectedHash, hash, StringComparison.Ordinal))
+                {
+                    contentHashByModelPath[normalizedPath] = null;
+                    return null;
+                }
+
+                expectedHash = hash;
+            }
+
+            contentHashByModelPath[normalizedPath] = expectedHash;
+            return expectedHash;
         }
     }
 
