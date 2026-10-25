@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
@@ -677,6 +678,59 @@ internal static class LithTechModelTextureLoader
     internal static bool TryDecodeTextureItem(ExplorerItem item)
     {
         return TryReadTextureItem(item) is not null;
+    }
+
+    internal static bool HaveEquivalentDecodedTexturePixels(IReadOnlyList<ExplorerItem> items)
+    {
+        if (items.Count == 0)
+        {
+            return false;
+        }
+
+        string? expectedHash = null;
+        Span<byte> dimensions = stackalloc byte[sizeof(int) * 2];
+        foreach (ExplorerItem item in items)
+        {
+            ImageSource? source = TryReadTextureItem(item);
+            if (source is not BitmapSource bitmap)
+            {
+                return false;
+            }
+
+            try
+            {
+                var normalized = new FormatConvertedBitmap(bitmap, PixelFormats.Bgra32, null, 0);
+                int width = normalized.PixelWidth;
+                int height = normalized.PixelHeight;
+                if (width <= 0 || height <= 0 || width > int.MaxValue / 4 || height > int.MaxValue / (width * 4))
+                {
+                    return false;
+                }
+
+                int stride = width * 4;
+                byte[] pixels = new byte[stride * height];
+                normalized.CopyPixels(pixels, stride, 0);
+
+                using IncrementalHash hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+                BinaryPrimitives.WriteInt32LittleEndian(dimensions, width);
+                BinaryPrimitives.WriteInt32LittleEndian(dimensions[sizeof(int)..], height);
+                hash.AppendData(dimensions);
+                hash.AppendData(pixels);
+                string currentHash = Convert.ToHexString(hash.GetHashAndReset());
+                if (expectedHash is not null && !string.Equals(expectedHash, currentHash, StringComparison.Ordinal))
+                {
+                    return false;
+                }
+
+                expectedHash = currentHash;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        return expectedHash is not null;
     }
 
     private static ImageSource? TryReadLocalTexture(string filePath)

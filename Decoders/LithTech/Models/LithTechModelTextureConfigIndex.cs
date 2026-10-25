@@ -5499,6 +5499,7 @@ internal static class LithTechModelTextureConfigIndex
         }
 
         string? expectedHash = null;
+        bool sameByteContent = true;
         foreach (ExplorerItem copy in copies)
         {
             byte[]? data = TryReadItemBytes(copy, MaxInferredTextureBytes);
@@ -5511,15 +5512,18 @@ internal static class LithTechModelTextureConfigIndex
             string actualHash = Convert.ToHexString(SHA256.HashData(data));
             if (expectedHash is not null && !string.Equals(expectedHash, actualHash, StringComparison.Ordinal))
             {
-                verifiedTexturePathCache[normalizedPath] = false;
-                return false;
+                sameByteContent = false;
             }
 
             expectedHash = actualHash;
         }
 
-        verifiedTexturePathCache[normalizedPath] = expectedHash is not null;
-        return expectedHash is not null;
+        bool verified = expectedHash is not null &&
+                        (sameByteContent ||
+                         string.Equals(Path.GetExtension(normalizedPath), ".dtx", StringComparison.OrdinalIgnoreCase) &&
+                         LithTechModelTextureLoader.HaveEquivalentDecodedTexturePixels(copies));
+        verifiedTexturePathCache[normalizedPath] = verified;
+        return verified;
     }
 
     private static string NormalizeTextureReferencePath(string texturePath)
@@ -8929,6 +8933,7 @@ internal static class LithTechModelTextureConfigIndex
         }
 
         string? expectedHash = null;
+        bool sameByteContent = true;
         foreach (ExplorerItem copy in copies)
         {
             byte[]? bytes = TryReadItemBytes(copy, 64 * 1024 * 1024);
@@ -8941,13 +8946,16 @@ internal static class LithTechModelTextureConfigIndex
 
             if (expectedHash is not null && !string.Equals(expectedHash, hash, StringComparison.OrdinalIgnoreCase))
             {
-                return false;
+                sameByteContent = false;
             }
 
             expectedHash = hash;
         }
 
-        return expectedHash is not null;
+        return expectedHash is not null &&
+               (sameByteContent ||
+                string.Equals(Path.GetExtension(normalizedPath), ".dtx", StringComparison.OrdinalIgnoreCase) &&
+                LithTechModelTextureLoader.HaveEquivalentDecodedTexturePixels(copies));
     }
 
     private static void AddVerifiedCftModelTextureSlotAliases(

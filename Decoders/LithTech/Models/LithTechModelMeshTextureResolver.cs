@@ -532,7 +532,18 @@ internal static class LithTechModelMeshTextureResolver
                 .Select(hash => hash!)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            return hashes.Length == 1 && items.All(item => !string.IsNullOrWhiteSpace(item.ArchiveFile?.Md5));
+            if (hashes.Length == 1 && items.All(item => !string.IsNullOrWhiteSpace(item.ArchiveFile?.Md5)))
+            {
+                return true;
+            }
+
+            string[] logicalPaths = items
+                .Select(item => NormalizePath(item.ArchiveFile?.FullPath ?? item.OutputRelativePath))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            return logicalPaths.Length == 1 &&
+                   string.Equals(Path.GetExtension(logicalPaths[0]), ".dtx", StringComparison.OrdinalIgnoreCase) &&
+                   LithTechModelTextureLoader.HaveEquivalentDecodedTexturePixels(items);
         }
 
         return items.All(item => item.ArchiveFile is null) &&
