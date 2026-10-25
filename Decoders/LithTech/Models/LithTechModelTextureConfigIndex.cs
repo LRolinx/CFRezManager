@@ -5484,7 +5484,15 @@ internal static class LithTechModelTextureConfigIndex
             (0, "Hero_Hand", "ModelTextures/PLAYERVIEW/Nano4Terminator/FVIEW_HAND_AsceticHero.DTX"),
             (1, "Hero_Arm", "ModelTextures/PLAYERVIEW/Nano4Terminator/FVIEW_ARM_AsceticHero.DTX")
         ];
-        string[] modelPaths = [modelFamily, modelFamily + "_BL", modelFamily + "_GR"];
+        string[] modelPaths =
+        [
+            modelFamily,
+            modelFamily + "_BL",
+            modelFamily + "_GR",
+            modelFamily + "_WOMAN_BL",
+            modelFamily + "_WOMAN_GR"
+        ];
+        var uvTriangleLayoutsByModelPath = new Dictionary<string, IReadOnlyDictionary<int, string>?>(StringComparer.OrdinalIgnoreCase);
 
         foreach (string modelPath in modelPaths)
         {
@@ -5516,6 +5524,35 @@ internal static class LithTechModelTextureConfigIndex
             if (slotLayouts is null)
             {
                 continue;
+            }
+
+            IReadOnlyDictionary<int, string>? uvTriangleLayouts =
+                CftPlayerViewArmEquivalence.GetConsistentTextureSlotUvTriangleSignatures(documents);
+            if (uvTriangleLayouts is null)
+            {
+                continue;
+            }
+
+            IReadOnlyDictionary<int, string> verifiedUvTriangleLayouts = uvTriangleLayouts;
+            uvTriangleLayoutsByModelPath[modelPath] = verifiedUvTriangleLayouts;
+            if (modelPath.EndsWith("_WOMAN_BL", StringComparison.OrdinalIgnoreCase) ||
+                modelPath.EndsWith("_WOMAN_GR", StringComparison.OrdinalIgnoreCase))
+            {
+                string maleVariantPath = modelPath.Replace("_WOMAN_", "_", StringComparison.OrdinalIgnoreCase);
+                if (!uvTriangleLayoutsByModelPath.TryGetValue(maleVariantPath, out IReadOnlyDictionary<int, string>? maleLayouts) ||
+                    maleLayouts is null)
+                {
+                    continue;
+                }
+
+                IReadOnlyDictionary<int, string> maleUvTriangleLayouts = maleLayouts;
+                if (roleBindings.Any(binding =>
+                        !verifiedUvTriangleLayouts.TryGetValue(binding.Slot, out string? womanSignature) ||
+                        !maleUvTriangleLayouts.TryGetValue(binding.Slot, out string? maleSignature) ||
+                        !string.Equals(womanSignature, maleSignature, StringComparison.Ordinal)))
+                {
+                    continue;
+                }
             }
 
             foreach ((int slot, string meshName, string texturePath) in roleBindings)
