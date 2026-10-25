@@ -191,7 +191,9 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 - `preview:<模型组号>:<道具编号>` 优先采用同组预览记录中唯一且能对应 LTC 的非零 `ModelId`；预览 `ModelId` 为 0 时，才从唯一的同组 `WeaponModel` 关系恢复。非零预览 `ModelId` 与 `WeaponModel.ModelId` 不同且没有直接 LTC 目标，或存在多个预览候选时，预览上下文保持未映射。`item:<道具编号>` 按唯一的同组 `WeaponModel` 关系解析。
 - 已验证跨行映射：`preview:2000000:3149` 的 LTC 旧编号 `5741` 通过 `WeaponIndex:4712` 关联到另一行编号 `5743`，将 `PV-9A91_WildEagle_ExtendMag` 槽 0 映射为 `PV-9A91_WildEagle_NG.DTX`；聚焦导出的 10 个网格全部成功绑定贴图。
 - 同路径 DTX 副本可按解码图像校验：`PV-BrokenKukri_RedCrystal.DTX` 在 `rez` 与 `rez2` 的原始 MD5 不同，但两份均解码为 512×512，像素 SHA-256 相同。五个预览上下文中的 `PV-BrokenKukri_RedCrystal` 槽 2 均映射到该贴图路径。
-- 2026-10-26 聚焦预览审计从当前安装的 481 个 REZ 归档复测了 217 个预览上下文/模型组合；全部组合均有映射，258 条槽位结果全部命中 LTC 预期贴图路径。
+- 2026-10-26 聚焦预览审计扫描当前安装的 481 个 REZ 归档，复测 217 个预览上下文/模型组合：141 组有映射，76 组仍未解析；171 条已映射槽位均命中按 LTC 身份关系校正后的预期贴图路径。BrokenKukri 的五个上下文仍全部命中槽 2。
+- 全部 LTC 模型字段审计覆盖 917 条目标记录、542 个上下文/模型组合；370 组有映射，172 组仍未解析。407 条已映射槽位均命中校正后的 LTC 预期路径。
+- `WeaponPreview/8/8-4709.bin` 的 `ModelId:9773` 对应 BF005.LTC 旧映射编号 9773 和 `WeaponIndex:7123`；`preview:8000000:4709` 的 `PV-Card_RM_TD_S31_Lv1` 槽 2 使用 `PV-Card_RM_TD_S31_Master.dtx`。相似的 `PV-Card_RM_TD_S31_POG.dtx` 属于 `WeaponIndex:7126`，不能套用到该预览上下文。
 - `ArmModel/Arm_*`、`Models/PLAYERVIEW/Arm_*` 和 `Models/PLAYERVIEW/ArmModel/Arm_*` 下的第一人称臂模按手/臂网格名、模型家族名和 BL/GR/SP 变体匹配 `ModelTextures/PLAYERVIEW` DTX；优先使用精确变体，女性模型的 `_WOMAN_BL/GR` 可对应贴图的 `_BL/GR` 后缀。候选贴图必须在玩家视角目录内唯一，且同一路径的归档副本 MD5 一致；角色或路径有歧义时不绑定。同一模型被多个角色皮肤复用时，用 `--texture-context` 选择对应 CFT 身份，不跨上下文套用贴图。
 - 对没有直接 CFT 手/臂绑定的旧版臂模，显式指定 `--texture-context` 后，可使用同阵营、同家族扩展版本的角色皮肤。只有源/目标所有物理模型副本均解码成功，且网格名、顶点、三角形索引、UV、文件声明材质槽和 RenderStyle 编号完全一致时才建立关联；嵌入贴图、缺失 UV、无效几何或副本冲突均不适用。该关联只存在于身份上下文中，不生成默认皮肤，报告标为 `cft-equivalent-arm-derived`，不视为游戏表直接引用。例如 `Arm_WildWest_BL` 用 `A9887` 选择 BLGR 皮肤，用 `A9350` 选择 Santa 皮肤；`Arm_Butcher_BL/GR` 可用 `A0202` 选择已在 CFT 中登记的 CN 皮肤。
 - 嵌入式 PV 道具模型在严格几何匹配未命中时，可按完整 UV 三角布局继承 CFT 臂模贴图。网格名、声明槽位、RenderStyle、UV 通道来源及每个 UV 三角（含重复项）必须一致，所有物理副本一致，且目标槽无直接绑定、候选贴图唯一；报告仍标为 `cft-equivalent-arm-derived`。该规则将 `PV-AK-47-Beast` 的槽 1 映射到 `Arm_MAN_BL` 关联的臂贴图。
