@@ -4637,7 +4637,11 @@ internal static class LithTechModelTextureConfigIndex
         }
 
         (CrossFireWeaponPreviewItemAliasIndex itemAliases, IReadOnlyList<WeaponPreviewSkinAsset> weaponPreviewSkinAssets) =
-            BuildWeaponPreviewItemAliases(crossFireScriptItems, ltcWeaponIndexIds, ltcMappingCache.Values);
+            BuildWeaponPreviewItemAliases(
+                crossFireScriptItems,
+                ltcWeaponIndexIds,
+                ltcMappingCache.Values,
+                modelItemsByPlayerViewRolePath);
         Dictionary<string, Dictionary<string, LtcPhysicalModelTextureBinding>> ltcPhysicalBindingAliases =
             BuildLtcPhysicalBindingAliases(
                 ltcItems,
@@ -8702,7 +8706,8 @@ internal static class LithTechModelTextureConfigIndex
     private static (CrossFireWeaponPreviewItemAliasIndex Aliases, IReadOnlyList<WeaponPreviewSkinAsset> SkinAssets) BuildWeaponPreviewItemAliases(
         IReadOnlyList<ExplorerItem> scriptItems,
         IReadOnlySet<uint> ltcWeaponIndexIds,
-        IEnumerable<IReadOnlyList<CrossFireLtcModelTextureMapping>> ltcTables)
+        IEnumerable<IReadOnlyList<CrossFireLtcModelTextureMapping>> ltcTables,
+        IReadOnlyDictionary<string, ExplorerItem[]> modelItemsByPlayerViewRolePath)
     {
         var previews = new List<CrossFireWeaponPreviewEntry>();
         var models = new List<CrossFireWeaponModelEntry>();
@@ -8749,7 +8754,136 @@ internal static class LithTechModelTextureConfigIndex
             ltcWeaponIndexIds,
             ltcWeaponLegacyMappingIndexIds,
             ltcWeaponIndexIdsByLegacyMappingIndex);
+        aliases = AddNameVerifiedWeaponPreviewSkinAliases(
+            aliases,
+            skinAssets,
+            models,
+            ltcWeaponIndexIds,
+            ltcTables,
+            modelItemsByPlayerViewRolePath);
         return (aliases, skinAssets);
+    }
+
+    private static CrossFireWeaponPreviewItemAliasIndex AddNameVerifiedWeaponPreviewSkinAliases(
+        CrossFireWeaponPreviewItemAliasIndex aliases,
+        IReadOnlyList<WeaponPreviewSkinAsset> skinAssets,
+        IReadOnlyList<CrossFireWeaponModelEntry> weaponModels,
+        IReadOnlySet<uint> ltcWeaponIndexIds,
+        IEnumerable<IReadOnlyList<CrossFireLtcModelTextureMapping>> ltcTables,
+        IReadOnlyDictionary<string, ExplorerItem[]> modelItemsByPlayerViewRolePath)
+    {
+        var playerViewModelsByWeaponIndex = new Dictionary<uint, HashSet<string>>();
+        foreach (CrossFireLtcModelTextureMapping mapping in ltcTables.SelectMany(table => table))
+        {
+            if (!mapping.ModelField.StartsWith("PViewModelFileName", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            string modelPath = NormalizeModelResourcePath(mapping.ModelReference);
+            if (modelPath.Length == 0 || !modelItemsByPlayerViewRolePath.ContainsKey(modelPath))
+            {
+                continue;
+            }
+
+            foreach (string identityAlias in mapping.IdentityAliases)
+            {
+                const string weaponIndexPrefix = "WeaponIndex:";
+                if (!identityAlias.StartsWith(weaponIndexPrefix, StringComparison.OrdinalIgnoreCase) ||
+                    !uint.TryParse(
+                        identityAlias[weaponIndexPrefix.Length..],
+                        NumberStyles.None,
+                        CultureInfo.InvariantCulture,
+                        out uint weaponIndex) ||
+                    !ltcWeaponIndexIds.Contains(weaponIndex))
+                {
+                    continue;
+                }
+
+                if (!playerViewModelsByWeaponIndex.TryGetValue(weaponIndex, out HashSet<string>? modelPaths))
+                {
+                    modelPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    playerViewModelsByWeaponIndex.Add(weaponIndex, modelPaths);
+                }
+
+                modelPaths.Add(modelPath);
+            }
+        }
+
+        var modelIdsByGroupAndItem = weaponModels
+            .Where(model => model.ModelGroupId > 0 && model.ItemId > 0)
+            .GroupBy(model => (model.ModelGroupId, model.ItemId))
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(model => model.ModelId).Distinct().ToArray());
+        var verifiedAliases = new List<(uint WeaponIndex, string Alias)>();
+        foreach (IGrouping<(uint ModelGroupId, uint ItemId), WeaponPreviewSkinAsset> group in skinAssets
+                     .Where(asset => asset.ItemId > 0 && asset.ModelGroupId > 0 && asset.ModelStem.Length > 0)
+                     .GroupBy(asset => (asset.ModelGroupId, asset.ItemId)))
+        {
+            uint itemId = group.Key.ItemId;
+            if (!ltcWeaponIndexIds.Contains(itemId) ||
+                !playerViewModelsByWeaponIndex.TryGetValue(itemId, out HashSet<string>? modelPaths) ||
+                modelPaths.Count != 1 ||
+                modelIdsByGroupAndItem.TryGetValue(group.Key, out uint[]? linkedModelIds) &&
+                linkedModelIds.Any(modelId => modelId > 0 && modelId != itemId))
+            {
+                continue;
+            }
+
+            string modelName = Path.GetFileNameWithoutExtension(modelPaths.Single());
+            if (!modelName.StartsWith("PV-", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            string modelStem = modelName[3..];
+            string[] skinStems = group
+                .Select(asset => asset.ModelStem)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (modelStem.Length == 0 || skinStems.Length == 0 ||
+                skinStems.Any(skinStem =>
+                    !string.Equals(skinStem, modelStem, StringComparison.OrdinalIgnoreCase) &&
+                    !skinStem.StartsWith(modelStem + "_", StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            string alias = "preview:" + group.Key.ModelGroupId.ToString(CultureInfo.InvariantCulture) + ":" +
+                           itemId.ToString(CultureInfo.InvariantCulture);
+            verifiedAliases.Add((itemId, alias));
+        }
+
+        if (verifiedAliases.Count == 0)
+        {
+            return aliases;
+        }
+
+        var aliasesByWeaponIndex = aliases.ByWeaponIndex.ToDictionary(
+            pair => pair.Key,
+            pair => new HashSet<string>(pair.Value, StringComparer.OrdinalIgnoreCase));
+        foreach ((uint weaponIndex, string alias) in verifiedAliases)
+        {
+            foreach (HashSet<string> existingAliases in aliasesByWeaponIndex.Values)
+            {
+                existingAliases.Remove(alias);
+            }
+
+            if (!aliasesByWeaponIndex.TryGetValue(weaponIndex, out HashSet<string>? itemAliases))
+            {
+                itemAliases = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                aliasesByWeaponIndex.Add(weaponIndex, itemAliases);
+            }
+
+            itemAliases.Add(alias);
+        }
+
+        return new CrossFireWeaponPreviewItemAliasIndex(
+            aliasesByWeaponIndex.ToDictionary(
+                pair => pair.Key,
+                pair => (IReadOnlyList<string>)pair.Value.Order(StringComparer.OrdinalIgnoreCase).ToArray()),
+            aliases.ByLtcLegacyMappingIndex);
     }
 
     private static void AddWeaponPreviewVariantTextureContextBindings(
