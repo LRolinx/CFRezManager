@@ -220,11 +220,11 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 - `PV-WAVE-Mortar` 嵌套目录基模的槽 2 直接映射到 `ModelTextures/PlayerView/PV-WAVE-Mortar.dtx`；标准路径基模通过完全一致的 UV 继承该槽，BL、GR、WOMAN_BL、WOMAN_GR 变体则按规范化基名映射同一贴图。各导出均为 `body`、`bomb` 网格恢复道具贴图，仅手、臂槽未解析。
 - `PV-500Chainsaw` 基模槽 2 直接使用 `ModelTextures/PlayerView/PV-500Chainsaw.dtx`；BL、GR、WOMAN_BL、WOMAN_GR 变体均按 LTC 贴图序号继承槽 2；WOMAN_GR 的 Object05 臂槽由同归档 Arm_WOMAN_GR 中同名网格的 RenderStyle 和 UV 三角签名确认。五个模型的导出都恢复全部三条槽 2 网格贴图，只有手、臂槽仍未解析。
 - `PV-687EDP_NY2026` 基模的 7 个槽 2 网格及 BL、GR、WOMAN_BL、WOMAN_GR 变体各自的 5 个槽 2 网格，均映射到 `ModelTextures/PlayerView/PV-687EDP_NY2026.dtx`。基模为直接映射，四个变体按 LTC 贴图序号继承；每个导出仅剩两条手、臂项未解析。
-- `PV-NegevNG7` 基模的 8 个槽 2 网格使用 `PV-NegevNG7.dtx`，`scope` 网格槽 3 使用 `PV-NegevNG7_01.dtx`。BL、GR、WOMAN_BL 变体按 LTC 贴图序号继承槽 2，并按完全一致的 UV 映射槽 3；WOMAN_GR 的 `scope` 槽 3 已映射，但 8 个槽 2 项仍未解析。贴图路径均在 `ModelTextures/PlayerView` 下；各导出剩余手、臂项未解析。
+- `PV-NegevNG7` 基模的 8 个槽 2 网格使用 `PV-NegevNG7.dtx`，`scope` 网格槽 3 使用 `PV-NegevNG7_01.dtx`。BL、GR、WOMAN_BL、WOMAN_GR 变体均按 LTC 贴图序号继承槽 2/3；WOMAN_GR 的 Object05 臂槽由同归档 Arm_WOMAN_GR 中同名网格的 RenderStyle 和 UV 三角签名确认。四个变体的聚焦导出都恢复 8 个槽 2 网格和 scope 槽 3，贴图位于 `ModelTextures/PlayerView`；手、臂项仍未解析。
 - `PV-MiniMythicHero` 基模及 BL、GR、WOMAN_BL、WOMAN_GR 变体的 `Object034` 网格槽 2 使用 `ModelTextures/PlayerView/PV-MiniMythicHero.dtx`，`sword` 网格槽 3 使用 `PV-MiniMythicHero_01.dtx`。四个变体的槽 2 按 LTC 贴图序号继承，槽 3 按完全一致的 UV 映射。每个导出均恢复两张道具贴图，仅手、臂槽未解析。
 - BF005.LTC 第 841 行为 `PV-TAC15` 登记的两张第一人称贴图，在 `PV-TAC15_WOMAN_BL/GR` 中按网格槽和 UV 签名分别映射：`body`、`bolt`、`Object001` 的槽 2 使用 `ModelTextures/PlayerView/PV-TAC15_01.dtx`，`scope` 的槽 3 使用 `_02.dtx`。聚焦导出确认每个变体恢复四个道具网格贴图，手、臂槽仍未解析。基模的三个道具网格都在槽 2，LTC 两条贴图引用无法确定各自槽位，仍保持未映射。
-- `PV-464SPX` 基模及 BL、GR、WOMAN_BL 变体的 5 个槽 2 网格均使用 `ModelTextures/PlayerView/PV-464SPX.dtx`，三个变体按 LTC 贴图序号继承；WOMAN_GR 的 5 个槽 2 项仍未解析。各模型的手、臂槽未解析。
-- `PV-HK417_Elite_RoyalDragon6` 基模的 3 个槽 2 网格直接使用 `ModelTextures/PlayerView/PV-HK417_Elite_RoyalDragon6.dtx`；BL、GR、WOMAN_BL 变体按 LTC 贴图序号继承同一贴图。WOMAN_GR 的 3 个槽 2 项仍未解析；所有模型的手、臂槽未解析。
+- `PV-464SPX` 基模及 BL、GR、WOMAN_BL 变体的 5 个槽 2 网格均使用 `ModelTextures/PlayerView/PV-464SPX.dtx`，BL、GR、WOMAN_BL、WOMAN_GR 变体均按 LTC 贴图序号继承槽 2；聚焦导出确认 WOMAN_GR 的 5 个槽 2 网格都映射到同一 DTX。各模型的手、臂槽未解析。
+- `PV-HK417_Elite_RoyalDragon6` 基模的 3 个槽 2 网格直接使用 `ModelTextures/PlayerView/PV-HK417_Elite_RoyalDragon6.dtx`；BL、GR、WOMAN_BL、WOMAN_GR 变体均按 LTC 贴图序号继承同一贴图；聚焦导出确认 WOMAN_GR 的 3 个槽 2 网格均已映射。所有模型的手、臂槽仍未解析。
 - 四个 `PV-M82A1_S_ReactiveArmor` 阵营/性别变体的两份 LTB 副本均按 LTC 贴图序号恢复 18 条槽 2 机身项，并按完全一致的 UV 映射两条 `PV-Scope` 槽 3 项。使用 `weaponindex:4437` 聚焦导出时，每个变体解析 20/24 项；剩余四项为手、臂槽。基模槽 2/3 均有直接贴图。
 - `PV-M82A1_DemonicBeast` 基模的 7 个槽 2 网格和两个槽 3 网格分别直接映射到 `ModelTextures/PlayerView/PV-M82A1_DemonicBeast.dtx` 与 `_01.dtx`。BL、GR、WOMAN_BL、WOMAN_GR 变体按 LTC 贴图序号继承两个槽的映射，每个导出恢复全部 9 个道具网格槽；手、臂和 `clanmark` 网格仍未解析。
 - `PV-M82A1_DemonicBeast_PVE` 基模两份 LTB 副本共映射 14 个槽 2 项和 4 个槽 3 项。BL、GR、WOMAN_BL、WOMAN_GR 变体也按 LTC 贴图序号恢复这 18 项；每份 24 行导出报告剩下 6 项，即双副本中的手、臂和 `clanmark` 网格。
