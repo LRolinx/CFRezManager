@@ -1257,6 +1257,7 @@ internal static class LithTechModelTextureConfigIndex
         WriteContextDictionary(dictionary.CftIdentityModelAliasByModelContext, "context", "cft-identity-model-alias-derived", isInferred: true);
         WriteContextDictionary(dictionary.EquivalentArmByModelContext, "context", "cft-equivalent-arm-derived", isInferred: true);
         WriteContextDictionary(dictionary.WeaponPreviewVariantByModelContext, "context", "weapon-preview-variant-derived", isInferred: true);
+        WriteUnresolvedLtcTextureReferences(dictionary.LtcTextureByModelContext, dictionary.ByModelContext);
         WriteRenderStyleContextDictionary(dictionary.RenderStyleByModelContext);
 
         var physicalModelGroups = index.ModelResourceItems
@@ -2126,6 +2127,100 @@ internal static class LithTechModelTextureConfigIndex
                 foreach ((int slot, string? texturePath) in slots.OrderBy(pair => pair.Key))
                 {
                     WriteMappingRow(modelPath, string.Empty, scope, context, slot, texturePath, mappingKind, isInferred);
+                }
+            }
+        }
+
+        void WriteUnresolvedLtcTextureReferences(
+            IReadOnlyDictionary<string, Dictionary<int, string?>> declaredReferences,
+            IReadOnlyDictionary<string, Dictionary<int, string?>> resolvedContextMappings)
+        {
+            var textureItemsByLogicalPath = index.ResourceItems
+                .Where(item => string.Equals(item.FileExtension, "dtx", StringComparison.OrdinalIgnoreCase))
+                .Select(item => (Item: item, LogicalPath: GetLogicalTextureResourcePath(GetModelResourcePath(item))))
+                .Where(pair => pair.LogicalPath.Length > 0)
+                .GroupBy(pair => pair.LogicalPath, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    group => group.Key,
+                    group => group.Select(pair => pair.Item).ToArray(),
+                    StringComparer.OrdinalIgnoreCase);
+            var verifiedTexturePathCache = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+
+            foreach ((string key, Dictionary<int, string?> slots) in declaredReferences.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase))
+            {
+                int separator = key.IndexOf('\0');
+                if (separator <= 0 || separator == key.Length - 1)
+                {
+                    continue;
+                }
+
+                string modelPath = key[..separator];
+                string context = key[(separator + 1)..];
+                resolvedContextMappings.TryGetValue(key, out Dictionary<int, string?>? resolvedSlots);
+                foreach ((int slot, string? texturePath) in slots.OrderBy(pair => pair.Key))
+                {
+                    bool hasContextMapping = resolvedSlots?.ContainsKey(slot) == true;
+                    if (hasContextMapping &&
+                        resolvedSlots!.TryGetValue(slot, out string? resolvedPath) &&
+                        !string.IsNullOrWhiteSpace(resolvedPath))
+                    {
+                        continue;
+                    }
+
+                    string? safelyResolvedPath = string.IsNullOrWhiteSpace(texturePath)
+                        ? null
+                        : ResolveExistingTextureReference(
+                            texturePath,
+                            index.ResourcePaths,
+                            index.TexturePathsByBaseName,
+                            textureItemsByLogicalPath,
+                            verifiedTexturePathCache);
+                    string resolvedLogicalPath = safelyResolvedPath is null
+                        ? string.Empty
+                        : GetLogicalTextureResourcePath(safelyResolvedPath);
+                    string logicalPath = resolvedLogicalPath.Length > 0
+                        ? resolvedLogicalPath
+                        : string.IsNullOrWhiteSpace(texturePath)
+                            ? string.Empty
+                            : NormalizeTextureReferencePath(texturePath);
+                    int physicalCopies = logicalPath.Length > 0 &&
+                                         textureItemsByLogicalPath.TryGetValue(logicalPath, out ExplorerItem[]? copies)
+                        ? copies.Length
+                        : 0;
+                    bool copiesVerified = physicalCopies > 0 &&
+                                         HasConsistentDecodableDtxCopies(
+                                             logicalPath,
+                                             textureItemsByLogicalPath,
+                                             verifiedTexturePathCache);
+                    string status = string.IsNullOrWhiteSpace(texturePath) || hasContextMapping
+                        ? "ambiguous"
+                        : physicalCopies == 0
+                            ? "texture-resource-missing"
+                            : copiesVerified
+                                ? "reference-unresolved"
+                                : "ambiguous";
+                    if (status == "ambiguous")
+                    {
+                        ambiguousMappings++;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(texturePath))
+                    {
+                        exactTexturePaths.Add(texturePath);
+                    }
+
+                    string detail = $"ltc_declared_reference=true;physical_copy_count={physicalCopies.ToString(CultureInfo.InvariantCulture)};physical_copy_check={(physicalCopies == 0 ? "path_absent" : copiesVerified ? "consistent_decodable" : "conflicting_or_undecodable")};context_binding_check={(hasContextMapping ? "conflicted" : "not_established")}";
+                    WriteAuditRow(
+                        modelPath,
+                        string.Empty,
+                        "context",
+                        context,
+                        slot,
+                        texturePath,
+                        "ltc-declared-reference",
+                        status,
+                        physicalCopies,
+                        detail);
                 }
             }
         }
