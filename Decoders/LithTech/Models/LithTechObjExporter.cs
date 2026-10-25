@@ -32,7 +32,8 @@ internal sealed record LithTechObjExportSource(
     Func<string, string, int, IReadOnlyList<string>>? MotionParentContextSlotResolver = null,
     Func<string, string, int, IReadOnlyList<string>>? CftPlayerViewRoleTextureContextSlotResolver = null,
     Func<string, string, int, IReadOnlyList<string>>? CftIdentityModelAliasTextureContextSlotResolver = null,
-    Func<string, int, IReadOnlyList<string>>? PreviewCharacterRoleTextureSlotResolver = null);
+    Func<string, int, IReadOnlyList<string>>? PreviewCharacterRoleTextureSlotResolver = null,
+    Func<string, string, int, IReadOnlyList<string>>? VariantSlotUvTextureContextSlotResolver = null);
 
 internal sealed record LithTechObjExportResult(
     string ObjPath,
@@ -533,6 +534,9 @@ internal static class LithTechObjExporter
 
         references = source.EquivalentArmTextureContextSlotResolver?.Invoke(modelReference, textureContext, slotIndex) ?? [];
         if (references.Count > 0) return new(references, "cft-equivalent-arm-derived", false);
+
+        references = source.VariantSlotUvTextureContextSlotResolver?.Invoke(modelReference, textureContext, slotIndex) ?? [];
+        if (references.Count > 0) return new(references, "variant-slot-uv-derived", false);
 
         IReadOnlyList<string> inferredReferences = source.InferredTextureContextSlotResolver?.Invoke(modelReference, textureContext, slotIndex) ?? [];
         if (inferredReferences.Count > 0)

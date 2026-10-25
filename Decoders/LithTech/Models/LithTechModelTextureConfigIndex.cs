@@ -494,6 +494,50 @@ internal static class LithTechModelTextureConfigIndex
         };
     }
 
+    public static Func<string, string, int, IReadOnlyList<string>>? CreateVariantSlotUvTextureContextSlotResolver(ExplorerItem root)
+    {
+        TextureConfigIndex index = TextureConfigIndexCache.GetValue(root, BuildIndex);
+        if (index.IsEmpty)
+        {
+            return null;
+        }
+
+        return (modelReference, context, slotIndex) =>
+        {
+            string modelPath = NormalizeModelResourcePath(modelReference);
+            string contextKey = NormalizeLooseKey(context);
+            if (modelPath.Length == 0 || contextKey.Length == 0 || slotIndex is < 0 or > MaxTextureSlotIndex)
+            {
+                return [];
+            }
+
+            ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index);
+            string key = $"{modelPath}\0{contextKey}";
+            if (dictionary.ByModelContext.TryGetValue(key, out Dictionary<int, string?>? directContextSlots) &&
+                directContextSlots.ContainsKey(slotIndex))
+            {
+                return [];
+            }
+
+            if (dictionary.VariantSlotUvByModelPath.TryGetValue(
+                    modelPath,
+                    out Dictionary<int, string?>? slots) &&
+                slots.TryGetValue(slotIndex, out string? texture) &&
+                !string.IsNullOrWhiteSpace(texture))
+            {
+                return [texture];
+            }
+
+            return dictionary.VariantSlotUvContentEquivalentByModelPath.TryGetValue(
+                       modelPath,
+                       out Dictionary<int, string?>? equivalentSlots) &&
+                   equivalentSlots.TryGetValue(slotIndex, out string? equivalentTexture) &&
+                   !string.IsNullOrWhiteSpace(equivalentTexture)
+                ? [equivalentTexture]
+                : [];
+        };
+    }
+
     public static Func<string, int, IReadOnlyList<string>>? CreateMotionParentSlotTextureSlotResolver(ExplorerItem root)
     {
         TextureConfigIndex index = TextureConfigIndexCache.GetValue(root, BuildIndex);
@@ -5721,6 +5765,7 @@ internal static class LithTechModelTextureConfigIndex
             .Where(group => group.Key.Length > 0)
             .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.OrdinalIgnoreCase);
         var contextTexturesByModelPath = new Dictionary<string, Dictionary<int, HashSet<string?>>>(StringComparer.OrdinalIgnoreCase);
+        var contextSlotsByModelPath = new Dictionary<string, List<Dictionary<int, string?>>>(StringComparer.OrdinalIgnoreCase);
         foreach ((string key, Dictionary<int, string?> slots) in byModelContext)
         {
             int separator = key.IndexOf('\0');
@@ -5730,6 +5775,13 @@ internal static class LithTechModelTextureConfigIndex
             }
 
             string modelPath = key[..separator];
+            if (!contextSlotsByModelPath.TryGetValue(modelPath, out List<Dictionary<int, string?>>? modelContexts))
+            {
+                contextSlotsByModelPath[modelPath] = modelContexts = [];
+            }
+
+            modelContexts.Add(slots);
+
             if (!contextTexturesByModelPath.TryGetValue(modelPath, out Dictionary<int, HashSet<string?>>? contextSlots))
             {
                 contextTexturesByModelPath[modelPath] = contextSlots = new Dictionary<int, HashSet<string?>>();
@@ -5781,8 +5833,15 @@ internal static class LithTechModelTextureConfigIndex
                     (exactMotionParentPath is not null &&
                      !string.Equals(donorModelPath, exactMotionParentPath, StringComparison.OrdinalIgnoreCase)) ||
                     !modelItemsByPlayerViewRolePath.TryGetValue(donorModelPath, out ExplorerItem[]? donorItems) ||
-                    !TryDecodeConsistentPlayerViewModelDocuments(donorItems, decodedModels, out List<LithTechModelDocument> donorDocuments) ||
-                    !byModelPath.TryGetValue(donorModelPath, out Dictionary<int, string?>? donorDirectSlots))
+                    !TryDecodeConsistentPlayerViewModelDocuments(donorItems, decodedModels, out List<LithTechModelDocument> donorDocuments))
+                {
+                    continue;
+                }
+
+                byModelPath.TryGetValue(donorModelPath, out Dictionary<int, string?>? donorDirectSlots);
+                contextSlotsByModelPath.TryGetValue(donorModelPath, out List<Dictionary<int, string?>>? donorContextEntries);
+                if ((donorDirectSlots is null || donorDirectSlots.Count == 0) &&
+                    (donorContextEntries is null || donorContextEntries.Count == 0))
                 {
                     continue;
                 }
@@ -5793,7 +5852,53 @@ internal static class LithTechModelTextureConfigIndex
                     continue;
                 }
 
-                foreach ((int donorSlotIndex, string? directTextureReference) in donorDirectSlots)
+                var donorTextureReferencesBySlot = donorDirectSlots is null
+                    ? new Dictionary<int, string?>()
+                    : new Dictionary<int, string?>(donorDirectSlots);
+                if (donorContextEntries is { Count: > 0 })
+                {
+                    foreach (int contextSlotIndex in donorContextEntries.SelectMany(context => context.Keys).Distinct())
+                    {
+                        if (donorTextureReferencesBySlot.TryGetValue(contextSlotIndex, out string? directTexture) &&
+                            !string.IsNullOrWhiteSpace(directTexture))
+                        {
+                            continue;
+                        }
+
+                        string? consistentContextTexture = null;
+                        bool hasConsistentContextTexture = true;
+                        foreach (Dictionary<int, string?> contextSlots in donorContextEntries)
+                        {
+                            if (!contextSlots.TryGetValue(contextSlotIndex, out string? contextTexture) ||
+                                string.IsNullOrWhiteSpace(contextTexture))
+                            {
+                                hasConsistentContextTexture = false;
+                                break;
+                            }
+
+                            string normalizedContextTexture = GetLogicalTextureResourcePath(contextTexture);
+                            if (normalizedContextTexture.Length == 0)
+                            {
+                                normalizedContextTexture = NormalizeKey(contextTexture);
+                            }
+                            if (consistentContextTexture is not null &&
+                                !string.Equals(consistentContextTexture, normalizedContextTexture, StringComparison.OrdinalIgnoreCase))
+                            {
+                                hasConsistentContextTexture = false;
+                                break;
+                            }
+
+                            consistentContextTexture = normalizedContextTexture;
+                        }
+
+                        if (hasConsistentContextTexture && !string.IsNullOrWhiteSpace(consistentContextTexture))
+                        {
+                            donorTextureReferencesBySlot[contextSlotIndex] = consistentContextTexture;
+                        }
+                    }
+                }
+
+                foreach ((int donorSlotIndex, string? directTextureReference) in donorTextureReferencesBySlot)
                 {
                     if (string.IsNullOrWhiteSpace(directTextureReference) ||
                         IsPlayerViewHandOrArmTextureSlot(donorDocuments, donorSlotIndex) ||
@@ -5809,7 +5914,12 @@ internal static class LithTechModelTextureConfigIndex
                         continue;
                     }
 
-                    string texturePath = NormalizeKey(directTextureReference);
+                    string texturePath = GetLogicalTextureResourcePath(directTextureReference);
+                    if (texturePath.Length == 0)
+                    {
+                        texturePath = NormalizeKey(directTextureReference);
+                    }
+
                     bool isPlayerViewOrWeaponTexture =
                         texturePath.StartsWith("ModelTextures/PLAYERVIEW/", StringComparison.OrdinalIgnoreCase) ||
                         texturePath.StartsWith("ModelTextures/WEAPONS/", StringComparison.OrdinalIgnoreCase);
@@ -5824,7 +5934,20 @@ internal static class LithTechModelTextureConfigIndex
                     if (contextTexturesByModelPath.TryGetValue(donorModelPath, out Dictionary<int, HashSet<string?>>? donorContextSlots) &&
                         donorContextSlots.TryGetValue(donorSlotIndex, out HashSet<string?>? donorContextTextures) &&
                         donorContextTextures.Any(contextTexture =>
-                            !string.Equals(contextTexture, texturePath, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            if (string.IsNullOrWhiteSpace(contextTexture))
+                            {
+                                return true;
+                            }
+
+                            string logicalContextTexture = GetLogicalTextureResourcePath(contextTexture);
+                            if (logicalContextTexture.Length == 0)
+                            {
+                                logicalContextTexture = NormalizeKey(contextTexture);
+                            }
+
+                            return !string.Equals(logicalContextTexture, texturePath, StringComparison.OrdinalIgnoreCase);
+                        }))
                     {
                         continue;
                     }
