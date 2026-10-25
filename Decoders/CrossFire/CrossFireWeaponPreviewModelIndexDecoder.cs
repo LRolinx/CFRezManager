@@ -128,6 +128,12 @@ internal static class CrossFireWeaponPreviewModelIndexDecoder
     {
         CrossFireWeaponPreviewEntry[] previewEntries = previews.ToArray();
         CrossFireWeaponModelEntry[] modelEntries = models.ToArray();
+        var weaponModelIdsByGroupAndItem = modelEntries
+            .Where(model => model.ModelGroupId > 0 && model.ItemId > 0)
+            .GroupBy(model => (model.ModelGroupId, model.ItemId))
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(model => model.ModelId).Distinct().ToArray());
         var modelsByGroupAndItem = modelEntries
             .Where(model => model.ModelGroupId > 0 && model.ItemId > 0 && model.ModelId > 0)
             .GroupBy(model => (model.ModelGroupId, model.ItemId))
@@ -143,6 +149,12 @@ internal static class CrossFireWeaponPreviewModelIndexDecoder
         var previewModelIdsByGroupAndItem = previewEntries
             .Where(preview => preview.ModelGroupId > 0 && preview.ItemId > 0 && preview.ModelId > 0)
             .GroupBy(preview => (preview.ModelGroupId, preview.ItemId))
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(preview => preview.ModelId).Distinct().ToArray());
+        var previewModelIdsByItem = previewEntries
+            .Where(preview => preview.ItemId > 0 && preview.ModelId > 0)
+            .GroupBy(preview => preview.ItemId)
             .ToDictionary(
                 group => group.Key,
                 group => group.Select(preview => preview.ModelId).Distinct().ToArray());
@@ -255,6 +267,30 @@ internal static class CrossFireWeaponPreviewModelIndexDecoder
                     }
                 }
             }
+        }
+
+        // A unique WeaponModel item row can omit ModelId. In that case, use
+        // WeaponPreview.ModelId for the item alias only when every preview group
+        // agrees on the same ID and that ID has a direct LTC WeaponIndex.
+        foreach (var weaponModel in weaponModelIdsByGroupAndItem)
+        {
+            if (weaponModel.Value.Length != 1 || weaponModel.Value[0] != 0 ||
+                !previewModelIdsByGroupAndItem.TryGetValue(weaponModel.Key, out uint[]? groupPreviewModelIds) ||
+                groupPreviewModelIds.Length != 1 ||
+                !previewModelIdsByItem.TryGetValue(weaponModel.Key.ItemId, out uint[]? itemPreviewModelIds) ||
+                itemPreviewModelIds.Length != 1 ||
+                itemPreviewModelIds[0] != groupPreviewModelIds[0] ||
+                (modelIdsByItem.TryGetValue(weaponModel.Key.ItemId, out uint[]? linkedModelIds) &&
+                 linkedModelIds.Any(modelId => modelId != groupPreviewModelIds[0])) ||
+                (ltcWeaponIndexIds.Contains(weaponModel.Key.ItemId) &&
+                 weaponModel.Key.ItemId != groupPreviewModelIds[0]) ||
+                ltcWeaponLegacyMappingIndexIds.Contains(weaponModel.Key.ItemId) ||
+                !ltcWeaponIndexIds.Contains(groupPreviewModelIds[0]))
+            {
+                continue;
+            }
+
+            AddAlias(aliasesByWeaponIndex, groupPreviewModelIds[0], ItemAlias(weaponModel.Key.ItemId));
         }
 
         foreach (CrossFireWeaponPreviewEntry preview in previewEntries)
