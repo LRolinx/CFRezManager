@@ -273,6 +273,14 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
   | 3749 | 预览模型/`WeaponIndex`：7406；用 `preview:2000000:3749`，无匹配的 `WeaponModel.ItemId` 行 | `PV-M4A1_S_UnderTech_Chg` | `QV-M4A1_S_UnderTech_Gold.DTX` | `PV-M4A1_S_UnderTech_Gold.DTX` |
 
   2190–2196 使用 `item:<编号>` 上下文。BL、GR、WOMAN_BL 变体会从对应 LTC 记录推导槽 2 贴图；WOMAN_GR 在当前 LTC 中没有对应模型记录，槽 2 保持未解析。手、臂槽也未绑定。四组聚焦导出均成功解码 QV 与 PV DTX。
+- 模型组 `2000000` 的 M4A1-S RedBeast 道具 `1895`、`1896`、`1897` 经同组 `WeaponModel.ModelId` 3050、3051、3052 关联到 LTC：
+
+  | 道具编号 | WeaponModel.ModelId | PView 模型 | 世界模型槽 0 | PView 槽 2 |
+  | --- | --- | --- | --- | --- |
+  | 1895、1897 | 3050、3052 | `PV-M4A1_S_RedKnifeBeast` | `QV-M4A1_S_RedRifleBeast.DTX` | `PV-M4A1_S_RedRifleBeast.DTX` |
+  | 1896 | 3051 | `PV-M4A1_S_RedRifleBeast` | `QV-M4A1_S_RedRifleBeast.DTX` | `PV-M4A1_S_RedRifleBeast.DTX` |
+
+  LTC 将 RedKnifeBeast 世界/PView 模型绑定到 RedRifleBeast 贴图。`QV-M4A1_S_RedRifleBeast_preview` 的槽 0 也使用 PV DTX。两种 PView 基模的 BL、GR、WOMAN_BL 变体均推导出槽 2 贴图；WOMAN_GR 保持未解析。`QV-M4A1_S_RedKnifeBeast_preview` 及手、臂槽未解析。聚焦导出成功解码 QV 和 PV 两张 DTX。
 - 原生 LTB 解码保留每个网格的 RenderStyle 编号，并区分文件声明的材质槽与推测槽。OBJ 仍只导出漫反射贴图，不重建全部 RenderStyle 效果。
 - 角色别名有冲突时，可用 `row:rez\RF100\Table\CharacterType.CFT#701:BL` 按零基 CFT 行和阵营精确选择皮肤；表内存在有效 `RecordId` 时可用 `recordid:rez\RF100\Table\CharacterType.CFT#<编号>`，两种编号域互不混用。
 - `--scan-cfg`：扫描 CFG，提取贴图引用，输出 TXT/CSV 报告。

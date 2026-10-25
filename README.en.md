@@ -272,6 +272,14 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
   | 3749 | Preview model/`WeaponIndex`: 7406; use `preview:2000000:3749` because there is no matching `WeaponModel.ItemId` row | `PV-M4A1_S_UnderTech_Chg` | `QV-M4A1_S_UnderTech_Gold.DTX` | `PV-M4A1_S_UnderTech_Gold.DTX` |
 
   Items 2190–2196 use `item:<id>` contexts. BL, GR, and WOMAN_BL variants derive slot-2 textures from their LTC records. WOMAN_GR has no matching model record in the current LTC set, so slot 2 remains unresolved; hand and arm slots are also unbound. All four focused exports decoded the QV and PV DTX files.
+- M4A1-S RedBeast items 1895, 1896, and 1897 in model group `2000000` link through same-group `WeaponModel.ModelId` values 3050, 3051, and 3052 to LTC records:
+
+  | Item IDs | WeaponModel.ModelId | PView model | World model slot 0 | PView slot 2 |
+  | --- | --- | --- | --- | --- |
+  | 1895, 1897 | 3050, 3052 | `PV-M4A1_S_RedKnifeBeast` | `QV-M4A1_S_RedRifleBeast.DTX` | `PV-M4A1_S_RedRifleBeast.DTX` |
+  | 1896 | 3051 | `PV-M4A1_S_RedRifleBeast` | `QV-M4A1_S_RedRifleBeast.DTX` | `PV-M4A1_S_RedRifleBeast.DTX` |
+
+  The LTC records bind the RedKnifeBeast world and PView models to RedRifleBeast textures. Slot 0 on `QV-M4A1_S_RedRifleBeast_preview` also uses the PV DTX. BL, GR, and WOMAN_BL variants of both PView bases derive the slot-2 texture; WOMAN_GR remains unresolved. `QV-M4A1_S_RedKnifeBeast_preview` and the hand/arm slots remain unresolved. The focused exports decoded both QV and PV DTX files.
 - Native LTB decoding retains per-mesh RenderStyle indices and distinguishes file-declared texture slots from inferred slots. OBJ export still writes a diffuse texture rather than recreating all RenderStyle effects.
 - If a character alias is ambiguous, use `row:rez\RF100\Table\CharacterType.CFT#701:BL` to select a skin by zero-based CFT row and side. When the table has a valid `RecordId`, use `recordid:rez\RF100\Table\CharacterType.CFT#<id>`; the two number domains stay separate.
 - `--scan-cfg`: scan CFG files, extract texture references, and write TXT/CSV reports.
