@@ -4712,6 +4712,17 @@ internal static class LithTechModelTextureConfigIndex
                         ? ResolveEquivalentPlayerViewArmSlots(modelItems, modelDocuments, playerViewArmDocuments)
                         : [];
 
+                int[] mappingTextureOrdinals = mapping.TextureFieldReferences
+                    .Select(textureReference => TryGetLtcPlayerViewTextureOrdinal(
+                        mapping.ModelField,
+                        textureReference.FieldName,
+                        out int textureOrdinal)
+                        ? textureOrdinal
+                        : -1)
+                    .Where(textureOrdinal => textureOrdinal >= 0)
+                    .Distinct()
+                    .ToArray();
+                bool allowSingleSlotOrdinalFallback = mappingTextureOrdinals.Length == 1;
                 foreach (CrossFireLtcTextureFieldReference textureReference in mapping.TextureFieldReferences)
                 {
                     if (!TryGetLtcPlayerViewTextureOrdinal(
@@ -4732,7 +4743,8 @@ internal static class LithTechModelTextureConfigIndex
                         modelDocuments,
                         mapping.ModelField,
                         textureOrdinal,
-                        equivalentPlayerViewArmSlots);
+                        equivalentPlayerViewArmSlots,
+                        allowSingleSlotOrdinalFallback);
                     if (mappedSlots.Length == 0)
                     {
                         continue;
@@ -4779,6 +4791,7 @@ internal static class LithTechModelTextureConfigIndex
                             textureOrdinal,
                             mappedSlots,
                             contextKeys,
+                            allowSingleSlotOrdinalFallback,
                             typedLtcPlayerViewModels,
                             modelItemsByPlayerViewRolePath,
                             decodedModels,
@@ -5147,6 +5160,7 @@ internal static class LithTechModelTextureConfigIndex
         int textureOrdinal,
         IReadOnlyList<int> sourceMappedSlots,
         IReadOnlyList<string> contextKeys,
+        bool allowSingleSlotOrdinalFallback,
         IReadOnlySet<string> typedLtcPlayerViewModels,
         IReadOnlyDictionary<string, ExplorerItem[]> modelItemsByPlayerViewRolePath,
         Dictionary<string, LithTechModelDocument?> decodedModels,
@@ -5254,7 +5268,8 @@ internal static class LithTechModelTextureConfigIndex
                 targetDocuments,
                 modelField,
                 textureOrdinal,
-                equivalentArmSlots);
+                equivalentArmSlots,
+                allowSingleSlotOrdinalFallback);
             if (targetSlots.Length != 1 || targetSlots[0] != sourceMappedSlots[0])
             {
                 continue;
@@ -9032,7 +9047,8 @@ internal static class LithTechModelTextureConfigIndex
         IReadOnlyList<LithTechModelDocument> documents,
         string modelField,
         int textureOrdinal,
-        IReadOnlyList<int> equivalentArmSlots)
+        IReadOnlyList<int> equivalentArmSlots,
+        bool allowSingleSlotOrdinalFallback)
     {
         int[]? resolvedSlots = null;
         bool excludeHandArmSlots = modelField.StartsWith("PViewModelFileName", StringComparison.OrdinalIgnoreCase);
@@ -9096,11 +9112,13 @@ internal static class LithTechModelTextureConfigIndex
             }
 
             int[] eligibleSlots = modelSlots.Except(handArmSlots).Order().ToArray();
-            // Numbered LTC player-view fields can describe the same skin on a
-            // standalone hand model or the sole weapon slot of a full preview
-            // model. In that case, the only eligible LTB slot is unambiguous;
-            // keep ordinal selection strict when multiple slots are available.
-            int resolvedOrdinal = eligibleSlots.Length == 1 ? 0 : textureOrdinal;
+            // A lone numbered LTC field can identify the only eligible slot on
+            // models without a separate weapon slot. When the row has several
+            // texture fields, preserve their order so a missing second slot
+            // does not collapse onto the first one.
+            int resolvedOrdinal = eligibleSlots.Length == 1 && allowSingleSlotOrdinalFallback
+                ? 0
+                : textureOrdinal;
             if (resolvedOrdinal < 0 || resolvedOrdinal >= eligibleSlots.Length)
             {
                 return [];
