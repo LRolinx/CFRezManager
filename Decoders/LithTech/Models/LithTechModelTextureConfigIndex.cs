@@ -4929,8 +4929,21 @@ internal static class LithTechModelTextureConfigIndex
                 }
 
                 if (modelPath.Length == 0 ||
-                    !TryGetConsistentLtcModelSlots(modelItems, decodedModels, out int[] mappedSlots) ||
-                    mappedSlots.Length != textureReferences.Length)
+                    !TryGetConsistentLtcModelSlots(modelItems, decodedModels, out int[] mappedSlots))
+                {
+                    continue;
+                }
+
+                // Some LTC rows carry trailing texture fields that have no used slot in this model.
+                // Bind the leading fields only when both the model slots and LTC ordinals form
+                // matching zero-based / one-based prefixes; never invent a slot for the remainder.
+                bool mapsAllTextureReferences = mappedSlots.Length == textureReferences.Length;
+                bool mapsOnlyLeadingTextureReferences = mappedSlots.Length < textureReferences.Length &&
+                                                        IsZeroBasedTextureSlotPrefix(mappedSlots) &&
+                                                        HasContiguousLtcTextureReferencePrefix(
+                                                            textureReferences,
+                                                            mappedSlots.Length);
+                if (!mapsAllTextureReferences && !mapsOnlyLeadingTextureReferences)
                 {
                     continue;
                 }
@@ -8194,6 +8207,44 @@ internal static class LithTechModelTextureConfigIndex
             out int ordinal) && ordinal > 0
             ? ordinal
             : int.MaxValue;
+    }
+
+    private static bool IsZeroBasedTextureSlotPrefix(IReadOnlyList<int> slots)
+    {
+        if (slots.Count == 0)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < slots.Count; index++)
+        {
+            if (slots[index] != index)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool HasContiguousLtcTextureReferencePrefix(
+        IReadOnlyList<CrossFireLtcTextureFieldReference> textureReferences,
+        int requiredCount)
+    {
+        if (requiredCount <= 0 || requiredCount > textureReferences.Count)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < requiredCount; index++)
+        {
+            if (GetLtcTextureFieldOrdinal(textureReferences[index].FieldName) != index + 1)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static Dictionary<string, Dictionary<string, LtcPhysicalModelTextureBinding>> BuildLtcPhysicalBindingAliases(
