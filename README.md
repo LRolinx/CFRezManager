@@ -266,6 +266,14 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
   | 2705 | 4573 | `QV-Grenade_HuluXiongdi.DTX` | `PV-Grenade_HuluXiongdi` 槽 2：`PV-Grenade_HuluXiongdi.DTX` |
 
   `PV-HuluXiongdi` 的 BL、GR、WOMAN_BL、WOMAN_GR 变体均以 UV 推导槽 3 的 `PV-HuluXiongdi01.DTX`；槽 2 仅 BL、GR、WOMAN_BL 通过 LTC 变体规则映射，WOMAN_GR 保持未解析。`PV-HuluXiongdi_chg` 的 BL、GR、WOMAN_BL 变体槽 2 按上下文推导贴图；WOMAN_GR 槽 2 以及 `Hulu01`、`Hulu02` 槽 3 未解析。`PV-Grenade_HuluXiongdi` 的四个阵营/性别变体槽 2 均按 UV 推导。手、臂槽保持未解析。定向提取扫描了当前全部 482 个 REZ 归档索引；所有目标模型均已解码，无几何跳过。报告位于 `artifacts/mapping-audit/item-2589-hulu-xiongdi-focused-20261025/`。
+- 模型组 `3000000` 的白樱道具也有 LTC 直连映射：
+
+  | 道具编号 | WeaponIndex | QV 世界槽 0 | PView 贴图槽 |
+  | --- | ---: | --- | --- |
+  | 2593、2597 | 4520、4521 | `QV-M200CheyTac_WhiteSakura.DTX` | `PV-M200CheyTac` 槽 2：`PV-M200CheyTac_WhiteSakura.DTX`；槽 3：`PV-M200CheyTac_WhiteSakura01.DTX` |
+  | 2599 | 4522 | `QV-WarFan_WhiteSakura.DTX` | `PV-WarFan` 槽 2：`PV-WarFan_WhiteSakura.DTX` |
+
+  `PV-M200CheyTac` 的 BL、GR、WOMAN_BL 变体按 LTC 规则映射槽 2、3；WOMAN_GR 两槽保持未解析。`PV-WarFan` 的 BL、GR、WOMAN_BL、WOMAN_GR 变体均以 UV 推导槽 2。手、臂槽仍未解析。两组共 20 份物理 LTB 均成功解码，无几何跳过；报告位于 `artifacts/mapping-audit/item-2593-m200-whitesakura-exact-20261025/`。
 - 模型组 `2000000` 的 HuluXiongdi 道具 `2681`、`2686` 经 `WeaponModel.ModelId` 4570、4571 关联到 LTC `WeaponIndex` 4570、4571。`QV-M4A1_S_IronBeast_HuluXiongdi` 槽 0 使用同名 QV DTX；`QV-M4A1_S_IronBeast_HuluXiongdi_Preview` 槽 0 使用 `PV-M4A1_S_IronBeast_HuluXiongdi.DTX`。PView 基模槽 2 使用该 PV DTX；BL、GR、WOMAN_BL 变体槽 2 继承同一贴图，槽 3 映射 `PV-M4A1_S_IronBeast_HuluXiongdi_01.DTX`。WOMAN_GR、手臂及其他无唯一来源的网格槽仍未解析。七个目标 LTB 均成功解码，无几何跳过；报告位于同一 HuluXiongdi 聚焦目录。
 - 模型组 `2000000` 的 `WeaponPreview` 记录 35、92、200 分别经同组 `WeaponModel` 指向 `ModelId` 3020、3021、3022；三者共用 `PV-AK47_Knife_SteelEmpire`。当前安装的聚焦导出验证了每个身份的两个物品槽：
 
