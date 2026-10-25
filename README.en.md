@@ -253,6 +253,15 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
   | 1997 | 1997 | `PV-AN94_SpaceShip` | 2: `PV-AN94_SpaceShip.DTX` |
 
   Other slots remain unresolved where the tables do not provide a binding. When an LTC texture reference matches multiple physical copies across archive roots, the resolver selects one only if every copy decodes and has the same SHA-256; conflicting or unreadable copies stay unmapped.
+- In model group `2000000`, `WeaponPreview` items 35, 92, and 200 link through same-group `WeaponModel` rows to ModelIds 3020, 3021, and 3022. All three use `PV-AK47_Knife_SteelEmpire`. Focused exports against the current install verified both item slots for each identity:
+
+  | Item ID | WeaponModel.ModelId | Slot 2 | Slot 3 |
+  | ---: | ---: | --- | --- |
+  | 35 | 3020 | `pv-AK47_Knife_SteelEmpire_ng.DTX` | `pv-AK47_Knife_SteelEmpire_ng01.DTX` |
+  | 92 | 3021 | `PV-AK47_Knife_SteelEmpire_NobleRed.DTX` | `PV-AK47_Knife_SteelEmpire_NobleRed01.DTX` |
+  | 200 | 3022 | `PV-AK47_Knife_SteelEmpire_NobleGRN.DTX` | `PV-AK47_Knife_SteelEmpire_NobleGRN01.DTX` |
+
+  Each context exports 13 meshes, resolving texture mappings on all 11 weapon meshes; the two hand/arm slots remain unbound. All six DTX files exist in the current install and decoded during export.
 - Native LTB decoding retains per-mesh RenderStyle indices and distinguishes file-declared texture slots from inferred slots. OBJ export still writes a diffuse texture rather than recreating all RenderStyle effects.
 - If a character alias is ambiguous, use `row:rez\RF100\Table\CharacterType.CFT#701:BL` to select a skin by zero-based CFT row and side. When the table has a valid `RecordId`, use `recordid:rez\RF100\Table\CharacterType.CFT#<id>`; the two number domains stay separate.
 - `--scan-cfg`: scan CFG files, extract texture references, and write TXT/CSV reports.

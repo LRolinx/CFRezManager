@@ -254,6 +254,15 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
   | 1997 | 1997 | `PV-AN94_SpaceShip` | 2：`PV-AN94_SpaceShip.DTX` |
 
   某些模型的其他槽仍未解析。LTC 贴图路径若在多个归档层有同名实体副本，只有副本均能解码、且 SHA-256 一致时才选择确定的物理路径；否则保持未映射。
+- 模型组 `2000000` 的 `WeaponPreview` 记录 35、92、200 分别经同组 `WeaponModel` 指向 `ModelId` 3020、3021、3022；三者共用 `PV-AK47_Knife_SteelEmpire`。当前安装的聚焦导出验证了每个身份的两个物品槽：
+
+  | 道具编号 | WeaponModel.ModelId | 槽 2 | 槽 3 |
+  | ---: | ---: | --- | --- |
+  | 35 | 3020 | `pv-AK47_Knife_SteelEmpire_ng.DTX` | `pv-AK47_Knife_SteelEmpire_ng01.DTX` |
+  | 92 | 3021 | `PV-AK47_Knife_SteelEmpire_NobleRed.DTX` | `PV-AK47_Knife_SteelEmpire_NobleRed01.DTX` |
+  | 200 | 3022 | `PV-AK47_Knife_SteelEmpire_NobleGRN.DTX` | `PV-AK47_Knife_SteelEmpire_NobleGRN01.DTX` |
+
+  三种上下文各导出 13 个网格，11 个武器网格成功解析贴图；两个手臂槽仍未绑定。三组 DTX 均在当前安装中找到并成功导出。
 - 原生 LTB 解码保留每个网格的 RenderStyle 编号，并区分文件声明的材质槽与推测槽。OBJ 仍只导出漫反射贴图，不重建全部 RenderStyle 效果。
 - 角色别名有冲突时，可用 `row:rez\RF100\Table\CharacterType.CFT#701:BL` 按零基 CFT 行和阵营精确选择皮肤；表内存在有效 `RecordId` 时可用 `recordid:rez\RF100\Table\CharacterType.CFT#<编号>`，两种编号域互不混用。
 - `--scan-cfg`：扫描 CFG，提取贴图引用，输出 TXT/CSV 报告。
