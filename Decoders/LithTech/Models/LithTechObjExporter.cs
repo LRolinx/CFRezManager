@@ -31,7 +31,8 @@ internal sealed record LithTechObjExportSource(
     Func<string, int, IReadOnlyList<string>>? MotionParentSlotTextureSlotResolver = null,
     Func<string, string, int, IReadOnlyList<string>>? MotionParentContextSlotResolver = null,
     Func<string, string, int, IReadOnlyList<string>>? CftPlayerViewRoleTextureContextSlotResolver = null,
-    Func<string, string, int, IReadOnlyList<string>>? CftIdentityModelAliasTextureContextSlotResolver = null);
+    Func<string, string, int, IReadOnlyList<string>>? CftIdentityModelAliasTextureContextSlotResolver = null,
+    Func<string, int, IReadOnlyList<string>>? PreviewCharacterRoleTextureSlotResolver = null);
 
 internal sealed record LithTechObjExportResult(
     string ObjPath,
@@ -385,13 +386,18 @@ internal static class LithTechObjExporter
                         IReadOnlyList<string> ltcPreviewVariantReferences = source.LtcPreviewVariantTextureSlotResolver?.Invoke(modelReference, skinSlotIndex) ?? [];
                         IReadOnlyList<string> previewNormalizedBasenameReferences = source.PreviewNormalizedBasenameTextureSlotResolver?.Invoke(modelReference, skinSlotIndex) ?? [];
                         IReadOnlyList<string> variantSlotUvReferences = source.VariantSlotUvTextureSlotResolver?.Invoke(modelReference, skinSlotIndex) ?? [];
+                        IReadOnlyList<string> previewCharacterRoleReferences = source.PreviewCharacterRoleTextureSlotResolver?.Invoke(modelReference, skinSlotIndex) ?? [];
                         bool matchesLtcPreviewVariant = ltcPreviewVariantReferences.Count > 0 &&
                                                         inferredReferences.SequenceEqual(ltcPreviewVariantReferences, StringComparer.OrdinalIgnoreCase);
+                        bool matchesPreviewCharacterRole = previewCharacterRoleReferences.Count > 0 &&
+                                                           inferredReferences.SequenceEqual(previewCharacterRoleReferences, StringComparer.OrdinalIgnoreCase);
                         bool matchesVariantSlotUv = variantSlotUvReferences.Count > 0 &&
                                                     inferredReferences.SequenceEqual(variantSlotUvReferences, StringComparer.OrdinalIgnoreCase);
                         bool matchesPreviewNormalizedBasename = previewNormalizedBasenameReferences.Count > 0 &&
                                                                  inferredReferences.SequenceEqual(previewNormalizedBasenameReferences, StringComparer.OrdinalIgnoreCase);
-                        resolverName = matchesLtcPreviewVariant
+                        resolverName = matchesPreviewCharacterRole
+                            ? "preview-character-role-derived"
+                            : matchesLtcPreviewVariant
                             ? "ltc-preview-variant-same-name-derived"
                             : matchesVariantSlotUv
                                 ? "variant-slot-uv-derived"
@@ -556,6 +562,7 @@ internal static class LithTechObjExporter
             "cft-player-view-role-derived" => 3,
             "cft-equivalent-arm-derived" => 4,
             "ltc-preview-variant-same-name-derived" => 5,
+            "preview-character-role-derived" => 5,
             "cft-body-face-derived" => 5,
             "motion-parent-slot-derived" => 6,
             _ => 7

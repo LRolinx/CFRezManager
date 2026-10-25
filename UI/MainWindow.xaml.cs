@@ -996,6 +996,9 @@ public partial class MainWindow : Window
             Func<string, int, IReadOnlyList<string>>? inferredTextureSlotResolver = exportRoot is null
                 ? null
                 : await Task.Run(() => LithTechModelTextureConfigIndex.CreateInferredTextureSlotResolver(exportRoot));
+            Func<string, int, IReadOnlyList<string>>? previewCharacterRoleTextureSlotResolver = exportRoot is null
+                ? null
+                : await Task.Run(() => LithTechModelTextureConfigIndex.CreatePreviewCharacterRoleTextureSlotResolver(exportRoot));
             Func<string, int, IReadOnlyList<string>>? weaponPreviewVariantTextureSlotResolver = exportRoot is null
                 ? null
                 : await Task.Run(() => LithTechModelTextureConfigIndex.CreateWeaponPreviewVariantTextureSlotResolver(exportRoot));
@@ -1044,6 +1047,7 @@ public partial class MainWindow : Window
                 previewNormalizedBasenameTextureSlotResolver,
                 variantSlotUvTextureSlotResolver,
                 motionParentSlotTextureSlotResolver,
+                previewCharacterRoleTextureSlotResolver,
                 meshTextureResolver,
                 progress));
             SetStatus(
@@ -1081,6 +1085,7 @@ public partial class MainWindow : Window
         Func<string, int, IReadOnlyList<string>>? previewNormalizedBasenameTextureSlotResolver,
         Func<string, int, IReadOnlyList<string>>? variantSlotUvTextureSlotResolver,
         Func<string, int, IReadOnlyList<string>>? motionParentSlotTextureSlotResolver,
+        Func<string, int, IReadOnlyList<string>>? previewCharacterRoleTextureSlotResolver,
         Func<string, string, int, string, IReadOnlyList<string>>? meshTextureResolver,
         IProgress<ModelObjExportProgress> progress)
     {
@@ -1106,7 +1111,8 @@ public partial class MainWindow : Window
                     LtcPreviewVariantTextureSlotResolver: ltcPreviewVariantTextureSlotResolver,
                     PreviewNormalizedBasenameTextureSlotResolver: previewNormalizedBasenameTextureSlotResolver,
                     VariantSlotUvTextureSlotResolver: variantSlotUvTextureSlotResolver,
-                    MotionParentSlotTextureSlotResolver: motionParentSlotTextureSlotResolver));
+                    MotionParentSlotTextureSlotResolver: motionParentSlotTextureSlotResolver,
+                    PreviewCharacterRoleTextureSlotResolver: previewCharacterRoleTextureSlotResolver));
             }
             else
             {
