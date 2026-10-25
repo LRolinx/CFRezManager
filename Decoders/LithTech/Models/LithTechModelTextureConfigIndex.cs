@@ -9058,10 +9058,12 @@ internal static class LithTechModelTextureConfigIndex
                     string normalizedName = NormalizeLooseKey(mesh.Name);
                     bool isHand = normalizedName.StartsWith("fviewhand", StringComparison.Ordinal) ||
                                   normalizedName == "hand" ||
+                                  HasDelimitedPlayerViewRoleSuffix(mesh.Name, "hand") ||
                                   hasPairedHandArmSuffixes && mesh.Name.EndsWith("_H", StringComparison.OrdinalIgnoreCase);
                     bool isArm = normalizedName.StartsWith("fviewarm", StringComparison.Ordinal) ||
                                  normalizedName.StartsWith("fviewam", StringComparison.Ordinal) ||
                                  normalizedName == "arm" ||
+                                 HasDelimitedPlayerViewRoleSuffix(mesh.Name, "arm") ||
                                  hasPairedHandArmSuffixes && mesh.Name.EndsWith("_A", StringComparison.OrdinalIgnoreCase);
                     if (isHand && isArm)
                     {
@@ -9100,6 +9102,23 @@ internal static class LithTechModelTextureConfigIndex
         }
 
         return resolvedSlots ?? [];
+    }
+
+    private static bool HasDelimitedPlayerViewRoleSuffix(string meshName, string role)
+    {
+        int separatorIndex = Math.Max(
+            Math.Max(meshName.LastIndexOf('-'), meshName.LastIndexOf('_')),
+            Math.Max(meshName.LastIndexOf(' '), meshName.LastIndexOf('.')));
+        if (separatorIndex < 0)
+        {
+            return false;
+        }
+
+        string suffix = NormalizeLooseKey(meshName[(separatorIndex + 1)..]);
+        return suffix.Equals(role, StringComparison.Ordinal) ||
+               suffix.Length > role.Length &&
+               suffix.StartsWith(role, StringComparison.Ordinal) &&
+               suffix[role.Length..].All(char.IsDigit);
     }
 
     private static IReadOnlyDictionary<string, LithTechModelDocument>? TryGetLtcPlayerViewArmDocuments(
