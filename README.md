@@ -274,6 +274,15 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
   | 2599 | 4522 | `QV-WarFan_WhiteSakura.DTX` | `PV-WarFan` 槽 2：`PV-WarFan_WhiteSakura.DTX` |
 
   `PV-M200CheyTac` 的 BL、GR、WOMAN_BL 变体按 LTC 规则映射槽 2、3；WOMAN_GR 两槽保持未解析。`PV-WarFan` 的 BL、GR、WOMAN_BL、WOMAN_GR 变体均以 UV 推导槽 2。手、臂槽仍未解析。两组共 20 份物理 LTB 均成功解码，无几何跳过；报告位于 `artifacts/mapping-audit/item-2593-m200-whitesakura-exact-20261025/`。
+- TangDynastySword 的三个道具上下文对应不同 LTC 武器记录。聚焦导出确认 QV 世界模型槽 0、L 模型槽 0 和 PView 槽 2 的贴图：
+
+  | 道具编号 | WeaponIndex | QV 世界槽 0 | L 模型槽 0 | PView 槽 2 |
+  | --- | ---: | --- | --- | --- |
+  | 1904 | 3059 | `QV-TangDynastySword_Silver.DTX` | `PV-TangDynastySword_Silver.DTX` | `PV-TangDynastySword_Silver.DTX` |
+  | 2551、2583 | 4548、4549 | `QV-TangDynastySword_Jochulmolyeo.DTX` | `PV-TangDynastySword_Jochulmolyeo.DTX` | `PV-TangDynastySword_Jochulmolyeo.DTX` |
+  | 2577、2581 | 4552、4551 | `QV-TangDynastySword_Yongmailsaeng.DTX` | `PV-TangDynastySword_Yongmailsaeng.DTX` | `PV-TangDynastySword_Yongmailsaeng.DTX` |
+
+  `PV-TangDynastySword` 的 BL、GR、WOMAN_BL、WOMAN_GR 变体槽 2 均按 UV 推导 Silver DTX。Jochulmolyeo 与 Yongmailsaeng 的 PView 基模槽 2 已验证；其四个阵营/性别变体目前没有通过槽位推导，保持未解析。三组手、臂槽也未解析。29 份物理 LTB 均成功解码，无几何跳过；报告位于 `artifacts/mapping-audit/item-1904-tangdynasty-focused-20261025/`。
 - 模型组 `2000000` 的 HuluXiongdi 道具 `2681`、`2686` 经 `WeaponModel.ModelId` 4570、4571 关联到 LTC `WeaponIndex` 4570、4571。`QV-M4A1_S_IronBeast_HuluXiongdi` 槽 0 使用同名 QV DTX；`QV-M4A1_S_IronBeast_HuluXiongdi_Preview` 槽 0 使用 `PV-M4A1_S_IronBeast_HuluXiongdi.DTX`。PView 基模槽 2 使用该 PV DTX；BL、GR、WOMAN_BL 变体槽 2 继承同一贴图，槽 3 映射 `PV-M4A1_S_IronBeast_HuluXiongdi_01.DTX`。WOMAN_GR、手臂及其他无唯一来源的网格槽仍未解析。七个目标 LTB 均成功解码，无几何跳过；报告位于同一 HuluXiongdi 聚焦目录。
 - 模型组 `2000000` 的 `WeaponPreview` 记录 35、92、200 分别经同组 `WeaponModel` 指向 `ModelId` 3020、3021、3022；三者共用 `PV-AK47_Knife_SteelEmpire`。当前安装的聚焦导出验证了每个身份的两个物品槽：
 

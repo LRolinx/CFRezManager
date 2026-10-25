@@ -273,6 +273,15 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
   | 2599 | 4522 | `QV-WarFan_WhiteSakura.DTX` | `PV-WarFan` slot 2: `PV-WarFan_WhiteSakura.DTX` |
 
   BL, GR, and WOMAN_BL variants of `PV-M200CheyTac` derive slots 2 and 3 from LTC; both WOMAN_GR slots remain unresolved. BL, GR, WOMAN_BL, and WOMAN_GR variants of `PV-WarFan` derive slot 2 by UV. Hand and arm slots remain unresolved. All 20 physical LTB copies decoded without skipped geometry. Reports are in `artifacts/mapping-audit/item-2593-m200-whitesakura-exact-20261025/`.
+- Three TangDynastySword item contexts use separate LTC weapon records. Focused exports verified slot 0 on the QV world model, slot 0 on its L model, and slot 2 on the PView base:
+
+  | Item ID | WeaponIndex | QV world slot 0 | L model slot 0 | PView slot 2 |
+  | --- | ---: | --- | --- | --- |
+  | 1904 | 3059 | `QV-TangDynastySword_Silver.DTX` | `PV-TangDynastySword_Silver.DTX` | `PV-TangDynastySword_Silver.DTX` |
+  | 2551, 2583 | 4548, 4549 | `QV-TangDynastySword_Jochulmolyeo.DTX` | `PV-TangDynastySword_Jochulmolyeo.DTX` | `PV-TangDynastySword_Jochulmolyeo.DTX` |
+  | 2577, 2581 | 4552, 4551 | `QV-TangDynastySword_Yongmailsaeng.DTX` | `PV-TangDynastySword_Yongmailsaeng.DTX` | `PV-TangDynastySword_Yongmailsaeng.DTX` |
+
+  BL, GR, WOMAN_BL, and WOMAN_GR variants of `PV-TangDynastySword` derive the Silver DTX on slot 2 by UV. Slot 2 is verified on the Jochulmolyeo and Yongmailsaeng PView bases; their four faction/gender variants have no confirmed slot binding and remain unresolved. Hand and arm slots remain unresolved in all three contexts. All 29 physical LTB copies decoded without skipped geometry. Reports are in `artifacts/mapping-audit/item-1904-tangdynasty-focused-20261025/`.
 - Model-group `2000000` items 2681 and 2686 link through `WeaponModel.ModelId` 4570 and 4571 to LTC `WeaponIndex` 4570 and 4571. Slot 0 on `QV-M4A1_S_IronBeast_HuluXiongdi` uses its QV DTX; slot 0 on `QV-M4A1_S_IronBeast_HuluXiongdi_Preview` uses `PV-M4A1_S_IronBeast_HuluXiongdi.DTX`. PView base slot 2 uses that PV DTX. BL, GR, and WOMAN_BL derive the same slot-2 mapping and map slot 3 to `PV-M4A1_S_IronBeast_HuluXiongdi_01.DTX`. WOMAN_GR, hand/arm meshes, and other slots without a unique source remain unresolved. All seven target LTB files decoded without skipped geometry. Reports are in the same HuluXiongdi audit directory.
 - In model group `2000000`, `WeaponPreview` items 35, 92, and 200 link through same-group `WeaponModel` rows to ModelIds 3020, 3021, and 3022. All three use `PV-AK47_Knife_SteelEmpire`. Focused exports against the current install verified both item slots for each identity:
 
