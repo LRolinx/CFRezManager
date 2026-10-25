@@ -9051,6 +9051,8 @@ internal static class LithTechModelTextureConfigIndex
             var handArmSlots = new HashSet<int>();
             if (excludeHandArmSlots)
             {
+                var namedHandArmMeshes = new HashSet<LithTechMesh>();
+                var namedHandArmSlots = new HashSet<int>();
                 bool hasPairedHandArmSuffixes = document.Meshes.Any(mesh => mesh.Name.EndsWith("_H", StringComparison.OrdinalIgnoreCase)) &&
                                                 document.Meshes.Any(mesh => mesh.Name.EndsWith("_A", StringComparison.OrdinalIgnoreCase));
                 foreach (LithTechMesh mesh in document.Meshes)
@@ -9072,10 +9074,24 @@ internal static class LithTechModelTextureConfigIndex
 
                     if (isHand || isArm)
                     {
-                        handArmSlots.UnionWith(mesh.TextureSlotIndices ?? []);
+                        namedHandArmMeshes.Add(mesh);
+                        namedHandArmSlots.UnionWith(mesh.TextureSlotIndices ?? []);
                     }
                 }
 
+                foreach (int slotIndex in namedHandArmSlots)
+                {
+                    LithTechMesh[] slotMeshes = document.Meshes
+                        .Where(mesh => (mesh.TextureSlotIndices ?? []).Contains(slotIndex))
+                        .ToArray();
+                    if (slotMeshes.Length > 0 && slotMeshes.All(namedHandArmMeshes.Contains))
+                    {
+                        handArmSlots.Add(slotIndex);
+                    }
+                }
+
+                // A hand or arm mesh can share a texture slot with the item itself.
+                // Only discard role-named slots when every mesh using the slot has that role.
                 handArmSlots.UnionWith(equivalentArmSlots);
             }
 
@@ -9246,6 +9262,22 @@ internal static class LithTechModelTextureConfigIndex
                 .Select(targetSlot => targetSlot.Key)
                 .Order()
                 .ToArray();
+            if (matchingArmSlots.Length != 1)
+            {
+                matchingArmSlots = targetSignatures.Keys
+                    .Where(targetSlot =>
+                    {
+                        string? targetSignature = GetPlayerViewArmTextureUvSignature(targetDocument, targetSlot);
+                        return targetSignature is not null && armRoles.ArmSlots.Any(armSlot =>
+                            string.Equals(
+                                targetSignature,
+                                GetPlayerViewArmTextureUvSignature(armDocument, armSlot),
+                                StringComparison.Ordinal));
+                    })
+                    .Order()
+                    .ToArray();
+            }
+
             if (matchingArmSlots.Length != 1 ||
                 resolvedSlots is not null && !resolvedSlots.SequenceEqual(matchingArmSlots))
             {
@@ -9256,6 +9288,34 @@ internal static class LithTechModelTextureConfigIndex
         }
 
         return resolvedSlots ?? [];
+    }
+
+    private static string? GetPlayerViewArmTextureUvSignature(LithTechModelDocument document, int slotIndex)
+    {
+        LithTechMesh[] slotMeshes = document.Meshes
+            .Where(mesh => (mesh.TextureSlotIndices ?? []).Contains(slotIndex))
+            .ToArray();
+        if (slotMeshes.Length == 0)
+        {
+            return null;
+        }
+
+        var meshSignatures = new List<string>(slotMeshes.Length);
+        foreach (LithTechMesh mesh in slotMeshes)
+        {
+            if (!mesh.HasAuthoritativeTextureBindings ||
+                mesh.TextureSlotIndices is not { Count: 1 } meshSlots || meshSlots[0] != slotIndex ||
+                !string.IsNullOrWhiteSpace(mesh.TexturePath) ||
+                GetVerifiedTextureUvTriangleSignature(mesh) is not string uvSignature)
+            {
+                return null;
+            }
+
+            string renderStyle = mesh.RenderStyleIndex?.ToString(CultureInfo.InvariantCulture) ?? "<none>";
+            meshSignatures.Add($"{mesh.Name.Trim().ToUpperInvariant()}\0{renderStyle}\0{uvSignature}");
+        }
+
+        return string.Join('\n', meshSignatures.Order(StringComparer.Ordinal));
     }
 
     private static void AddModelTextureContextSlotMapping(
