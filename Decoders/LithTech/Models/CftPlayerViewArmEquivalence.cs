@@ -110,6 +110,47 @@ internal static class CftPlayerViewArmEquivalence
         return expected;
     }
 
+    public static IReadOnlyDictionary<(int Slot, string MeshName), string>? GetConsistentRoleMeshGeometryUvSignatures(
+        IReadOnlyList<LithTechModelDocument> documents)
+    {
+        if (documents.Count == 0) return null;
+        Dictionary<(int Slot, string MeshName), string>? expected = null;
+        foreach (LithTechModelDocument document in documents)
+        {
+            var current = new Dictionary<(int Slot, string MeshName), string>();
+            foreach (LithTechMesh mesh in document.Meshes)
+            {
+                bool isHand = mesh.Name.Contains("hand", StringComparison.OrdinalIgnoreCase);
+                bool isArm = mesh.Name.Contains("arm", StringComparison.OrdinalIgnoreCase);
+                if (isHand && isArm) return null;
+                if (!isHand && !isArm) continue;
+                if (mesh.TextureSlotIndices is not { Count: 1 } slots || slots[0] < 0)
+                {
+                    return null;
+                }
+
+                string meshName = mesh.Name.Trim().ToUpperInvariant();
+                string? signature = GetTextureGeometryUvSignature(mesh);
+                if (signature is null || !current.TryAdd((slots[0], meshName), signature))
+                {
+                    return null;
+                }
+            }
+
+            if (current.Count == 0 || expected is not null &&
+                (expected.Count != current.Count || expected.Any(pair =>
+                    !current.TryGetValue(pair.Key, out string? value) ||
+                    !string.Equals(pair.Value, value, StringComparison.Ordinal))))
+            {
+                return null;
+            }
+
+            expected ??= current;
+        }
+
+        return expected;
+    }
+
     public static IReadOnlyDictionary<int, string>? GetConsistentTextureSlotUvTriangleSignatures(
         IReadOnlyList<LithTechModelDocument> documents)
     {
