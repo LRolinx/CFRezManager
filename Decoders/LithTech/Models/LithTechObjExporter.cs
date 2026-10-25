@@ -33,7 +33,9 @@ internal sealed record LithTechObjExportSource(
     Func<string, string, int, IReadOnlyList<string>>? CftPlayerViewRoleTextureContextSlotResolver = null,
     Func<string, string, int, IReadOnlyList<string>>? CftIdentityModelAliasTextureContextSlotResolver = null,
     Func<string, int, IReadOnlyList<string>>? PreviewCharacterRoleTextureSlotResolver = null,
-    Func<string, string, int, IReadOnlyList<string>>? VariantSlotUvTextureContextSlotResolver = null);
+    Func<string, string, int, IReadOnlyList<string>>? VariantSlotUvTextureContextSlotResolver = null,
+    Func<string, int, IReadOnlyList<string>>? MeshNameDerivedTextureSlotResolver = null,
+    Func<string, string, int, IReadOnlyList<string>>? MeshNameDerivedTextureContextSlotResolver = null);
 
 internal sealed record LithTechObjExportResult(
     string ObjPath,
@@ -413,6 +415,12 @@ internal static class LithTechObjExporter
                     references = source.MotionParentSlotTextureSlotResolver?.Invoke(modelReference, skinSlotIndex) ?? [];
                     if (references.Count > 0) resolverName = "motion-parent-slot-derived";
                 }
+
+                if (references.Count == 0)
+                {
+                    references = source.MeshNameDerivedTextureSlotResolver?.Invoke(modelReference, skinSlotIndex) ?? [];
+                    if (references.Count > 0) resolverName = "mesh-name-slot-derived";
+                }
             }
 
             if (references.Count == 0 && !contextConflict && source.MeshTextureResolver is not null)
@@ -551,8 +559,11 @@ internal static class LithTechObjExporter
         }
 
         references = source.MotionParentContextSlotResolver?.Invoke(modelReference, textureContext, slotIndex) ?? [];
+        if (references.Count > 0) return new(references, "motion-parent-slot-derived", false);
+
+        references = source.MeshNameDerivedTextureContextSlotResolver?.Invoke(modelReference, textureContext, slotIndex) ?? [];
         return references.Count > 0
-            ? new(references, "motion-parent-slot-derived", false)
+            ? new(references, "mesh-name-slot-derived", false)
             : new([], "context-slot", false);
     }
 
@@ -569,6 +580,7 @@ internal static class LithTechObjExporter
             "preview-character-role-derived" => 5,
             "cft-body-face-derived" => 5,
             "motion-parent-slot-derived" => 6,
+            "mesh-name-slot-derived" => 7,
             _ => 7
         };
     }
@@ -816,7 +828,8 @@ internal static class LithTechObjExporter
         }
         else if (source.TextureSlotResolver is not null ||
                  source.WeaponPreviewVariantTextureSlotResolver is not null ||
-                 source.MotionParentSlotTextureSlotResolver is not null)
+                 source.MotionParentSlotTextureSlotResolver is not null ||
+                 source.MeshNameDerivedTextureSlotResolver is not null)
         {
             foreach (int slotIndex in (mesh.TextureSlotIndices ?? []).Distinct())
             {
@@ -832,6 +845,10 @@ internal static class LithTechObjExporter
                 if (slotTextures.Count == 0)
                 {
                     slotTextures = source.MotionParentSlotTextureSlotResolver?.Invoke(slotModelReference, slotIndex) ?? [];
+                }
+                if (slotTextures.Count == 0)
+                {
+                    slotTextures = source.MeshNameDerivedTextureSlotResolver?.Invoke(slotModelReference, slotIndex) ?? [];
                 }
 
                 foreach (string slotTexture in slotTextures)

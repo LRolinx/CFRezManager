@@ -234,6 +234,11 @@ internal static class LithTechObjExportCommand
         Func<string, string, int, IReadOnlyList<string>>? motionParentContextSlotResolver = string.IsNullOrWhiteSpace(options.TextureContext)
             ? null
             : LithTechModelTextureConfigIndex.CreateMotionParentContextSlotResolver(root);
+        Func<string, int, IReadOnlyList<string>>? meshNameDerivedTextureSlotResolver =
+            LithTechModelTextureConfigIndex.CreateMeshNameDerivedTextureSlotResolver(root);
+        Func<string, string, int, IReadOnlyList<string>>? meshNameDerivedTextureContextSlotResolver = string.IsNullOrWhiteSpace(options.TextureContext)
+            ? null
+            : LithTechModelTextureConfigIndex.CreateMeshNameDerivedTextureContextSlotResolver(root);
         Func<string, string, int, string, IReadOnlyList<string>>? meshTextureResolver = LithTechModelMeshTextureResolver.CreateResolver(root);
         Func<string, string, int, IReadOnlyList<string>>? equivalentArmTextureContextSlotResolver = string.IsNullOrWhiteSpace(options.TextureContext)
             ? null
@@ -291,7 +296,9 @@ internal static class LithTechObjExportCommand
                     cftPlayerViewRoleTextureContextSlotResolver,
                     cftIdentityModelAliasTextureContextSlotResolver,
                     previewCharacterRoleTextureSlotResolver,
-                    variantSlotUvTextureContextSlotResolver));
+                    variantSlotUvTextureContextSlotResolver,
+                    meshNameDerivedTextureSlotResolver,
+                    meshNameDerivedTextureContextSlotResolver));
             }
             else
             {
