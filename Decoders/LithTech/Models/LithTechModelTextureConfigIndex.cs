@@ -17,6 +17,20 @@ internal static class LithTechModelTextureConfigIndex
         string MissingTexturePath,
         string ExistingTexturePath);
 
+    private sealed record VerifiedCftTextureFieldSlotAlias(
+        string TableFileName,
+        int RowIndex,
+        int RecordId,
+        string ModelPath,
+        string ModelColumn,
+        string IdentityAlias,
+        int SourceSlotIndex,
+        int TargetSlotIndex,
+        string[] TextureColumns,
+        string MissingTexturePath,
+        string ExistingTexturePath,
+        string MeshName);
+
     private sealed record VerifiedCftModelTextureSlotAlias(
         string TargetModelPath,
         int TargetSlotIndex,
@@ -109,6 +123,25 @@ internal static class LithTechModelTextureConfigIndex
             2,
             "ModelTextures/Character/AIMode/AI1_EvilDen/AI_PrincessIron_HAIR.dtx",
             "ModelTextures/SOCKETITEM/BASIC/PrincessIron_pc/PrincessIron_PC_HAIR.dtx")
+    ];
+
+    // CharacterItem.CFT row 1809 names the SP hair texture in TexFile2, but
+    // its only mesh has native slot 0. The same-stem DTX is unique and decodable.
+    private static readonly VerifiedCftTextureFieldSlotAlias[] VerifiedCftTextureFieldSlotAliases =
+    [
+        new(
+            "CharacterItem.CFT",
+            1808,
+            1809,
+            "Models/SOCKETITEM/BASIC/Blitz_Buster/Blitz_Buster_Hair_SP",
+            "_GRSocketItemModelFile",
+            "Blitz_Buster_SP Head",
+            1,
+            0,
+            ["_BLTexFile2", "_GRTexFile2"],
+            "ModelTextures/SOCKETITEM/BASIC/Blitz_Buster/Blitz_Buster_HAT_SP.dtx",
+            "ModelTextures/SOCKETITEM/BASIC/Blitz_Buster/Blitz_Buster_HAIR_SP.dtx",
+            "V214_Blitz_Buster_GR_hiar")
     ];
 
     // CutScene02 uses the CFT-bound SandDragon materials on embedded dragon meshes.
@@ -3957,15 +3990,29 @@ internal static class LithTechModelTextureConfigIndex
                 {
                     if (CftModelTextureMappingDecoder.TryGetTextureSlotIndex(texture.Column, out int slotIndex))
                     {
-                        explicitTextureSlots.Add(slotIndex);
                         string? existingTexturePath = ResolveExistingCftTextureReference(
                             modelResourcePath,
                             texture.Path,
                             resourceItems,
                             resourcePaths,
                             texturePathsByBaseName);
+                        int resolvedSlotIndex = TryResolveVerifiedCftTextureFieldSlotAlias(
+                            configItem.Path,
+                            mapping,
+                            texture,
+                            modelResourcePath,
+                            slotIndex,
+                            existingTexturePath,
+                            modelItemsByPath,
+                            decodedModels,
+                            textureItemsByLogicalPath,
+                            verifiedTexturePathCache,
+                            out int aliasSlotIndex)
+                            ? aliasSlotIndex
+                            : slotIndex;
+                        explicitTextureSlots.Add(resolvedSlotIndex);
                         string texturePath = existingTexturePath ?? texture.Path;
-                        AddModelTextureSlotMapping(byModelPath, modelPath, slotIndex, texturePath);
+                        AddModelTextureSlotMapping(byModelPath, modelPath, resolvedSlotIndex, texturePath);
 
                         if (existingTexturePath is not null)
                         {
@@ -3974,7 +4021,7 @@ internal static class LithTechModelTextureConfigIndex
                                     NormalizeKey(texture.Path),
                                     StringComparison.OrdinalIgnoreCase))
                             {
-                                exactCftTextureSlots.Add(slotIndex);
+                                exactCftTextureSlots.Add(resolvedSlotIndex);
                             }
 
                             foreach (string contextKey in contextKeys)
@@ -3983,20 +4030,20 @@ internal static class LithTechModelTextureConfigIndex
                                     byModelContext,
                                     modelPath,
                                     contextKey,
-                                    slotIndex,
+                                    resolvedSlotIndex,
                                     existingTexturePath);
                             }
                         }
 
                         if (existingTexturePath is not null)
                         {
-                            if (!rowSlotTextures.TryGetValue(slotIndex, out string? existingRowTexture))
+                            if (!rowSlotTextures.TryGetValue(resolvedSlotIndex, out string? existingRowTexture))
                             {
-                                rowSlotTextures.Add(slotIndex, existingTexturePath);
+                                rowSlotTextures.Add(resolvedSlotIndex, existingTexturePath);
                             }
                             else if (!string.Equals(existingRowTexture, existingTexturePath, StringComparison.OrdinalIgnoreCase))
                             {
-                                rowSlotTextures[slotIndex] = null;
+                                rowSlotTextures[resolvedSlotIndex] = null;
                             }
                         }
                     }
@@ -9407,6 +9454,91 @@ internal static class LithTechModelTextureConfigIndex
         }
 
         return null;
+    }
+
+    private static bool TryResolveVerifiedCftTextureFieldSlotAlias(
+        string tablePath,
+        CftModelTextureMapping mapping,
+        CftTextureReference texture,
+        string modelResourcePath,
+        int sourceSlotIndex,
+        string? existingTexturePath,
+        IReadOnlyDictionary<string, ExplorerItem[]> modelItemsByPath,
+        Dictionary<string, LithTechModelDocument?> decodedModels,
+        IReadOnlyDictionary<string, ExplorerItem[]> textureItemsByLogicalPath,
+        Dictionary<string, bool> verifiedTexturePathCache,
+        out int targetSlotIndex)
+    {
+        targetSlotIndex = -1;
+        VerifiedCftTextureFieldSlotAlias? alias = VerifiedCftTextureFieldSlotAliases.FirstOrDefault(candidate =>
+            string.Equals(Path.GetFileName(tablePath), candidate.TableFileName, StringComparison.OrdinalIgnoreCase) &&
+            mapping.RowIndex == candidate.RowIndex &&
+            mapping.RecordId == candidate.RecordId &&
+            string.Equals(mapping.ModelColumn, candidate.ModelColumn, StringComparison.OrdinalIgnoreCase) &&
+            mapping.IdentityAliases.Contains(candidate.IdentityAlias, StringComparer.OrdinalIgnoreCase) &&
+            string.Equals(
+                NormalizeExtensionlessModelReference(modelResourcePath),
+                NormalizeExtensionlessModelReference(candidate.ModelPath),
+                StringComparison.OrdinalIgnoreCase) &&
+            sourceSlotIndex == candidate.SourceSlotIndex &&
+            candidate.TextureColumns.Contains(texture.Column, StringComparer.OrdinalIgnoreCase) &&
+            string.Equals(NormalizeKey(texture.Path), NormalizeKey(candidate.MissingTexturePath), StringComparison.OrdinalIgnoreCase) &&
+            existingTexturePath is not null &&
+            string.Equals(NormalizeKey(existingTexturePath), NormalizeKey(candidate.ExistingTexturePath), StringComparison.OrdinalIgnoreCase));
+        if (alias is null)
+        {
+            return false;
+        }
+
+        string logicalModelPath = GetLogicalModelResourcePath(alias.ModelPath + ".ltb");
+        if (!modelItemsByPath.TryGetValue(logicalModelPath, out ExplorerItem[]? modelCopies) ||
+            modelCopies.Length == 0 ||
+            !TryGetConsistentLtcModelSlots(modelCopies, decodedModels, out int[] modelSlots) ||
+            !modelSlots.SequenceEqual([alias.TargetSlotIndex]))
+        {
+            return false;
+        }
+
+        string? expectedLayout = null;
+        foreach (ExplorerItem modelCopy in modelCopies)
+        {
+            LithTechModelDocument? document = TryDecodeSlotInheritanceModel(
+                modelCopy,
+                GetModelResourcePath(modelCopy),
+                decodedModels);
+            if (document is null || document.Meshes.Count != 1)
+            {
+                return false;
+            }
+
+            LithTechMesh mesh = document.Meshes[0];
+            if (!mesh.HasAuthoritativeTextureBindings ||
+                mesh.TextureSlotIndices is not { Count: 1 } meshSlots ||
+                meshSlots[0] != alias.TargetSlotIndex ||
+                !string.Equals(mesh.Name, alias.MeshName, StringComparison.OrdinalIgnoreCase) ||
+                !string.IsNullOrWhiteSpace(mesh.TexturePath) ||
+                GetVerifiedTextureUvTriangleSignature(mesh) is null ||
+                mesh.RenderStyleIndex is not int ||
+                CftPlayerViewArmEquivalence.GetConsistentTextureSlotGeometryUvSignatures([document]) is not { } signatures ||
+                !signatures.TryGetValue(alias.TargetSlotIndex, out string? layout) ||
+                expectedLayout is not null && !string.Equals(expectedLayout, layout, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            expectedLayout = layout;
+        }
+
+        if (!HasConsistentDecodableDtxCopies(
+                alias.ExistingTexturePath,
+                textureItemsByLogicalPath,
+                verifiedTexturePathCache))
+        {
+            return false;
+        }
+
+        targetSlotIndex = alias.TargetSlotIndex;
+        return true;
     }
 
     private static bool IsVerifiedCftMotionTextureAlias(

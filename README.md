@@ -172,6 +172,7 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 - `--audit-table-decode`：逐份读取目录及所有 REZ（含根目录 `engine.rez`）中的 CFT/LTC，不按归档 MD5 跳过物理副本。TSV 记录实际内容 SHA-256、解压字节数、CFT 行列数、已消费字节和未解释尾部；读取失败、大小限制和目录/归档扫描失败分别记录。CFT 的 `typed-decoded` 表示声明行及已识别的 ASCII `END` 尾标全部消费完毕；`typed-decoded-with-trailing-bytes` 表示还有未解释数据。LTC 的 `native-text-decoded` 表示内置解码路径已还原文本，配置类 LTC 不要求包含模型几何。另写 `_summary.txt` 汇总物理副本及唯一内容数。成功解码不表示模型—贴图映射已确认。
 - `--inspect-cft-model-texture-links`：输出所有强类型 CFT 行的模型字段、关联模型、贴图字段和身份别名，用于区分角色、动作、手臂和 Socket 等引用角色。
 - `WeaponAttachItemDoll.CFT` 的道具身份也可绑定预览配件贴图：`item:13869`（第 147 行）和 `item:21765`（第 320 行）均将 `PV-ACC_Interaction_Joy` 的 `Box002` 槽 0 映射到 `PV-ACC_Baihu.dtx`；两次聚焦导出都报告 `context-slot`，且无缺失贴图。
+- `CharacterItem.CFT` 第 1809 行的 `Blitz_Buster_Hair_SP` 特例将 `_BLTexFile2` / `_GRTexFile2` 指向的缺失 `Blitz_Buster_HAT_SP.dtx` 绑定到原生槽 0。仅当所有模型副本都解码为单网格、槽位布局一致且网格名为 `V214_Blitz_Buster_GR_hiar`，同时唯一的 `Blitz_Buster_HAIR_SP.DTX` 所有副本均可解码且 SHA-256 一致时生效。聚焦导出在有身份上下文和无上下文时均导出 1 张贴图、缺失数为 0。
 - 同表第 320 行的身份别名 `ACC_Interaction_BlueLotus` 对应独立模型 `PV-ACC_Interaction_BlueLotus`。只有当别名在同目录 ACC_SD 预览模型中唯一、Joy 与目标模型的所有副本网格布局/UV/槽位/RenderStyle 和权威绑定完全相同、精确 DTX 的所有副本均可解码且 SHA-256 一致，并且目标槽没有直接或冲突映射时，才把 Baihu 贴图推导到该行上下文。`item:21765` 聚焦导出中，Joy 与 BlueLotus 的 `Box002` 槽 0 均导出 `PV-ACC_Baihu.dtx`；BlueLotus 报告为 `cft-identity-model-alias-derived`。该推导不用于无上下文导出。
 - 两个 CFT 引用诊断命令的“已解码内容数”只统计成功读取全部声明行的表；部分表中已提取的行仍保留在引用报告中。逐文件失败和尾部情况用 `--audit-table-decode` 检查。
 - 完整读取声明行且紧接标准 `END` 尾标时，CFT 的路径候选扫描在尾标前结束，防止旧数据残留混入其他模型的贴图候选；尾标后的内容仍由解码审计列为未解释数据。没有完整行/尾标证据的表保留原有部分解析路径。
