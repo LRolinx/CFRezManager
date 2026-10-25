@@ -4745,10 +4745,6 @@ internal static class LithTechModelTextureConfigIndex
                         textureOrdinal,
                         equivalentPlayerViewArmSlots,
                         allowSingleSlotOrdinalFallback);
-                    if (mappedSlots.Length == 0)
-                    {
-                        continue;
-                    }
 
                     string texturePath = existingTexturePath ?? textureReference.Path;
                     foreach (int slotIndex in mappedSlots)
@@ -4781,7 +4777,7 @@ internal static class LithTechModelTextureConfigIndex
                     }
 
                     if (existingTexturePath is not null &&
-                        mappedSlots.Length == 1 &&
+                        mappedSlots.Length <= 1 &&
                         mapping.ModelField.StartsWith("PViewModelFileName", StringComparison.OrdinalIgnoreCase))
                     {
                         AddLtcPreviewVariantTextureBindings(
@@ -4790,6 +4786,8 @@ internal static class LithTechModelTextureConfigIndex
                             existingTexturePath,
                             textureOrdinal,
                             mappedSlots,
+                            modelDocuments,
+                            equivalentPlayerViewArmSlots,
                             contextKeys,
                             allowSingleSlotOrdinalFallback,
                             typedLtcPlayerViewModels,
@@ -5159,6 +5157,8 @@ internal static class LithTechModelTextureConfigIndex
         string textureReferencePath,
         int textureOrdinal,
         IReadOnlyList<int> sourceMappedSlots,
+        IReadOnlyList<LithTechModelDocument> sourceDocuments,
+        IReadOnlyList<int> sourceEquivalentArmSlots,
         IReadOnlyList<string> contextKeys,
         bool allowSingleSlotOrdinalFallback,
         IReadOnlySet<string> typedLtcPlayerViewModels,
@@ -5172,7 +5172,13 @@ internal static class LithTechModelTextureConfigIndex
         Dictionary<string, Dictionary<int, string?>> ltcPreviewVariantByModelContext,
         HashSet<string> modelsWithSlotSpecificBindings)
     {
-        if (sourceMappedSlots.Count != 1 ||
+        bool inferAdditionalVariantOrdinal = sourceMappedSlots.Count == 0 &&
+                                             textureOrdinal > 0 &&
+                                             !allowSingleSlotOrdinalFallback &&
+                                             sourceDocuments.Count > 0 &&
+                                             CftPlayerViewArmEquivalence.GetConsistentTextureSlotLayoutSignatures(sourceDocuments) is not null;
+        if (sourceMappedSlots.Count > 1 ||
+            sourceMappedSlots.Count == 0 && !inferAdditionalVariantOrdinal ||
             !modelField.StartsWith("PViewModelFileName", StringComparison.OrdinalIgnoreCase))
         {
             return;
@@ -5193,27 +5199,31 @@ internal static class LithTechModelTextureConfigIndex
         }
 
         string sourceModelPath = NormalizeModelResourcePath(modelPath);
-        int sourceSlotIndex = sourceMappedSlots[0];
+        int? sourceSlotIndex = sourceMappedSlots.Count == 1 ? sourceMappedSlots[0] : null;
         // Do not let the variant inference replace a different texture bound to the source slot.
-        if (byModelPath.TryGetValue(sourceModelPath, out Dictionary<int, string?>? sourceDirectSlots) &&
-            sourceDirectSlots.TryGetValue(sourceSlotIndex, out string? sourceDirectTexture) &&
+        if (sourceSlotIndex is int mappedSourceSlot &&
+            byModelPath.TryGetValue(sourceModelPath, out Dictionary<int, string?>? sourceDirectSlots) &&
+            sourceDirectSlots.TryGetValue(mappedSourceSlot, out string? sourceDirectTexture) &&
             !string.IsNullOrWhiteSpace(sourceDirectTexture) &&
             !string.Equals(NormalizeTextureReferencePath(sourceDirectTexture), texturePath, StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
 
-        foreach (string contextKey in contextKeys)
+        if (sourceSlotIndex is int contextSourceSlot)
         {
-            string normalizedContext = NormalizeLooseKey(contextKey);
-            string sourceContextKey = $"{sourceModelPath}\0{normalizedContext}";
-            if (normalizedContext.Length > 0 &&
-                byModelContext.TryGetValue(sourceContextKey, out Dictionary<int, string?>? sourceContextSlots) &&
-                sourceContextSlots.TryGetValue(sourceSlotIndex, out string? sourceContextTexture) &&
-                !string.IsNullOrWhiteSpace(sourceContextTexture) &&
-                !string.Equals(NormalizeTextureReferencePath(sourceContextTexture), texturePath, StringComparison.OrdinalIgnoreCase))
+            foreach (string contextKey in contextKeys)
             {
-                return;
+                string normalizedContext = NormalizeLooseKey(contextKey);
+                string sourceContextKey = $"{sourceModelPath}\0{normalizedContext}";
+                if (normalizedContext.Length > 0 &&
+                    byModelContext.TryGetValue(sourceContextKey, out Dictionary<int, string?>? sourceContextSlots) &&
+                    sourceContextSlots.TryGetValue(contextSourceSlot, out string? sourceContextTexture) &&
+                    !string.IsNullOrWhiteSpace(sourceContextTexture) &&
+                    !string.Equals(NormalizeTextureReferencePath(sourceContextTexture), texturePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
             }
         }
 
@@ -5270,7 +5280,16 @@ internal static class LithTechModelTextureConfigIndex
                 textureOrdinal,
                 equivalentArmSlots,
                 allowSingleSlotOrdinalFallback);
-            if (targetSlots.Length != 1 || targetSlots[0] != sourceMappedSlots[0])
+            if (targetSlots.Length != 1 ||
+                sourceSlotIndex is int sourceSlot && targetSlots[0] != sourceSlot ||
+                sourceSlotIndex is null && !CanInferAdditionalLtcPreviewVariantOrdinal(
+                    sourceDocuments,
+                    sourceEquivalentArmSlots,
+                    targetDocuments,
+                    equivalentArmSlots,
+                    modelField,
+                    textureOrdinal,
+                    targetSlots[0]))
             {
                 continue;
             }
@@ -5304,6 +5323,56 @@ internal static class LithTechModelTextureConfigIndex
 
             modelsWithSlotSpecificBindings.Add(targetPath);
         }
+    }
+
+    private static bool CanInferAdditionalLtcPreviewVariantOrdinal(
+        IReadOnlyList<LithTechModelDocument> sourceDocuments,
+        IReadOnlyList<int> sourceEquivalentArmSlots,
+        IReadOnlyList<LithTechModelDocument> targetDocuments,
+        IReadOnlyList<int> targetEquivalentArmSlots,
+        string modelField,
+        int textureOrdinal,
+        int targetSlot)
+    {
+        if (textureOrdinal <= 0 || sourceDocuments.Count == 0 || targetDocuments.Count == 0 ||
+            CftPlayerViewArmEquivalence.GetConsistentTextureSlotLayoutSignatures(sourceDocuments) is null ||
+            CftPlayerViewArmEquivalence.GetConsistentTextureSlotLayoutSignatures(targetDocuments) is null)
+        {
+            return false;
+        }
+
+        int[] sourceModelSlots = sourceDocuments
+            .SelectMany(document => document.Meshes)
+            .SelectMany(mesh => mesh.TextureSlotIndices ?? [])
+            .Distinct()
+            .ToArray();
+        if (sourceModelSlots.Contains(targetSlot) ||
+            ResolveLtcPlayerViewTextureSlots(sourceDocuments, modelField, textureOrdinal, sourceEquivalentArmSlots, false).Length != 0)
+        {
+            return false;
+        }
+
+        for (int ordinal = 0; ordinal < textureOrdinal; ordinal++)
+        {
+            int[] sourceSlots = ResolveLtcPlayerViewTextureSlots(
+                sourceDocuments,
+                modelField,
+                ordinal,
+                sourceEquivalentArmSlots,
+                allowSingleSlotOrdinalFallback: false);
+            int[] targetSlots = ResolveLtcPlayerViewTextureSlots(
+                targetDocuments,
+                modelField,
+                ordinal,
+                targetEquivalentArmSlots,
+                allowSingleSlotOrdinalFallback: false);
+            if (sourceSlots.Length != 1 || targetSlots.Length != 1 || sourceSlots[0] != targetSlots[0])
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static bool HasConsistentDecodableDtxCopies(
@@ -9198,13 +9267,14 @@ internal static class LithTechModelTextureConfigIndex
         IReadOnlyDictionary<string, ExplorerItem[]> modelItemsByPlayerViewRolePath)
     {
         string normalizedPath = NormalizeExtensionlessModelReference(modelPath);
-        const string playerViewPrefix = "Models/PLAYERVIEW/PV-";
-        if (!normalizedPath.StartsWith(playerViewPrefix, StringComparison.OrdinalIgnoreCase))
+        const string playerViewRoot = "Models/PLAYERVIEW/";
+        string modelName = Path.GetFileName(normalizedPath);
+        if (!normalizedPath.StartsWith(playerViewRoot, StringComparison.OrdinalIgnoreCase) ||
+            !modelName.StartsWith("PV-", StringComparison.OrdinalIgnoreCase))
         {
             return null;
         }
 
-        string modelName = Path.GetFileName(normalizedPath);
         string[] nameParts = modelName.Split('_', StringSplitOptions.RemoveEmptyEntries);
         for (int index = nameParts.Length - 2; index >= 0; index--)
         {
