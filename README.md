@@ -255,6 +255,15 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 
   某些模型的其他槽仍未解析。LTC 贴图路径若在多个归档层有同名实体副本，只有副本均能解码、且 SHA-256 一致时才选择确定的物理路径；否则保持未映射。
 - 模型组 `3000000` 的道具 `812` 有预览编号冲突：唯一的 `WeaponModel.ItemId` 行关联 `ModelId:812` 和 LTC `WeaponIndex:812`，但 `WeaponPreview` 记录的 `ModelId` 是 `1255`。`item:812` 聚焦导出确认 `PV-AWM_A_InfernalDragon` 槽 2、3 分别使用 `PV-AWM_A_InfernalDragon.DTX`、`PV-AWM_A_InfernalDragon01.DTX`；LTC 预览模型 `QV-AWM_InfernalDragon_preview` 槽 0 使用前一张 PV 贴图。BF005.LTC 为 QV 男、女世界模型槽 0 指定 `QV-AWM_A_InfernalDragon.DTX`，但当前 `rez`、`rez2` 的同路径 DTX 内容哈希不同，槽位报告保持未解析；OBJ 中由文件名推断出的贴图不算已确认绑定。`preview:3000000:812` 也保持未解析。手、臂槽仍未解析；六份目标 LTB 均成功解码，无几何跳过。报告位于 `artifacts/mapping-audit/item-812-focused-20261025/`。
+- 道具 `856`、`1111`、`2164` 的 `WeaponModel.ItemId` 分别关联同号 ModelId 与 LTC WeaponIndex；其 `WeaponPreview.ModelId` 则分别是 `1298`、`1650`、`3320`。使用 `item:<道具编号>` 可取得以下 LTC 映射：
+
+  | 道具编号 | PView 贴图槽 | LTC 预览模型槽 0 | QV 世界模型槽 0 |
+  | ---: | --- | --- | --- |
+  | 856 | `PV-M4A1_S_Transformers.DTX`（槽 2） | `QV-M4A1_S_IronBeast_preview` → 同名 PV DTX | `QV-M4A1_S_Transformers.DTX` 路径明确，但 `rez`、`rez2` 副本哈希不同，仍未解析 |
+  | 1111 | `PV-M82A1_S_BornBeast.DTX`（槽 1）；`PV-M82A1_S_BornBeast01.DTX`（槽 2） | `QV-M82A1_S_BornBeast_preview` → `PV-M82A1_S_BornBeast.DTX` | `QV-M82A1_S_BornBeast.DTX` 路径明确，但 `rez`、`rez2` 副本哈希不同，仍未解析 |
+  | 2164 | `PV-GatlingGun_InfernalDragon.DTX`（槽 2） | `QV-GatlingGun_InfernalDragon_preview` → 同名 PV DTX | `QV-GatlingGun_InfernalDragon.DTX` |
+
+  道具 `1939` 也使用 LTC `WeaponIndex:1111`。三项 `preview:3000000:<道具编号>` 聚焦导出均未解析贴图；不能用预览编号替代道具身份。13 份目标 LTB 均成功解码，无几何跳过；手、臂槽仍未解析，`item:1111` 的 PView 槽 3 也未解析。报告位于 `artifacts/mapping-audit/item-mismatch-856-1111-2164-20261025/`。
 - 模型组 `3000000` 的 CowRifle 两个道具共用 `PV-CowRifle_MOS_AK47`，但贴图身份不同：`item:2554` 经 `WeaponModel.ModelId:4555` / LTC `WeaponIndex:4555` 使用 `QV-CowRifle_MOS_AK47_NobleGold.DTX` 和 `PV-CowRifle_MOS_AK47_NobleGold.DTX`；`item:2575` 经 `ModelId:4554` / `WeaponIndex:4554` 使用不带 `NobleGold` 的两张 DTX。两者的 QV 男、女世界模型槽 0 均已聚焦导出验证；2554 的 `QV-CowRifle_MOS_AK47_NobleGold_preview` 槽 0 使用 PV NobleGold DTX。PView 基模槽 2 直接映射各自 DTX，BL 变体槽 2 按 LTC 规则推导同一贴图；GR、WOMAN_BL、WOMAN_GR 变体尚未通过完整副本和槽位布局校验，保持未映射。五个 PView 模型的 10 份物理副本均已解码，无几何跳过；世界模型导出及 `item:2554` 的 NobleGold 预览模型导出均无缺失贴图。报告位于 `artifacts/mapping-audit/item-1399-flashbang-focused-20261025/`。
 - 模型组 `3000000` 的 HuluXiongdi 道具经同组 `WeaponModel` 关联到以下 LTC 武器记录：
 
