@@ -20,7 +20,7 @@ CF Rez Manager is a Windows WPF tool for browsing, searching, previewing, extrac
 
 ## Model And Texture Records
 
-- The [confirmed model-to-texture register](docs/asset-mapping-register.tsv) ships with the application. It records exported slots and CFT-declared model, texture, and motion-model paths whose slots still need verification.
+- The [model-to-texture reference register](docs/asset-mapping-register.tsv) ships with the application. It records exported slots and CFT-declared model, texture, and motion-model paths whose slots still need verification; the runtime resolver does not load it as an automatic mapping.
 - The [register field guide](docs/asset-mapping-register.md) explains statuses and blank fields. OBJ export does not preserve bone names or animation tracks; unconfirmed socket bindings stay blank.
 
 ## Requirements
@@ -366,7 +366,7 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 
 ## v1.2.5 Changes
 
-- Added a model-to-texture register to release packages, separating exported slot mappings from CFT-declared relationships that still need slot verification, and recording declared motion-model paths.
+- Added a model-to-texture reference register to release packages, separating exported slot mappings from CFT-declared relationships that still need slot verification, and recording declared motion-model paths.
 - Updated the CFT/LTC inventory for the current game install. FireAim Marker body, arm, and accessory references are recorded for focused export follow-up.
 - Updated Chinese and English documentation and GitHub Release notes, and bumped the application version to `v1.2.5`.
 

@@ -20,7 +20,7 @@ CF Rez Manager 是一个 Windows WPF 工具，用来浏览、搜索、预览、�
 
 ## 模型贴图记录
 
-- [已确认模型贴图清单](docs/asset-mapping-register.tsv) 随发布包提供，记录已成功导出的槽位，以及 CFT 已声明但槽位待验证的模型、贴图和动作模型路径。
+- [模型贴图参考清单](docs/asset-mapping-register.tsv) 随发布包提供，记录已成功导出的槽位，以及 CFT 已声明但槽位待验证的模型、贴图和动作模型路径；清单供复核，不作为运行时自动映射。
 - [清单字段说明](docs/asset-mapping-register.md) 说明状态和空字段的含义。OBJ 导出目前不保存骨骼名称或动画轨道；未确认的骨骼挂点留空。
 
 ## 环境要求
@@ -367,7 +367,7 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 
 ## v1.2.5 更新
 
-- 新增随程序发布的模型贴图映射清单，区分已导出确认的槽位和 CFT 已声明但槽位待验证的关系，并记录可确认的动作模型路径。
+- 新增随程序发布的模型贴图参考清单，区分已导出确认的槽位和 CFT 已声明但槽位待验证的关系，并记录可确认的动作模型路径。
 - 更新当前游戏目录的 CFT/LTC 盘点；FireAim Marker 的身体、手臂和配件路径已入表，贴图槽位等待聚焦导出验证。
 - 更新中英文说明书和 GitHub Release 文案，版本号提升到 `v1.2.5`。
 

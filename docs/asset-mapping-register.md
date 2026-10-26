@@ -1,6 +1,6 @@
 # Asset Mapping Register
 
-`asset-mapping-register.tsv` is a versioned record of confirmed model-to-texture slots and table-declared relationships. Published packages include it under `docs/`.
+`asset-mapping-register.tsv` is a versioned reference record of confirmed model-to-texture slots and table-declared relationships. Published packages include it under `docs/`. The runtime resolver does not load this register; unverified rows do not change export behavior.
 
 ## Status
 
