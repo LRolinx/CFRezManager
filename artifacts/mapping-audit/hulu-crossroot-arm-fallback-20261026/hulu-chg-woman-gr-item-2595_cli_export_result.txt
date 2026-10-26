@@ -1,0 +1,20 @@
+CF Rez Manager command-line OBJ export
+
+Source root: D:\CFRezManager\artifacts\mapping-audit\item-2589-hulu-xiongdi-focused-20261025
+Model query: Models/PLAYERVIEW/PV-HuluXiongdi_chg_WOMAN_GR.LTB
+Texture context: item:2595
+OBJ: D:\CFRezManager\artifacts\mapping-audit\hulu-crossroot-arm-fallback-20261026\hulu-chg-woman-gr-item-2595.obj
+MTL: D:\CFRezManager\artifacts\mapping-audit\hulu-crossroot-arm-fallback-20261026\hulu-chg-woman-gr-item-2595.mtl
+Texture folder: D:\CFRezManager\artifacts\mapping-audit\hulu-crossroot-arm-fallback-20261026\hulu-chg-woman-gr-item-2595_textures
+Texture report: D:\CFRezManager\artifacts\mapping-audit\hulu-crossroot-arm-fallback-20261026\hulu-chg-woman-gr-item-2595_texture_report.txt
+Texture slot report: D:\CFRezManager\artifacts\mapping-audit\hulu-crossroot-arm-fallback-20261026\hulu-chg-woman-gr-item-2595_texture_slots.tsv
+Mapping report: D:\CFRezManager\artifacts\mapping-audit\hulu-crossroot-arm-fallback-20261026\hulu-chg-woman-gr-item-2595_mapping_candidates.txt
+
+Sources: 1
+Meshes: 5
+Vertices: 5659
+Triangles: 6714
+Meshes skipped (non-finite geometry): 0
+Textures exported: 1
+Missing textures: 4
+Skipped matched files: 0

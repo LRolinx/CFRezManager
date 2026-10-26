@@ -9952,10 +9952,24 @@ internal static class LithTechModelTextureConfigIndex
             LithTechModelDocument targetDocument = targetDocuments[documentIndex];
             // Pair copies by resource layer so unrelated archive versions cannot supply the arm layout.
             string targetArchiveRoot = GetModelArchiveRoot(GetModelResourcePath(targetItems[documentIndex]));
-            if (targetArchiveRoot.Length == 0 ||
-                !armDocumentsByArchiveRoot.TryGetValue(targetArchiveRoot, out LithTechModelDocument? armDocument))
+            if (targetArchiveRoot.Length == 0)
             {
                 return [];
+            }
+
+            if (!armDocumentsByArchiveRoot.TryGetValue(targetArchiveRoot, out LithTechModelDocument? armDocument))
+            {
+                int[] crossRootArmSlots = ResolveCrossRootPlayerViewArmSlotsByUvLayout(
+                    targetDocument,
+                    armDocumentsByArchiveRoot.Values);
+                if (crossRootArmSlots.Length != 1 ||
+                    resolvedSlots is not null && !resolvedSlots.SequenceEqual(crossRootArmSlots))
+                {
+                    return [];
+                }
+
+                resolvedSlots = crossRootArmSlots;
+                continue;
             }
 
             CftPlayerViewRoleSlotMap armRoles = CftPlayerViewRoleSlotResolver.Resolve(
@@ -10009,6 +10023,54 @@ internal static class LithTechModelTextureConfigIndex
         }
 
         return resolvedSlots ?? [];
+    }
+
+    private static int[] ResolveCrossRootPlayerViewArmSlotsByUvLayout(
+        LithTechModelDocument targetDocument,
+        IEnumerable<LithTechModelDocument> armDocuments)
+    {
+        // Cross-layer copies can use different model-space positions while retaining the same named UV layout.
+        IReadOnlyDictionary<int, string>? targetSignatures =
+            CftPlayerViewArmEquivalence.GetConsistentTextureSlotUvTriangleSignatures([targetDocument]);
+        if (targetSignatures is null)
+        {
+            return [];
+        }
+
+        int[]? expectedArmSlots = null;
+        var matchingTargetSlots = new HashSet<int>();
+        foreach (LithTechModelDocument armDocument in armDocuments)
+        {
+            CftPlayerViewRoleSlotMap armRoles = CftPlayerViewRoleSlotResolver.Resolve(
+                [armDocument],
+                hasHandTextureReference: true,
+                hasArmTextureReference: true);
+            if (armRoles.ArmSlots.Count == 0 ||
+                expectedArmSlots is not null && !expectedArmSlots.SequenceEqual(armRoles.ArmSlots))
+            {
+                return [];
+            }
+
+            expectedArmSlots ??= armRoles.ArmSlots.ToArray();
+            IReadOnlyDictionary<int, string>? armSignatures =
+                CftPlayerViewArmEquivalence.GetConsistentTextureSlotUvTriangleSignatures([armDocument]);
+            if (armSignatures is null)
+            {
+                return [];
+            }
+
+            foreach (KeyValuePair<int, string> targetSlot in targetSignatures)
+            {
+                if (armRoles.ArmSlots.Any(armSlot =>
+                        armSignatures.TryGetValue(armSlot, out string? armSignature) &&
+                        string.Equals(targetSlot.Value, armSignature, StringComparison.Ordinal)))
+                {
+                    matchingTargetSlots.Add(targetSlot.Key);
+                }
+            }
+        }
+
+        return matchingTargetSlots.Count == 1 ? matchingTargetSlots.Order().ToArray() : [];
     }
 
     private static string? GetPlayerViewArmTextureUvSignature(LithTechModelDocument document, int slotIndex)

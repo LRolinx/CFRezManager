@@ -1,0 +1,6 @@
+source_path	mesh_name	texture_context	local_stage_index	global_skin_slot	mapping_source	texture_reference	exported_texture_path	export_status	has_uv	uv_set_count	uv_source_stream_index
+rez3\RF016\Models\PLAYERVIEW\PV-HuluXiongdi_chg_WOMAN_GR.LTB	Fview-hand04	item:2589	0	0	context-slot			unresolved	true	1	0
+rez3\RF016\Models\PLAYERVIEW\PV-HuluXiongdi_chg_WOMAN_GR.LTB	Object05	item:2589	0	1	context-slot			unresolved	true	1	0
+rez3\RF016\Models\PLAYERVIEW\PV-HuluXiongdi_chg_WOMAN_GR.LTB	PV_H	item:2589	0	2	ltc-preview-variant-derived	ModelTextures/PLAYERVIEW/PV-HuluXiongdi_Chg.DTX	hulu-chg-woman-gr-item-2589_textures/PV-HuluXiongdi_Chg.png	exported	true	1	0
+rez3\RF016\Models\PLAYERVIEW\PV-HuluXiongdi_chg_WOMAN_GR.LTB	Hulu01	item:2589	0	3	context-slot			unresolved	true	1	0
+rez3\RF016\Models\PLAYERVIEW\PV-HuluXiongdi_chg_WOMAN_GR.LTB	Hulu02	item:2589	0	3	context-slot			unresolved	true	1	0

@@ -307,7 +307,7 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
   | 2612、2626 | 4531、4529 | `QV-HuluXiongdi.DTX` | `PV-HuluXiongdi` 槽 2：`PV-HuluXiongdi.DTX`；槽 3：`PV-HuluXiongdi01.DTX` |
   | 2705 | 4573 | `QV-Grenade_HuluXiongdi.DTX` | `PV-Grenade_HuluXiongdi` 槽 2：`PV-Grenade_HuluXiongdi.DTX` |
 
-  `PV-HuluXiongdi` 的 BL、GR、WOMAN_BL、WOMAN_GR 变体均以 UV 推导槽 3 的 `PV-HuluXiongdi01.DTX`；槽 2 仅 BL、GR、WOMAN_BL 通过 LTC 变体规则映射，WOMAN_GR 保持未解析。`PV-HuluXiongdi_chg` 的 BL、GR、WOMAN_BL 变体槽 2 按上下文推导贴图；WOMAN_GR 槽 2 以及 `Hulu01`、`Hulu02` 槽 3 未解析。`PV-Grenade_HuluXiongdi` 的四个阵营/性别变体槽 2 均按 UV 推导。手、臂槽保持未解析。定向提取扫描了当前全部 482 个 REZ 归档索引；所有目标模型均已解码，无几何跳过。报告位于 `artifacts/mapping-audit/item-2589-hulu-xiongdi-focused-20261025/`。
+  `PV-HuluXiongdi` 的 BL、GR、WOMAN_BL、WOMAN_GR 变体均以 UV 推导槽 3 的 `PV-HuluXiongdi01.DTX`，槽 2 均按 LTC 变体规则映射。`PV-HuluXiongdi_chg` 的四个变体槽 2 均按道具上下文映射；WOMAN_GR 的 `Object05` 槽 1 已通过跨资源层 UV 三角布局匹配识别为手臂，手部槽 0、手臂槽 1 和 `Hulu01`、`Hulu02` 槽 3 仍无可靠贴图来源。`PV-Grenade_HuluXiongdi` 的四个阵营/性别变体槽 2 均按 UV 推导。WOMAN_GR 的定向导出确认道具 2589、2591 使用 `PV-HuluXiongdi_Chg.DTX`，2595、2612 使用 `PV-HuluXiongdi.DTX`，均落在槽 2。所有目标模型均已解码，无几何跳过。报告位于 `artifacts/mapping-audit/item-2589-hulu-xiongdi-focused-20261025/`，跨层核对记录位于 `artifacts/mapping-audit/hulu-crossroot-arm-fallback-20261026.md`。
 - 模型组 `3000000` 的白樱道具也有 LTC 直连映射：
 
   | 道具编号 | WeaponIndex | QV 世界槽 0 | PView 贴图槽 |
