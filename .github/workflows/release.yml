@@ -49,6 +49,13 @@ jobs:
           body: |
             CF Rez Manager ${{ github.ref_name }}
 
+            ## v1.2.5 更新 / Highlights
+
+            - 新增随程序发布的模型贴图映射清单，区分已导出槽位与 CFT 已声明但待验证的关系，并记录动作模型路径。
+            - 更新当前游戏目录 CFT/LTC 盘点，登记 FireAim Marker 身体、手臂和配件的模型与贴图引用。
+            - Added a model-to-texture register to the package, separating exported slots from CFT-declared relationships still awaiting slot verification, and recording motion-model paths.
+            - Updated the current game-install CFT/LTC inventory with FireAim Marker body, arm, and accessory references.
+
             ## v1.2.4 更新 / Highlights
 
             - 新增图片导出格式设置窗口，可分别为 CrossFire 图片 BIN、DTX、TGA 和 DDS 选择保留源文件或导出解码后的 PNG。

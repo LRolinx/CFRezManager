@@ -18,6 +18,11 @@ CF Rez Manager 是一个 Windows WPF 工具，用来浏览、搜索、预览、�
 - 按格式选择将 BIN、DTX、TGA、DDS 等可解码图片资源保留为源文件或导出为标准 `.png`。
 - 提供 OBJ/MTL 模型导出、CFG 扫描和 CFG 解码等命令行批处理入口。
 
+## 模型贴图记录
+
+- [已确认模型贴图清单](docs/asset-mapping-register.tsv) 随发布包提供，记录已成功导出的槽位，以及 CFT 已声明但槽位待验证的模型、贴图和动作模型路径。
+- [清单字段说明](docs/asset-mapping-register.md) 说明状态和空字段的含义。OBJ 导出目前不保存骨骼名称或动画轨道；未确认的骨骼挂点留空。
+
 ## 环境要求
 
 - Windows
@@ -177,7 +182,7 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 - 同表第 320 行的身份别名 `ACC_Interaction_BlueLotus` 对应独立模型 `PV-ACC_Interaction_BlueLotus`。只有当别名在同目录 ACC_SD 预览模型中唯一、Joy 与目标模型的所有副本网格布局/UV/槽位/RenderStyle 和权威绑定完全相同、精确 DTX 的所有副本均可解码且 SHA-256 一致，并且目标槽没有直接或冲突映射时，才把 Baihu 贴图推导到该行上下文。`item:21765` 聚焦导出中，Joy 与 BlueLotus 的 `Box002` 槽 0 均导出 `PV-ACC_Baihu.dtx`；BlueLotus 报告为 `cft-identity-model-alias-derived`。该推导不用于无上下文导出。
 - 两个 CFT 引用诊断命令的“已解码内容数”只统计成功读取全部声明行的表；部分表中已提取的行仍保留在引用报告中。逐文件失败和尾部情况用 `--audit-table-decode` 检查。
 - 完整读取声明行且紧接标准 `END` 尾标时，CFT 的路径候选扫描在尾标前结束，防止旧数据残留混入其他模型的贴图候选；尾标后的内容仍由解码审计列为未解释数据。没有完整行/尾标证据的表保留原有部分解析路径。
-- 2026-10-23 的完整解码审计发现 70 份唯一 CFT 内容含 `END` 后数据；其中只有 `KingsMissionObjectInfo.CFT` 尾部能识别出模型/贴图路径。`CharacterType.CFT` 的 449 字节尾部没有路径，尾部数据不用于建立行级映射。
+- 2026-10-26 的当前目录盘点覆盖 482 个 REZ 归档、2,398 份 CFT/LTC 物理副本；70 份唯一 CFT 内容仍有未解释尾部。当前 `RF100.REZ` 的 `CharacterType.CFT` 有 381 字节未消费数据，路径扫描没有从这段数据建立行级映射。
 - `--inspect-ltc-model-texture-links`：输出 LTC 强类型模型行、纹理字段、辅助贴图引用和身份别名，用于检查武器与玩家视角模型的对应关系。
 - `--inspect-texture-resource-paths --contains <文本>`：列出路径包含指定文本的贴图逻辑路径、物理副本和 MD5，用于核对同名 DTX 是否存在冲突。
 - CFT 动作引用即使未写扩展名，也只有在完整逻辑路径对应单一资源扩展名、父子模型均解码成功且实际槽位交集非空时才继承贴图。
@@ -196,7 +201,7 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 - 同路径 DTX 副本可按解码图像校验：`PV-BrokenKukri_RedCrystal.DTX` 在 `rez` 与 `rez2` 的原始 MD5 不同，但两份均解码为 512×512，像素 SHA-256 相同。五个预览上下文中的 `PV-BrokenKukri_RedCrystal` 槽 2 均映射到该贴图路径。
 - 2026-10-26 按当前 WeaponPreview、WeaponModel 与 LTC 记录重建交叉表。PView/PreView 审计包含 232 个预览上下文/模型组合，230 组映射、266 个槽位均命中 LTC 指定贴图。仅 `preview:10000000:4897` 和 `preview:8000000:4897` 的 `PV-Keris_Finger` 保持未映射：槽 0/1 是手/臂，基准 `PV-Keris_Unicorn` 的道具网格在槽 2，而该变体没有槽 2。
 - 复核时直接解码了两个预览 BIN：`WeaponPreview/8/8-4897.bin` 与 `WeaponPreview/VVIPShopGv/10-4897.bin` 的 `ModelId` 均为 `10327`，对应 BF005.LTC 旧编号 10327 / `WeaponIndex:7557`。世界模型行将 `QV-Keris_Finger` 槽 0 绑定到 `QV-Keris_Unicorn.dtx`；PView `PV-Keris_Finger` 只有 `Fview-hand2` 槽 0 和 `Fview-arm2` 槽 1，基础 `PV-Keris_Unicorn` 的 `Object01` 才使用槽 2。旧 `coverage-current-crosswalk.tsv` 中指向 WideGrenade 的条目已由全武器字段交叉表取代；这两项 PView 上下文仍因变体缺少槽 2 道具网格而保持未映射。
-- 全武器字段交叉表复核覆盖 972 条 LTC 目标行、601 个上下文/模型组合；599 组有映射，642 个已映射槽位全部命中 LTC 指定路径。336 个模型/贴图路径（187 个模型、149 张贴图）均在当前安装的 481 个 REZ 归档中找到，共 373 份物理副本。另有 694 个直接 LTC 预览上下文/模型组合、742 个槽位通过绑定一致性复核。此前基于旧交叉表和不完整资源目录的 217/542 组数字不再作为覆盖结论。
+- 全武器字段交叉表复核覆盖 972 条 LTC 目标行、601 个上下文/模型组合；599 组有映射，642 个已映射槽位全部命中 LTC 指定路径。336 个模型/贴图路径（187 个模型、149 张贴图）均在交叉表使用的 481 个 REZ 归档快照中找到，共 373 份物理副本。另有 694 个直接 LTC 预览上下文/模型组合、742 个槽位通过绑定一致性复核。2026-10-26 的表解码盘点另覆盖 482 个归档，不代表武器交叉表已重算。此前基于旧交叉表和不完整资源目录的 217/542 组数字不再作为覆盖结论。
 - BornBeast 世界模型 G_M/G_F 的 16 个上下文/模型组合现映射到 LTC 首字段指定的 Modern 或 Foliage 贴图。预览 `2000000:3416` 的 `ModelId:6317` 经 BF005.LTC 对应 `WeaponIndex:5050`；两种模型的所有副本都只声明槽 0，因此只绑定该 LTC 行的第一张贴图，第二字段的 Knife 贴图不分配给这些模型。G_M 聚焦 OBJ 导出得到 1 个网格、1 张贴图、缺失 0。\n- `WeaponPreview/8/8-4709.bin` 的 `ModelId:9773` 对应 BF005.LTC 旧映射编号 9773 和 `WeaponIndex:7123`；`preview:8000000:4709` 的 `PV-Card_RM_TD_S31_Lv1` 槽 2 使用 `PV-Card_RM_TD_S31_Master.dtx`。相似的 `PV-Card_RM_TD_S31_POG.dtx` 属于 `WeaponIndex:7126`，不能套用到该预览上下文。
 - `ArmModel/Arm_*`、`Models/PLAYERVIEW/Arm_*` 和 `Models/PLAYERVIEW/ArmModel/Arm_*` 下的第一人称臂模按手/臂网格名、模型家族名和 BL/GR/SP 变体匹配 `ModelTextures/PLAYERVIEW` DTX；优先使用精确变体，女性模型的 `_WOMAN_BL/GR` 可对应贴图的 `_BL/GR` 后缀。候选贴图必须在玩家视角目录内唯一，且同一路径的归档副本 MD5 一致；角色或路径有歧义时不绑定。同一模型被多个角色皮肤复用时，用 `--texture-context` 选择对应 CFT 身份，不跨上下文套用贴图。
 - 对没有直接 CFT 手/臂绑定的旧版臂模，显式指定 `--texture-context` 后，可使用同阵营、同家族扩展版本的角色皮肤。只有源/目标所有物理模型副本均解码成功，且网格名、顶点、三角形索引、UV、文件声明材质槽和 RenderStyle 编号完全一致时才建立关联；嵌入贴图、缺失 UV、无效几何或副本冲突均不适用。该关联只存在于身份上下文中，不生成默认皮肤，报告标为 `cft-equivalent-arm-derived`，不视为游戏表直接引用。例如 `Arm_WildWest_BL` 用 `A9887` 选择 BLGR 皮肤，用 `A9350` 选择 Santa 皮肤；`Arm_Butcher_BL/GR` 可用 `A0202` 选择已在 CFT 中登记的 CN 皮肤。
@@ -359,6 +364,12 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 - 角色别名有冲突时，可用 `row:rez\RF100\Table\CharacterType.CFT#701:BL` 按零基 CFT 行和阵营精确选择皮肤；表内存在有效 `RecordId` 时可用 `recordid:rez\RF100\Table\CharacterType.CFT#<编号>`，两种编号域互不混用。
 - `--scan-cfg`：扫描 CFG，提取贴图引用，输出 TXT/CSV 报告。
 - `--decode-cfg`：重试失败 CFG，导出可还原文本或二进制预览图，并分类高熵配置。
+
+## v1.2.5 更新
+
+- 新增随程序发布的模型贴图映射清单，区分已导出确认的槽位和 CFT 已声明但槽位待验证的关系，并记录可确认的动作模型路径。
+- 更新当前游戏目录的 CFT/LTC 盘点；FireAim Marker 的身体、手臂和配件路径已入表，贴图槽位等待聚焦导出验证。
+- 更新中英文说明书和 GitHub Release 文案，版本号提升到 `v1.2.5`。
 
 ## v1.2.4 更新
 
