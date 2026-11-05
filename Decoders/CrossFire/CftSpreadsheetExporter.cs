@@ -212,6 +212,11 @@ internal static class CftSpreadsheetExporter
                         ? row.ColumnValues[column] : row.Values.GetValueOrDefault(table.Columns[column]);
                     string reference = ColumnName(column + 1) + rowNumber;
                     if (value is int integer) WriteIntegerCell(writer, reference, integer);
+                    else if (value is float number)
+                    {
+                        if (float.IsFinite(number)) WriteFloatCell(writer, reference, number);
+                        else WriteTextCell(writer, reference, number.ToString("R", CultureInfo.InvariantCulture));
+                    }
                     else if (value is string text) WriteTextCell(writer, reference, text);
                 }
                 writer.WriteEndElement();
@@ -226,6 +231,12 @@ internal static class CftSpreadsheetExporter
     {
         writer.WriteStartElement("c", SheetNamespace); writer.WriteAttributeString("r", reference);
         writer.WriteElementString("v", SheetNamespace, value.ToString(CultureInfo.InvariantCulture)); writer.WriteEndElement();
+    }
+
+    private static void WriteFloatCell(XmlWriter writer, string reference, float value)
+    {
+        writer.WriteStartElement("c", SheetNamespace); writer.WriteAttributeString("r", reference);
+        writer.WriteElementString("v", SheetNamespace, value.ToString("R", CultureInfo.InvariantCulture)); writer.WriteEndElement();
     }
 
     private static void WriteTextCell(XmlWriter writer, string reference, string value, bool header = false)

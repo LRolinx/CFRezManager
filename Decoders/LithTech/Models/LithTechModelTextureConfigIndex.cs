@@ -5587,14 +5587,6 @@ internal static class LithTechModelTextureConfigIndex
             }
         }
 
-        if (!HasConsistentDecodableDtxCopies(
-                texturePath,
-                textureItemsByLogicalPath,
-                verifiedTexturePathCache))
-        {
-            return;
-        }
-
         var targetPaths = variantSuffixes
             .Select(suffix => NormalizeModelResourcePath(sourceModelPath + suffix))
             .ToList();
@@ -5675,6 +5667,15 @@ internal static class LithTechModelTextureConfigIndex
                 directPathSlots.ContainsKey(slotIndex))
             {
                 continue;
+            }
+
+            // Validate pixels only when an unbound, structurally valid variant needs them.
+            if (!HasConsistentDecodableDtxCopies(
+                    texturePath,
+                    textureItemsByLogicalPath,
+                    verifiedTexturePathCache))
+            {
+                return;
             }
 
             AddModelTextureSlotMapping(ltcPreviewVariantByModelPath, targetPath, slotIndex, texturePath);

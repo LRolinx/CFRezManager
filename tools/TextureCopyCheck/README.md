@@ -1,5 +1,7 @@
 # Texture copy checks
 
+The [CFT catalog checks](../../docs/asset-mapping-register.md#cft-catalog-and-node-templates) add six cases around deferred variant validation in the context suite. An eligible inferred binding still verifies decoded copies; untyped, absent and directly bound variants skip unused pixel validation. The 49 copy checks pass. Full-root indexing remains expensive, and neither stopped full-root run is counted as an exported model.
+
 The [other-CFT comparison](../../docs/asset-mapping-register.md#other-model-tables) decodes 174 physical DTXs. Two IronBeast2 NG paths each have different pixels in their physical copies. Restored row bindings keep those conflicts unresolved and stop 16 unrelated old-skin fallbacks; every stopped image matches none of the declared copies. All 49 copy checks pass, and 253 written PNG witnesses remain byte-identical.
 
 The [UGC snapshot](../../docs/asset-mapping-register.md#ugc-assets) decodes 3,003 physical DTXs and retains 17 logical paths with conflicting pixels. Every written requested or grouped export matches a unique source pixel result; zero-alpha removal is recorded. Across those exports, 32,723 PNG witnesses remain byte-identical. The 49 synthetic copy checks pass; recorded object texture candidates do not select a physical version or a scene texture.

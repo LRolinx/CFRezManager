@@ -39,7 +39,13 @@ public partial class CftPreviewWindow : Window
         {
             string key = "C" + index.ToString(CultureInfo.InvariantCulture);
             bool numeric = _table.ColumnTypes[index] != 1;
-            data.Columns.Add(key, numeric ? typeof(int) : typeof(string));
+            Type valueType = _table.ColumnTypes[index] switch
+            {
+                1 => typeof(string),
+                5 => typeof(float),
+                _ => typeof(int)
+            };
+            data.Columns.Add(key, valueType);
             AddColumn(key, _table.Columns[index], numeric, width: numeric ? 150 : 240);
         }
         TableGrid.FrozenColumnCount = 1;

@@ -190,6 +190,16 @@ internal static class CrossFireCftTableDecoder
 
                         value = stringValue;
                         break;
+                    case 5:
+                        if (!TryReadInt32(data, ref position, out int floatBits))
+                        {
+                            consumedBytes = position;
+                            errorMessage = $"Incomplete CFT float at row {rowIndex}, column {column} ({columns[column]}), byte {position}.";
+                            return false;
+                        }
+
+                        value = BitConverter.Int32BitsToSingle(floatBits);
+                        break;
                     default:
                         if (!TryReadInt32(data, ref position, out int integerValue))
                         {
