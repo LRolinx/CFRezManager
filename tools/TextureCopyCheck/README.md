@@ -23,3 +23,5 @@ Model associations have a separate [structure check](../LtbStructureAudit/README
 The [character arm checks](../CharacterArmCheck/README.md) cover side-qualified CFT selectors and preserve both declarations when GR and BL share a model path. All three checks run before release packaging; a matching logical texture still needs valid physical copies.
 
 The [arm texture inventory](../../docs/evidence/character-arms-20261105-texture-copies.tsv) records 1,464 decoded DTX copies and [36 conflicting logical paths](../../docs/evidence/character-arms-20261105-texture-conflicts.tsv). These conflicts remain unresolved regardless of which character context selects the path.
+
+Animation equivalence needs separate evidence. Two recorded PView copies have identical transform channels but [different sound-event timing](../../docs/evidence/pview-motion-20261105-event-differences.tsv); the [channel inspection](../LtbStructureAudit/README.md#channel-inspection) retains their exact payload and event bytes.

@@ -6,15 +6,16 @@ using System.Text;
 
 // Serialized layout: ModelPiece::Load, ModelNode::Load, ModelAnim::Load,
 // LoadSockets and LoadAnimBindings in the LithTech D3D LTB v9/model v25 loader.
-// Channel payloads are bounded and skipped; this tool inventories tracks without evaluating them.
+// Optional channel inspection decodes samples without evaluating animation poses.
 
-if (args.Length != 2)
+if (args.Length is < 2 or > 3 || args.Length == 3 && args[2] != "--channels")
 {
-    Console.Error.WriteLine("Usage: LtbStructureAudit <extracted-resource-root> <output-directory>");
+    Console.Error.WriteLine("Usage: LtbStructureAudit <extracted-resource-root> <output-directory> [--channels]");
     return 2;
 }
 
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+bool inspectChannels = args.Length == 3;
 string root = Path.GetFullPath(args[0]), output = Path.GetFullPath(args[1]);
 if (!Directory.Exists(root))
 {
@@ -30,6 +31,8 @@ var socketRows = new List<string> { "source\tsocket_index\tname\tnode_index\trot
 var weightRows = new List<string> { "source\tweight_set_index\tname\tnode_count\tnode_weights_f32_hex" };
 var childRows = new List<string> { "source\tchild_index\tis_self\tdeclared_path\tanimation_bindings" };
 var bindingRows = new List<string> { "source\tchild_index\tbinding_index\tanimation_name\tdimensions_f32_hex\ttranslation_f32_hex\tself_name_match_count\tself_same_index_name_matches" };
+var channelRows = new List<string> { "source\tanimation_index\tnode_index\tnode_name\tkind\tencoding\tsamples\tframe_binding\tdecoded_byte_offset\tpayload_bytes\tpayload_sha256\tfirst_value_f32_hex\tlast_value_f32_hex" };
+var keyRows = new List<string> { "source\tanimation_index\tkeyframe_index\ttime_ms\tevent_text\tevent_cp949_hex" };
 string manifestPath = Path.Combine(root, "resource-manifest.tsv");
 IEnumerable<string[]> resources = File.Exists(manifestPath)
     ? File.ReadAllLines(manifestPath).Skip(1).Select(line => line.Split('\t'))
@@ -52,6 +55,8 @@ foreach (string[] fields in resources)
     var weightSets = new List<WeightSet>();
     var childModels = new List<ChildModel>();
     var animationBindings = new List<AnimationBinding>();
+    var channels = new List<Channel>();
+    var keys = new List<Key>();
     uint[] alloc = new uint[15]; uint version = 0; string command = "", error = "", status = "header-invalid";
     try
     {
@@ -112,21 +117,41 @@ foreach (string[] fields in resources)
             string name = c.Str(); uint compression = c.U32(), interp = c.U32(), frames = c.U32();
             if (compression > 3 || frames > 1000000) throw new InvalidDataException("Animation limits");
             uint lastTime = 0;
-            for (uint k = 0; k < frames; k++) { uint time = c.U32(); if (time < lastTime) throw new InvalidDataException("Unordered keys"); lastTime = time; c.Str(); }
+            for (uint k = 0; k < frames; k++)
+            {
+                uint time = c.U32(); if (time < lastTime) throw new InvalidDataException("Unordered keys"); lastTime = time;
+                int start = c.Position; string text = c.Str();
+                if (inspectChannels) keys.Add(new(i, k, time, text, Convert.ToHexString(data.AsSpan(start + 2, c.Position - start - 2))));
+            }
             foreach (Node node in nodes)
             {
                 if (compression == 0)
                 {
                     byte vertex = c.Byte(); if (vertex > 1) throw new InvalidDataException("Invalid vertex animation flag");
-                    if (vertex == 0) c.Skip(checked((int)frames * 28));
-                    else for (uint k = 0; k < frames; k++) { uint count = c.U32(); if (count > 1000000) throw new InvalidDataException("Vertex count limit"); c.Skip(checked((int)count * 12)); }
+                    if (vertex == 0)
+                    {
+                        ReadChannel(c, i, node, "position", frames, frames, false, channels, inspectChannels);
+                        ReadChannel(c, i, node, "rotation", frames, frames, false, channels, inspectChannels);
+                    }
+                    else
+                    {
+                        int start = c.Position;
+                        for (uint k = 0; k < frames; k++)
+                        {
+                            uint count = c.U32(); if (count > 1000000) throw new InvalidDataException("Vertex count limit");
+                            if (inspectChannels) for (uint v = 0; v < count; v++) { c.Float(); c.Float(); c.Float(); }
+                            else c.Skip(checked((int)count * 12));
+                        }
+                        if (inspectChannels) channels.Add(new(i, node.Index, node.Name, "vertex", "f32-vec3-lists", frames, "per-frame-vertex-lists",
+                            start, c.Position - start, Convert.ToHexString(SHA256.HashData(data.AsSpan(start, c.Position - start))), "", ""));
+                    }
                 }
                 else
                 {
                     uint count = c.U32(); if (count > Math.Max(1, frames)) throw new InvalidDataException("Position channel count");
-                    c.Skip(checked((int)count * (compression == 2 ? 6 : 12)));
+                    ReadChannel(c, i, node, "position", count, frames, compression == 2, channels, inspectChannels);
                     count = c.U32(); if (count > Math.Max(1, frames)) throw new InvalidDataException("Rotation channel count");
-                    c.Skip(checked((int)count * (compression == 1 ? 16 : 8)));
+                    ReadChannel(c, i, node, "rotation", count, frames, compression != 1, channels, inspectChannels);
                 }
             }
             anims.Add(new(i, name, compression, interp, frames, lastTime));
@@ -173,6 +198,9 @@ foreach (string[] fields in resources)
                 : "";
             bindingRows.Add(string.Join('\t', source, b.Child, b.Index, Clean(b.Name), b.Dimensions, b.Translation, matches, sameIndex));
         }
+        foreach (var ch in channels) channelRows.Add(string.Join('\t', source, ch.Animation, ch.Node, Clean(ch.Name), ch.Kind, ch.Encoding, ch.Samples,
+            ch.FrameBinding, ch.Offset, ch.Bytes, ch.Hash, Clean(ch.First), Clean(ch.Last)));
+        foreach (var k in keys) keyRows.Add(string.Join('\t', source, k.Animation, k.Index, k.Time, Clean(k.Text), Clean(k.Raw)));
     }
     else failures++;
     Console.WriteLine($"{source}: {status}; nodes={nodes.Count}/{alloc[2]}, animations={anims.Count}/{alloc[1]}; {error}");
@@ -184,6 +212,9 @@ File.WriteAllLines(Path.Combine(output, "sockets.tsv"), socketRows);
 File.WriteAllLines(Path.Combine(output, "weight-sets.tsv"), weightRows);
 File.WriteAllLines(Path.Combine(output, "child-models.tsv"), childRows);
 File.WriteAllLines(Path.Combine(output, "animation-bindings.tsv"), bindingRows);
+File.WriteAllLines(Path.Combine(output, "channels.tsv"), channelRows);
+File.WriteAllLines(Path.Combine(output, "keyframes.tsv"), keyRows);
+File.WriteAllLines(Path.Combine(output, "inspection.tsv"), ["inspection\trequested", "animation-channels\t" + inspectChannels.ToString().ToLowerInvariant()]);
 return failures == 0 ? 0 : 1;
 
 static void ReadNode(Cursor c, int parent, int depth, uint allocated, List<Node> nodes, HashSet<ushort> indices)
@@ -198,6 +229,26 @@ static void ReadNode(Cursor c, int parent, int depth, uint allocated, List<Node>
     for (uint i = 0; i < count; i++) ReadNode(c, index, depth + 1, allocated, nodes, indices);
 }
 static string Hash(string text) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
+static void ReadChannel(Cursor c, uint animation, Node node, string kind, uint count, uint frames, bool quantized, List<Channel> channels, bool inspect)
+{
+    int components = kind == "position" ? 3 : 4;
+    int start = c.Position, bytes = checked((int)count * components * (quantized ? 2 : 4));
+    if (!inspect) { c.Skip(bytes); return; }
+    if (count > 1 && count != frames) throw new InvalidDataException("Partial animation channel has no supported frame binding.");
+    byte[] first = new byte[components * 4], last = new byte[components * 4];
+    if (count == 0 && kind == "rotation") BitConverter.GetBytes(1f).CopyTo(first, 12);
+    first.CopyTo(last, 0);
+    for (uint sample = 0; sample < count; sample++)
+    for (int component = 0; component < components; component++)
+    {
+        float value = quantized ? unchecked((short)c.U16()) / (kind == "position" ? 16f : 32767f) : c.Float();
+        if (sample == 0) BitConverter.GetBytes(value).CopyTo(first, component * 4);
+        if (sample == count - 1) BitConverter.GetBytes(value).CopyTo(last, component * 4);
+    }
+    string encoding = quantized ? kind == "position" ? "i16-vec3-div16" : "i16-quat-div32767" : kind == "position" ? "f32-vec3" : "f32-quat";
+    channels.Add(new(animation, node.Index, node.Name, kind, encoding, count, count == 0 ? "default" : count == 1 ? "constant" : "per-keyframe",
+        start, bytes, Convert.ToHexString(SHA256.HashData(c.Data.AsSpan(start, bytes))), Convert.ToHexString(first), Convert.ToHexString(last)));
+}
 static string Clean(string text)
 {
     string value = text.Replace('\t', ' ').Replace('\r', ' ').Replace('\n', ' ');
@@ -209,6 +260,8 @@ record Socket(uint Index, string Name, uint Node, string Transform);
 record WeightSet(uint Index, string Name, uint Nodes, string Weights);
 record ChildModel(uint Index, string Path);
 record AnimationBinding(uint Child, uint Index, string Name, string Dimensions, string Translation);
+record Channel(uint Animation, uint Node, string Name, string Kind, string Encoding, uint Samples, string FrameBinding, int Offset, int Bytes, string Hash, string First, string Last);
+record Key(uint Animation, uint Index, uint Time, string Text, string Raw);
 class Cursor(byte[] data)
 {
     public byte[] Data => data; public int Position { get; private set; }

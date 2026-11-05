@@ -29,6 +29,7 @@ CF Rez Manager is a Windows WPF tool for browsing, searching, previewing, extrac
 - OBJ export stops enumerating ordinary name fallbacks after a successful texture lookup and builds the mesh-name index on demand. Related SGFX glow textures still export. Texture reports list the candidates actually enumerated for that export.
 - Copies at the same logical texture path are shared only when every copy decodes with matching dimensions and BGRA pixels. Conflicting copies retain their sources and hashes while the game's active version remains unverified. PNG byte regression checks preserve all 915 confirmed records.
 - The combined structure records cover 373 distinct physical LTB files, including child-model declarations, 8,867 animation bindings and 17 node blend-weight sets. All three FireAim body models internally reference `M-motion_blue.ltb`; the three arm models have no such internal reference. Physical motion-version selection and playback remain unverified.
+- The HuluXiongdi PView snapshot retains 37 model files, 85 embedded animations, 13,088 channels and 2,318 keyframes. Two base-model copies share identical transform channels but place combo sound events 33 and 43 milliseconds apart; their physical versions remain separate.
 
 ## Requirements
 

@@ -1,0 +1,3 @@
+"source_a"	"source_b"	"animation_index"	"animation_name"	"event_text"	"event_cp949_hex"	"source_a_keyframe"	"source_a_time_ms"	"source_b_keyframe"	"source_b_time_ms"
+"rez3/RF016.REZ:Models/PLAYERVIEW/PV-HuluXiongdi.LTB"	"rez4/RF016.REZ:Models/PLAYERVIEW/PV-HuluXiongdi.LTB"	"11"	"combo_1"	"ShotSoundStart"	"53686F74536F756E645374617274"	"0"	"0"	"1"	"33"
+"rez3/RF016.REZ:Models/PLAYERVIEW/PV-HuluXiongdi.LTB"	"rez4/RF016.REZ:Models/PLAYERVIEW/PV-HuluXiongdi.LTB"	"12"	"combo_2"	"ShotSoundStart"	"53686F74536F756E645374617274"	"0"	"0"	"1"	"43"

@@ -19,12 +19,28 @@ The validated layout is native D3D LTB header version 9, model version 25, inclu
 - `weight-sets.tsv`: named animation blend masks, node counts and serialized float32 weights in node-index order. These are not vertex skin weights.
 - `child-models.tsv`: child index, implicit-self flag, raw declared path and serialized animation-binding count. Index 0 is the containing model and has no path string in the file.
 - `animation-bindings.tsv`: child index, binding index, animation name, dimensions and translation. Self bindings also report case-insensitive name-match counts and same-index name equality; external children are not compared with the containing model's animations. These metadata values are separate from bone keyframes.
+- `inspection.tsv`: whether animation channels were requested for this run.
+- `channels.tsv` and `keyframes.tsv`: channel payloads and event records when `--channels` is present. Normal runs write empty tables and mark channel inspection as unrequested, clearing any records from a previous run in the same output directory.
 
 Matrix, socket, weight and binding vector values are little-endian float32 bytes encoded as hexadecimal. Hierarchy hashes cover node index, parent, name and flags sorted by index. Bind-matrix hashes compare serialized values, so different hashes do not by themselves prove incompatible poses. Duplicate or reordered binding names remain visible in the report; structural completeness does not establish a unique animation association.
 
 `structure-complete` requires the declared node, piece, LOD, weight-set, child-model, animation and socket counts to agree, bounded animation channels, and complete file consumption with at most three zero padding bytes. All detailed tables are emitted only for complete files. Exit code 1 reports rejected files; exit code 2 reports invalid arguments.
 
-The tool inventories animation channels without evaluating them. Matching node hierarchies is evidence for an association; animation playback, skin weights and retargeting still require validation. OBJ export remains geometry and texture export.
+The tool inventories animation data without evaluating poses. Matching node hierarchies is evidence for an association; animation playback, skin weights and retargeting still require validation. OBJ export remains geometry and texture export.
+
+## Channel inspection
+
+```powershell
+dotnet run --project tools/LtbStructureAudit -c Release -- C:\Extracted C:\Reports\LtbStructure --channels
+```
+
+`channels.tsv` records each node's position/rotation payload offset in the decoded LTB, byte count, SHA-256, sample count, encoding and first/last decoded values as float32 hexadecimal. It follows serialized hierarchy traversal, retaining each node's actual index. Uncompressed channels store all positions followed by all quaternions. The four supported encodings are uncompressed, full-float relevant channels, signed int16 positions/rotations, and full-float positions with int16 rotations. Int16 positions divide by 16; quaternion components divide by 32767, without clamping or normalization.
+
+Zero compressed samples retain a default zero position or identity quaternion. One sample is constant; larger channels must contain one sample per keyframe. Partial channels without a validated frame binding are rejected. Float samples must be finite. Vertex-animation payloads remain separate records with their frame-list bytes and hashes.
+
+`keyframes.tsv` retains each key index, time in milliseconds and raw event bytes in `event_cp949_hex`. The text column is a CP949 interpretation with display control characters replaced by spaces; the hexadecimal column preserves the original bytes. All detailed rows require a complete file parse. A structure-only run bounds the payloads but does not perform these sample checks.
+
+The [PView snapshot](../../docs/evidence/pview-motion-20261105-channel-validation.tsv) independently verifies 13,088 channels and 2,318 keys from 37 files. The two `PV-HuluXiongdi.ltb` copies have identical transform channels but [different sound-event timing](../../docs/evidence/pview-motion-20261105-event-differences.tsv). Sixteen variants explicitly reference their base PView; their [child candidates](../../docs/evidence/pview-motion-20261105-child-candidates.tsv) keep hierarchy and bind-matrix comparisons separate.
 
 CharacterType arm selection has a separate [context check](../CharacterArmCheck/README.md): side-qualified row, identity and RecordId selectors must retain their own skins when several characters or sides share an arm model. Structure completeness alone does not verify that skin selection.
 
@@ -48,7 +64,7 @@ The [combined association snapshot](../../docs/evidence/ltb-associations-2026110
 .\tools\LtbStructureAudit\Check.ps1
 ```
 
-The script builds the tool into a unique directory under `artifacts/ltb-structure-check/`, creates 14 synthetic files without game resources and runs 40 assertions. These cover self/external child records, empty external bindings, preserved float bytes, quoted paths, duplicate/reordered/missing names, invalid counts, non-finite values, truncated records and trailing data. Invalid fixtures produce summary errors without detailed rows. Results default to `artifacts/ltb-structure-check/results.tsv`; `-Output <report.tsv>` changes that path. `-ToolDll <LtbStructureAudit.dll>` uses an existing build. The release workflow runs the checks before packaging.
+The script builds the tool into a unique directory under `artifacts/ltb-structure-check/`, creates 26 synthetic files without game resources and runs 128 assertions. The original 40 checks cover child declarations and bindings. Additional cases cover all four channel encodings, zero/default channels, vertex payloads, raw events, swapped node indices, exact payload hashes, partial channels, non-finite samples and stale-output clearing. Invalid fixtures produce summary errors without detailed rows. Successful checks exit with code 0 even though the rejection fixtures intentionally return code 1 from the audit tool. Results default to `artifacts/ltb-structure-check/results.tsv`; `-Output <report.tsv>` changes that path. `-ToolDll <LtbStructureAudit.dll>` uses an existing build. The release workflow runs the checks before packaging.
 
 ## Motion comparison
 

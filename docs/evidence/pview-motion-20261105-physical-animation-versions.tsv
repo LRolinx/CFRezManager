@@ -1,0 +1,2 @@
+"logical_path"	"source_a"	"source_b"	"hierarchy_equal"	"bind_matrices_equal"	"channel_payloads_and_encodings_equal"	"key_times_equal"	"event_bytes_and_placement_equal"	"status"
+"Models/PLAYERVIEW/PV-HuluXiongdi.LTB"	"rez3/RF016.REZ:Models/PLAYERVIEW/PV-HuluXiongdi.LTB"	"rez4/RF016.REZ:Models/PLAYERVIEW/PV-HuluXiongdi.LTB"	"true"	"true"	"true"	"true"	"false"	"different-event-timing; physical-version-unverified"

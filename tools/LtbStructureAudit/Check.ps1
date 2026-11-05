@@ -23,8 +23,10 @@ function Write-String([IO.BinaryWriter]$Writer, [string]$Text) {
     $Writer.Write([uint16]$bytes.Length)
     $Writer.Write($bytes)
 }
+function To-Hex([byte[]]$Bytes) { return [BitConverter]::ToString($Bytes).Replace('-', '') }
 
-function New-Fixture([string[]]$Animations = @('Idle', 'Walk'), [string[]]$Bindings = @('Idle', 'Walk'), [switch]$EmptyChildBindings) {
+function New-Fixture([string[]]$Animations = @('Idle', 'Walk'), [string[]]$Bindings = @('Idle', 'Walk'), [switch]$EmptyChildBindings,
+    [uint32]$Compression = 1, [uint32]$Frames = 1, [switch]$DefaultChannels, [switch]$SwapNodes, [switch]$VertexChannel) {
     $buffer = [IO.MemoryStream]::new()
     $w = [IO.BinaryWriter]::new($buffer)
     $w.Write([uint16]1); $w.Write([uint16]9); $w.Write([byte[]]::new(16)); $w.Write([uint32]25)
@@ -34,7 +36,7 @@ function New-Fixture([string[]]$Animations = @('Idle', 'Walk'), [string[]]$Bindi
     Write-String $w 'structure-check'; $w.Write([single]1); $w.Write([uint32]0); $w.Write([uint32]0)
     foreach ($index in 0..1) {
         Write-String $w @('Root', 'Bone')[$index]
-        $w.Write([uint16]$index); $w.Write([byte]0)
+        $w.Write([uint16]$(if ($SwapNodes) { 1 - $index } else { $index })); $w.Write([byte]0)
         foreach ($cell in 0..15) { $w.Write([single][int]($cell -in @(0, 5, 10, 15))) }
         $w.Write([uint32](1 - $index))
     }
@@ -48,16 +50,44 @@ function New-Fixture([string[]]$Animations = @('Idle', 'Walk'), [string[]]$Bindi
     $childPath = [int]$buffer.Position
     Write-String $w 'Motion/"shared".ltb'
     $w.Write([uint32]2)
+    $positionCount = -1; $positionStart = -1; $rotationStart = -1
     foreach ($name in $Animations) {
         foreach ($v in 1..3) { $w.Write([single]$v) }
         Write-String $w $name
-        $w.Write([uint32]1); $w.Write([uint32]200); $w.Write([uint32]1)
-        $w.Write([uint32]0); Write-String $w 'key'
+        $w.Write($Compression); $w.Write([uint32]200); $w.Write($Frames)
+        for ($frame = 0; $frame -lt $Frames; $frame++) {
+            $w.Write([uint32]($frame * 33)); Write-String $w $(if ($frame -eq 0) { 'key' } else { "key`"event`tline" })
+        }
         foreach ($node in 0..1) {
-            $w.Write([uint32]1)
-            foreach ($v in 0..2) { $w.Write([single]$v) }
-            $w.Write([uint32]1)
-            foreach ($v in @(0, 0, 0, 1)) { $w.Write([single]$v) }
+            if ($Compression -eq 0) { $w.Write([byte][int][bool]$VertexChannel) }
+            if ($Compression -eq 0 -and $VertexChannel) {
+                for ($frame = 0; $frame -lt $Frames; $frame++) {
+                    $w.Write([uint32]2)
+                    if ($positionStart -lt 0) { $positionStart = [int]$buffer.Position }
+                    foreach ($v in 0..5) { $w.Write([single]($v + $frame)) }
+                }
+                continue
+            }
+            $samples = if ($DefaultChannels) { 0 } else { $Frames }
+            if ($Compression -ne 0) {
+                if ($positionCount -lt 0) { $positionCount = [int]$buffer.Position }
+                $w.Write([uint32]$samples)
+            }
+            if ($positionStart -lt 0) { $positionStart = [int]$buffer.Position }
+            for ($sample = 0; $sample -lt $samples; $sample++) {
+                if ($Compression -eq 2) {
+                    foreach ($v in $(if ($sample -eq 0) { @(-32768, 0, 32767) } else { @(16, -32, 48) })) { $w.Write([int16]$v) }
+                }
+                else { foreach ($v in 0..2) { $w.Write([single]($v + $sample * 3)) } }
+            }
+            if ($Compression -ne 0) { $w.Write([uint32]$samples) }
+            if ($rotationStart -lt 0) { $rotationStart = [int]$buffer.Position }
+            for ($sample = 0; $sample -lt $samples; $sample++) {
+                if ($Compression -in @(2, 3)) {
+                    foreach ($v in $(if ($sample -eq 0) { @(0, 0, 0, 32767) } else { @(0, 16384, 0, 28377) })) { $w.Write([int16]$v) }
+                }
+                else { foreach ($v in $(if ($sample -eq 0) { @(0, 0, 0, 1) } else { @(0, 0.5, 0, 0.8660254) })) { $w.Write([single]$v) } }
+            }
         }
     }
     $w.Write([uint32]1); $w.Write([uint32]1); Write-String $w 'Effect'
@@ -76,7 +106,8 @@ function New-Fixture([string[]]$Animations = @('Idle', 'Walk'), [string[]]$Bindi
     $data = $buffer.ToArray()
     $w.Dispose(); $buffer.Dispose()
     return [pscustomobject]@{ Data = $data; WeightCount = $weightCount; WeightStart = $weightStart;
-        ChildCount = $childCount; ChildPath = $childPath; BindingCount = $bindingCount }
+        ChildCount = $childCount; ChildPath = $childPath; BindingCount = $bindingCount;
+        PositionCount = $positionCount; PositionStart = $positionStart; RotationStart = $rotationStart }
 }
 
 function Save-Fixture([string]$Name, [byte[]]$Data) {
@@ -143,7 +174,71 @@ Check 'case-insensitive self names match' (@($tables['animation-bindings'] | Whe
 Check 'duplicate self names remain ambiguous' (@($tables['animation-bindings'] | Where-Object { $_.source -eq 'duplicate-names.ltb' -and $_.child_index -eq '0' -and $_.self_name_match_count -eq '2' }).Count -eq 2)
 Check 'reordered names do not claim index equality' (@($tables['animation-bindings'] | Where-Object { $_.source -eq 'reordered-names.ltb' -and $_.child_index -eq '0' -and $_.self_same_index_name_matches -eq 'false' }).Count -eq 2)
 Check 'missing self name is recorded' (@($tables['animation-bindings'] | Where-Object { $_.source -eq 'missing-name.ltb' -and $_.animation_name -eq 'Missing' -and $_.self_name_match_count -eq '0' -and $_.self_same_index_name_matches -eq 'false' }).Count -eq 1)
+Check 'default inspection leaves channel tables empty' (@(Import-Csv (Join-Path $reports 'channels.tsv') -Delimiter "`t").Count -eq 0 -and @(Import-Csv (Join-Path $reports 'keyframes.tsv') -Delimiter "`t").Count -eq 0 -and (Import-Csv (Join-Path $reports 'inspection.tsv') -Delimiter "`t").requested -eq 'false')
+$channelFixtures = Join-Path $run 'channel-fixtures'
+$channelReports = Join-Path $run 'channel-reports'
+[void][IO.Directory]::CreateDirectory($channelFixtures)
+$fixtures = $channelFixtures
+$channelControls = [ordered]@{
+    'plain' = (New-Fixture -Compression 0 -Frames 2)
+    'float' = (New-Fixture -Compression 1 -Frames 2)
+    'packed' = (New-Fixture -Compression 2 -Frames 2)
+    'rotation-packed' = (New-Fixture -Compression 3 -Frames 2)
+    'defaults' = (New-Fixture -Frames 2 -DefaultChannels)
+    'swapped-nodes' = (New-Fixture -Frames 2 -SwapNodes)
+    'vertex' = (New-Fixture -Compression 0 -Frames 2 -VertexChannel)
+}
+foreach ($name in $channelControls.Keys) { Save-Fixture $name $channelControls[$name].Data }
+$partial = New-Fixture -Frames 3
+Save-Changed 'partial-channel' $partial $partial.PositionCount 2
+Save-Changed 'nonfinite-position' $channelControls['float'] $channelControls['float'].PositionStart 2143289344
+Save-Changed 'nonfinite-rotation' $channelControls['float'] $channelControls['float'].RotationStart 2143289344
+Save-Changed 'nonfinite-vertex' $channelControls['vertex'] $channelControls['vertex'].PositionStart 2143289344
+Save-Fixture 'truncated-channel-file' $channelControls['packed'].Data[0..($channelControls['packed'].Data.Length - 4)]
+& dotnet $ToolDll $channelFixtures $channelReports --channels > (Join-Path $run 'channel-audit.log')
+Check 'channel audit rejects invalid fixtures' ($LASTEXITCODE -eq 1)
+$channelModels = @(Import-Csv (Join-Path $channelReports 'models.tsv') -Delimiter "`t")
+$channels = @(Import-Csv (Join-Path $channelReports 'channels.tsv') -Delimiter "`t")
+$keys = @(Import-Csv (Join-Path $channelReports 'keyframes.tsv') -Delimiter "`t")
+Check 'all channel fixture model rows retained' ($channelModels.Count -eq 12)
+foreach ($model in $channelModels) {
+    $isControl = $channelControls.Contains([IO.Path]::GetFileNameWithoutExtension($model.source))
+    Check ('channel parse status: ' + $model.source) (($model.status -eq 'structure-complete') -eq $isControl)
+    if (-not $isControl) {
+        Check ('no partial channels or keys: ' + $model.source) (@($channels | Where-Object source -EQ $model.source).Count -eq 0 -and @($keys | Where-Object source -EQ $model.source).Count -eq 0)
+    }
+}
+Check 'complete channel row count' ($channels.Count -eq 52)
+Check 'complete keyframe row count' ($keys.Count -eq 28)
+Check 'channel inspection is explicitly recorded' ((Import-Csv (Join-Path $channelReports 'inspection.tsv') -Delimiter "`t").requested -eq 'true')
+foreach ($channel in $channels) {
+    $data = $channelControls[[IO.Path]::GetFileNameWithoutExtension($channel.source)].Data
+    $payload = [byte[]]::new([int]$channel.payload_bytes)
+    [Array]::Copy($data, [int]$channel.decoded_byte_offset, $payload, 0, $payload.Length)
+    $digest = [Security.Cryptography.SHA256]::Create()
+    try { $payloadHash = To-Hex ($digest.ComputeHash($payload)) } finally { $digest.Dispose() }
+    Check ("exact payload hash: $($channel.source)/$($channel.animation_index)/$($channel.node_index)/$($channel.kind)") ($payloadHash -eq $channel.payload_sha256)
+}
+function Channel([string]$Source, [string]$Kind, [int]$Node = 0) {
+    return @($channels | Where-Object { $_.source -eq ($Source + '.ltb') -and $_.animation_index -eq '0' -and $_.node_index -eq [string]$Node -and $_.kind -eq $Kind })[0]
+}
+Check 'uncompressed positions are a separate block' ((Channel 'plain' 'position').first_value_f32_hex -eq '000000000000803F00000040' -and (Channel 'plain' 'position').last_value_f32_hex -eq '00004040000080400000A040')
+Check 'uncompressed quaternion block starts after every position' ((Channel 'plain' 'rotation').first_value_f32_hex -eq '0000000000000000000000000000803F')
+Check 'full-float compressed channels preserve both samples' ((Channel 'float' 'position').first_value_f32_hex -eq (Channel 'plain' 'position').first_value_f32_hex -and (Channel 'float' 'position').last_value_f32_hex -eq (Channel 'plain' 'position').last_value_f32_hex)
+Check 'quantized positions use signed int16 divided by 16' ((Channel 'packed' 'position').first_value_f32_hex -eq '000000C50000000000FEFF44' -and (Channel 'packed' 'position').last_value_f32_hex -eq '0000803F000000C000004040')
+$rotation = ([single[]]@(0, ([single]16384 / [single]32767), 0, ([single]28377 / [single]32767)) | ForEach-Object { To-Hex ([BitConverter]::GetBytes($_)) }) -join ''
+Check 'quantized rotations divide components by 32767' ((Channel 'packed' 'rotation').last_value_f32_hex -eq $rotation)
+Check 'rotation-only compression keeps full-float positions' ((Channel 'rotation-packed' 'position').last_value_f32_hex -eq (Channel 'float' 'position').last_value_f32_hex -and (Channel 'rotation-packed' 'rotation').last_value_f32_hex -eq $rotation)
+Check 'zero position samples retain the default zero vector' ((Channel 'defaults' 'position').samples -eq '0' -and (Channel 'defaults' 'position').frame_binding -eq 'default' -and (Channel 'defaults' 'position').first_value_f32_hex -eq '000000000000000000000000')
+Check 'zero rotation samples retain the default identity quaternion' ((Channel 'defaults' 'rotation').samples -eq '0' -and (Channel 'defaults' 'rotation').first_value_f32_hex -eq '0000000000000000000000000000803F')
+Check 'channel order follows the hierarchy rather than sorted node indices' ((Channel 'swapped-nodes' 'position' 1).decoded_byte_offset -eq [string]$channelControls['swapped-nodes'].PositionStart -and (Channel 'swapped-nodes' 'position' 1).node_name -eq 'Root')
+Check 'vertex channels remain distinct from bone transforms' (@($channels | Where-Object { $_.source -eq 'vertex.ltb' -and $_.kind -eq 'vertex' -and $_.samples -eq '2' -and $_.frame_binding -eq 'per-frame-vertex-lists' }).Count -eq 4)
+Check 'raw event bytes retain quotes and tabs' (@($keys | Where-Object { $_.source -eq 'plain.ltb' -and $_.keyframe_index -eq '1' -and $_.time_ms -eq '33' -and $_.event_cp949_hex -eq '6B6579226576656E74096C696E65' }).Count -eq 2)
+& dotnet $ToolDll $channelFixtures $channelReports > (Join-Path $run 'plain-rerun.log')
+Check 'plain rerun still reports invalid files' ($LASTEXITCODE -eq 1)
+Check 'plain rerun clears stale channel records' (@(Import-Csv (Join-Path $channelReports 'channels.tsv') -Delimiter "`t").Count -eq 0 -and @(Import-Csv (Join-Path $channelReports 'keyframes.tsv') -Delimiter "`t").Count -eq 0 -and (Import-Csv (Join-Path $channelReports 'inspection.tsv') -Delimiter "`t").requested -eq 'false')
 $outputPath = if ([IO.Path]::IsPathRooted($Output)) { $Output } else { Join-Path $repo $Output }
 [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($outputPath))
 $checks | Export-Csv -LiteralPath $outputPath -Delimiter "`t" -NoTypeInformation -Encoding utf8
 Write-Output "$($checks.Count) structure checks passed. Results: $outputPath"
+exit 0
