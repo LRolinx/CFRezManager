@@ -22,6 +22,7 @@ CF Rez Manager is a Windows WPF tool for browsing, searching, previewing, extrac
 
 - The [model-to-texture reference register](docs/asset-mapping-register.tsv) ships with the application. It records exported slots and CFT-declared model, texture, and motion-model paths whose slots still need verification; the runtime resolver does not load it as an automatic mapping.
 - The [register field guide](docs/asset-mapping-register.md) explains statuses and blank fields. OBJ export does not preserve bone names or animation tracks; unconfirmed socket bindings stay blank.
+- The [RezView animation reference](docs/rezview-animation-reference.md) records the external branch's skeleton, skinning and package design, with sample pairing checks and animation-count limits. Unity animation preview is not integrated into this version.
 
 ## Requirements
 

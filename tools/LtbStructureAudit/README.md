@@ -24,3 +24,17 @@ Matrix and socket values are little-endian float32 bytes encoded as hexadecimal.
 The tool inventories animation channels without evaluating them. Matching node hierarchies is evidence for an association; animation playback, skin weights and retargeting still require validation. OBJ export remains geometry and texture export.
 
 The FireAim snapshot records 17 complete physical LTB files. Checks using a truncated file, invalid node count, unsupported version and unexpected trailing bytes reject all four altered files and emit detailed rows only for the valid control.
+
+## Motion comparison
+
+`CompareMotion.ps1` compares explicit pairs using complete `models.tsv` and `nodes.tsv` records. The pair input needs `parent_source` and `motion_source` columns; it may also be the output file, because all input is read before writing. The script rejects missing model/node records and duplicate node indices.
+
+```powershell
+.\tools\LtbStructureAudit\CompareMotion.ps1 `
+  -Models docs\evidence\fireaim-marker-20261105-structure-models.tsv `
+  -Nodes docs\evidence\fireaim-marker-20261105-skeleton-nodes.tsv `
+  -Pairs docs\evidence\fireaim-marker-20261105-motion-compatibility.tsv `
+  -Output C:\Reports\motion-compatibility.tsv
+```
+
+The output includes name overlap, non-root matches, duplicate names, hierarchy/bind-matrix equality and an animation-count limit check. The default limit is 1,024 for the pinned [RezView reader reviewed here](../../docs/rezview-animation-reference.md); it can be supplied with `-ViewerAnimationLimit`. Passing `any_name_gate_passes` means only that at least one node name overlaps. It does not establish a valid animation binding or actual behavior of the external program. The FireAim arms pass that weak condition through `Scene Root` alone, while none of their non-root names match the motion source.
