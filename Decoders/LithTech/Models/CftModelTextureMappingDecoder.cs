@@ -585,9 +585,11 @@ internal static class CftModelTextureMappingDecoder
         string modelColumn,
         string? modelSide)
     {
+        bool characterBody = GetCharacterBodyModelSide(modelColumn) is not null;
+        bool characterItem = GetCharacterItemModelSide(modelColumn) is not null;
         CftTextureReference[] compatibleTextures = textureReferences
             .Where(texture =>
-                HaveCompatibleResourceSides(modelSide, texture, GetCharacterBodyModelSide(modelColumn) is not null) &&
+                HaveCompatibleResourceSides(modelSide, texture, characterBody, characterItem) &&
                 HaveCompatibleResourceRoles(modelColumn, texture, textureReferences))
             .DistinctBy(texture => $"{texture.ColumnIndex}\n{texture.Path}", StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -648,6 +650,21 @@ internal static class CftModelTextureMappingDecoder
             "BLSOCKETITEMMODELFILE" or "BLFSOCKETITEMMODELFILE" => "BL",
             _ => null
         };
+    }
+
+    internal static bool TryGetCharacterItemTextureSlot(string columnName, out string side, out int slot)
+    {
+        string column = columnName.TrimStart('_');
+        side = ""; slot = -1;
+        foreach (string candidate in new[] { "GR", "BL" })
+        {
+            string prefix = candidate + "TexFile";
+            if (!column.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) continue;
+            side = candidate;
+            if (column.Equals(prefix, StringComparison.OrdinalIgnoreCase)) { slot = 0; return true; }
+            return TryGetTextureSlotIndex(columnName, out slot);
+        }
+        return false;
     }
 
     internal static string? GetCharacterBodyModelSide(string columnName)
@@ -733,6 +750,10 @@ internal static class CftModelTextureMappingDecoder
         CftTextureReference texture,
         IReadOnlyList<CftTextureReference> rowTextures)
     {
+        // These columns belong to CharacterItem's primary side models. A DTX
+        // mistakenly stored in a model column is not a socket texture field.
+        if (GetCharacterItemModelSide(modelColumn) is not null)
+            return TryGetCharacterItemTextureSlot(texture.Column, out _, out _);
         bool modelIsPlayerView = IsPlayerViewColumn(modelColumn);
         bool textureIsPlayerView = IsPlayerViewColumn(texture.Column);
         if (modelIsPlayerView != textureIsPlayerView)
@@ -787,10 +808,11 @@ internal static class CftModelTextureMappingDecoder
             : index;
     }
 
-    private static bool HaveCompatibleResourceSides(string? modelSide, CftTextureReference texture, bool characterBody)
+    private static bool HaveCompatibleResourceSides(string? modelSide, CftTextureReference texture, bool characterBody, bool characterItem)
     {
         string? textureSide = characterBody && TryGetCharacterBodyTextureSlot(texture.Column, out string declaredSide, out _)
-            ? declaredSide : GetResourceSide(texture.Column) ?? GetResourceSide(texture.Path);
+            ? declaredSide : characterItem && TryGetCharacterItemTextureSlot(texture.Column, out string itemSide, out _)
+                ? itemSide : GetResourceSide(texture.Column) ?? GetResourceSide(texture.Path);
         return string.IsNullOrWhiteSpace(modelSide) ||
                string.IsNullOrWhiteSpace(textureSide) ||
                string.Equals(textureSide, modelSide, StringComparison.OrdinalIgnoreCase);

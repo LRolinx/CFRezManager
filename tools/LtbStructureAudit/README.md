@@ -34,6 +34,8 @@ Pass this tool's completed `--channels` report to the skin tool's `--poses` opti
 
 The [body inventory](../../docs/evidence/character-bodies-20261105-structure-models.tsv) adds 947 complete physical files with 27,776 nodes, 7,502 sockets, 1,894 blend masks and 946 external child declarations. None contains an embedded animation. An [independent reader](../../docs/evidence/character-bodies-20261105-structure-validation.tsv) reproduced every retained value and consumed each file completely. Child paths remain declarations; physical motion selection and playback compatibility are unverified.
 
+The [full CharacterItem inventory](../../docs/evidence/characteritem-all-20261105-structure-models.tsv) covers 2,666 physical LTBs, including earlier accessory samples. It retains 8,600 nodes, 2,666 embedded animations, 109 blend masks, 2,666 self bindings and one socket. The [independent comparison](../../docs/evidence/characteritem-all-20261105-structure-validation.tsv) reproduces all records and complete file consumption. Raw attachment enums remain separate from external bone bindings, and the inventory does not evaluate poses.
+
 ## Channel inspection
 
 ```powershell

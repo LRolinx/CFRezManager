@@ -10493,17 +10493,8 @@ internal static class LithTechModelTextureConfigIndex
 
     private static bool TryGetCharacterItemTextureSlotForSide(string columnName, string side, out int slot)
     {
-        slot = -1;
-        string normalized = columnName.TrimStart('_');
-        string prefix = side + "TexFile";
-        if (string.Equals(normalized, prefix, StringComparison.OrdinalIgnoreCase))
-        {
-            slot = 0;
-            return true;
-        }
-
-        return normalized.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) &&
-               CftModelTextureMappingDecoder.TryGetTextureSlotIndex(columnName, out slot);
+        return CftModelTextureMappingDecoder.TryGetCharacterItemTextureSlot(columnName, out string declaredSide, out slot) &&
+               declaredSide.Equals(side, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsUnindexedCftSkinFileName(string columnName)

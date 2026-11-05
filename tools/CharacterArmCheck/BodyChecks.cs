@@ -6,6 +6,7 @@ static partial class Program
 {
     const string BodyPath = "Models/Character/Shared_GR.ltb";
     const string RoyalPath = "Models/Character/BattleRoyal/Shared_GR_BR.ltb";
+    static readonly string MissingBodyTexture = "ModelTextures/Character/BodyCheck/Missing_" + Guid.NewGuid().ToString("N") + ".png";
     static string BodyTexture(int row, string side, int slot) => $"ModelTextures/Character/BodyCheck/Row{row}_{slot}_{(side == "GR" ? "BL" : "GR")}.png";
     static void RunBodyChecks(string run)
     {
@@ -51,10 +52,10 @@ static partial class Program
         }
         foreach (string model in new[] { BodyPath, RoyalPath }) foreach (int slot in new[] { 0, 1 })
             Check("shared body requires side " + model + " slot " + slot, resolver(model, "row:CharacterType.CFT#0", slot).Count == 0);
-        File.Move(Path.Combine(source, BodyTexture(0, "BL", 0)), Path.Combine(source, BodyTexture(0, "BL", 0)) + ".removed");
+        File.WriteAllBytes(Path.Combine(source, "Table/CharacterType.CFT"), BodyTable(missingBlBase: true));
         var missing = (Func<string, string, int, IReadOnlyList<string>>)Call("LithTechModelTextureConfigIndex", "CreateTextureContextSlotResolver", Root())!;
         Check("missing BL body declaration does not become a GR default", missing(BodyPath, "row:CharacterType.CFT#0", 0).Count == 0);
-        Check("missing BL body remains the selected declared reference", missing(BodyPath, "row:CharacterType.CFT#0:BL", 0).Select(Key).SequenceEqual(new[] { Key(BodyTexture(0, "BL", 0)) }));
+        Check("missing BL body remains the selected declared reference", missing(BodyPath, "row:CharacterType.CFT#0:BL", 0).Select(Key).SequenceEqual(new[] { Key(MissingBodyTexture) }));
         Check("missing BL body keeps its valid second texture", missing(BodyPath, "row:CharacterType.CFT#0:BL", 1).Select(Key).SequenceEqual(new[] { Key(BodyTexture(0, "BL", 1)) }));
         string missingObj = Path.Combine(run, "body-missing.obj"); TextWriter saved = Console.Out; int missingCode;
         using (var log = new StringWriter())
@@ -71,7 +72,7 @@ static partial class Program
         var invalid = (Func<string, string, int, IReadOnlyList<string>>)Call("LithTechModelTextureConfigIndex", "CreateTextureContextSlotResolver", Root())!;
         foreach (string side in new[] { "GR", "BL" }) Check("invalid physical body copy prevents base slot binding " + side, invalid(BodyPath, "row:CharacterType.CFT#0:" + side, 0).Count == 0);
     }
-    static byte[] BodyTable()
+    static byte[] BodyTable(bool missingBlBase = false)
     {
         string[] columns = ["_RealCharacterType", "_ItemName", "_ResourceName", "_ItemID", "_ItemCode", "_ButeType", "_GRModelFile", "_BLModelFile", "_GRModelFile2", "_BLModelFile2", "_BattleRoyal_GRModelFile", "_BattleRoyal_BLModelFile", "_GRTextureFile", "_GRTextureFile2", "_BLTextureFile", "_BLTextureFile2"];
         using var output = new MemoryStream(); using var w = new BinaryWriter(output); w.Write(new byte[8718]); output.Position = 0; w.Write(Encoding.ASCII.GetBytes("su")); output.Position = 6; w.Write(columns.Length); w.Write(2);
@@ -80,7 +81,7 @@ static partial class Program
         for (int row = 0; row < 2; row++)
         {
             w.Write(row + 300);
-            object[] values = [0, "Body" + row, "BodyCheck", (row + 800).ToString(), "B" + row, 0, BodyPath, BodyPath, BodyPath, BodyPath, RoyalPath, RoyalPath, BodyTexture(row, "GR", 0), BodyTexture(row, "GR", 1), BodyTexture(row, "BL", 0), BodyTexture(row, "BL", 1)];
+            object[] values = [0, "Body" + row, "BodyCheck", (row + 800).ToString(), "B" + row, 0, BodyPath, BodyPath, BodyPath, BodyPath, RoyalPath, RoyalPath, BodyTexture(row, "GR", 0), BodyTexture(row, "GR", 1), missingBlBase && row == 0 ? MissingBodyTexture : BodyTexture(row, "BL", 0), BodyTexture(row, "BL", 1)];
             foreach (object value in values) if (value is int n) w.Write(n); else { byte[] b = Encoding.Unicode.GetBytes((string)value); w.Write((ushort)b.Length); w.Write(b); }
         }
         w.Write(Encoding.ASCII.GetBytes("END" + new string(' ', 61))); w.Write((byte)0); return output.ToArray();
