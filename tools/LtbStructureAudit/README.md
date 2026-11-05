@@ -1,5 +1,7 @@
 # LTB structure audit
 
+The [UGC structure comparison](../../docs/evidence/ugc-20261105-structure-validation.tsv) independently verifies 1,104 complete native files, 2,554 nodes, 18,100 embedded animations, 312 sockets and 38 blend masks. Six external child declarations have 18 saved physical candidates with matching hierarchies; only two match bind matrices. Four render-style files and two legacy smoke-grenade models keep separate error rows. This snapshot does not inspect channels, skinning or poses. [LTA/LTC shape and UV evidence](../../docs/evidence/ugc-20261105-text-model-meshes.tsv) is separate from native structure validation. All 128 structure guards pass.
+
 Run from the repository with the .NET 8 SDK on Windows:
 
 ```powershell

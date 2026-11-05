@@ -5,18 +5,18 @@
 ## Status
 
 - `exported-slot`: the focused OBJ export's texture-slot report marked this model, mesh, and slot as exported.
-- `exported-slot-unverified`: the export wrote a texture, but conflicting physical copies or multiple side-specific fields leave the intended binding unconfirmed. The written texture must not be treated as a confirmed game mapping.
+- `exported-slot-unverified`: the export wrote a texture, but the intended binding remains unconfirmed. Causes include conflicting copies, multiple side-specific fields, filename fallbacks, unverified legacy slots and motion-model texture ownership. The written texture must not be treated as a confirmed game mapping.
 - `table-declared-slot-unverified`: a typed CFT row declares the model and texture fields, but the model slot has not been verified by export.
 - `model-resource-missing`: the table declares the model, but the current resource scan did not find its file. Any listed texture and motion paths remain table declarations.
 - `model-reference-incomplete`: the source field names a directory without a complete model filename. The record retains the original field and any same-side texture declaration; no model slot is established.
-- `slot-unresolved`: the model and slot were decoded, but the focused export did not establish a texture binding, including cases where the logical path is known but its physical copies conflict.
+- `slot-unresolved`: the model was decoded, but the focused export did not establish a texture binding. This includes conflicting physical texture copies and models without an authoritative texture stage.
 
 Rows describe individual slots. A successful row can coexist with other unresolved meshes in the same OBJ export.
 
 ## Fields
 
 - `model_path` and `texture_path` use paths relative to the game resource root.
-- `global_texture_slot` is the LTB skin slot; it is blank until slot evidence exists.
+- `global_texture_slot` is the serialized model texture slot from native LTB data or an LTA/LTC shape; it is blank until slot evidence exists.
 - `mapping_source_or_field` names the resolver source for exported slots or the CFT field for declared relationships.
 - `skeleton_or_bone_names` records a node count and hierarchy hash when inspected; the linked node table retains every name and parent. Counts include the scene root.
 - `bone_or_socket_binding` records embedded model sockets, inspected native vertex-skin methods, sampled pose status or the raw CFT attachment target type. The linked tables retain physical sources, bone indices and weighted vertex/corner counts. An embedded socket does not establish which accessory uses it. Blank values mean unknown, not absent.
@@ -27,7 +27,25 @@ Starting with v1.2.7, opening a CFT displays all decoded rows in a table with ro
 
 ## Snapshot
 
-The register contains 25,750 records: 22,339 confirmed exports, 1,264 unresolved slots, 75 written but unverified slots, 365 declarations without a matching decoded slot, 1,704 missing-model declarations and three incomplete model references. Records include explicit row and side contexts, so several records can describe different selected skins on the same model slot. These are recorded samples, not a full-game coverage count. Physical model copies remain separate in the evidence tables and are deduplicated by context, logical model, mesh name and slot in the register.
+The register contains 31,503 records: 27,063 confirmed exports, 2,202 unresolved slots, 113 written but unverified slots, 391 declarations without a matching decoded slot, 1,731 missing-model declarations and three incomplete model references. Records include explicit row and side contexts, so several records can describe different selected skins on the same model slot. These are recorded samples, not a full-game coverage count. Physical model copies remain separate in the evidence tables and are deduplicated by context, logical model, mesh name and slot in the register.
+
+### UGC assets
+
+The [44-table inventory](evidence/ugc-20261105-tables.tsv) retains all 10,881 rows and [176,892 field values](evidence/ugc-20261105-raw-fields.tsv). The [declaration comparison](evidence/ugc-20261105-cft-validation.tsv) covers 2,112 model cases, including 13 related motion references and 272 object-catalog models without row texture fields. The complete CFT audit still has 13,595 typed model rows; its only [two changes](evidence/ugc-20261105-cft-delta.tsv) preserve the previously filtered `MAP2/ALPHA.DTX` field. That field has no matching slot 3 in the inspected model and remains a declaration; it does not replace the model's slot 31. Eight tables retain unexplained non-padding data after their END markers, with trailer hashes recorded separately from row fields.
+
+LTA/LTC geometry now reads texture indices and render-style indices from its owning shape. Independent `tex-fs` indices preserve each triangle corner's UV, splitting shared positions at UV seams. The [text-model comparison](evidence/ugc-20261105-text-model-meshes.tsv) checks all 2,493 meshes from [776 LTCs and one LTA](evidence/ugc-20261105-text-model-sources.tsv); 2,490 meshes have UV seams and explicit shape slots. The remaining three retain geometry without inventing slot metadata. This comparison independently parses decoded text; LTC decompression itself and text-model skeleton playback are not independently validated.
+
+Of [2,112 export cases](evidence/ugc-20261105-jobs.tsv), 2,097 export geometry and 15 have missing model resources. The [triangle-corner comparison](evidence/ugc-20261105-job-validation.tsv) preserves every exported face position against the preceding source version; UV seam splitting changes vertex indexing. The [5,970 requested-model stage witnesses](evidence/ugc-20261105-export-slots.tsv) contain 4,754 confirmed outputs, 1,103 unresolved slots and 113 written but unverified outputs. There are 2,097 new confirmed LTC texture outputs. The unverified outputs include 92 motion-model witnesses whose texture ownership is unproven, ten legacy smoke-grenade witnesses and eleven object filename fallbacks.
+
+The exporter's existing numbered-sibling grouping adds 68,704 stage witnesses, retained as [3,465 aggregate records](evidence/ugc-20261105-grouped-export-slots.tsv) with their source paths and job lists. These do not establish CFT ownership and are kept outside the register's requested-model rows. Seven new sibling outputs remain unverified. Across requested and grouped stages, 32,723 written PNGs remain byte-identical, and every written image matches a unique decoded source pixel result. The [family coverage](evidence/ugc-20261105-numbered-family-coverage.tsv) accounts for all 1,877 physical files in the tested export groups; supplemental files are included in the affected 16 repeated exports.
+
+The [5,433-resource snapshot](evidence/ugc-20261105-resources.tsv) contains 1,110 LTB-extension files, 777 text models, 3,003 DTXs, 499 PNGs and 44 CFTs. A [fresh scan of 482 archives](evidence/ugc-20261105-archive-scan.tsv) reproduces every stored SHA-256. All DTXs decode; [17 logical texture paths](evidence/ugc-20261105-texture-conflicts.tsv) have conflicting physical pixels. The [5,951 exact paths and probes](evidence/ugc-20261105-targets.tsv) retain 579 absent entries separately from the 15 missing-model cases.
+
+The [native structure inventory](evidence/ugc-20261105-structure-models.tsv) has 1,104 complete models, [2,554 nodes](evidence/ugc-20261105-nodes.tsv), [18,100 embedded animations](evidence/ugc-20261105-animations.tsv), [312 sockets](evidence/ugc-20261105-sockets.tsv), [38 blend masks](evidence/ugc-20261105-weight-sets.tsv) and 18,100 self animation bindings. The [independent reader](evidence/ugc-20261105-structure-validation.tsv) reproduces every saved value and complete file consumption. Four [excluded files](evidence/ugc-20261105-excluded-native.tsv) are declared render styles; two are legacy smoke-grenade models with an unvalidated structure version. Their geometry export does not validate their skeletons or slot layout. This batch does not inspect native animation channels, vertex skinning or sampled poses.
+
+Six external child declarations retain [18 physical candidates](evidence/ugc-20261105-child-candidates.tsv). All share their parent's node hierarchy; only two share its bind matrices. [Socket declarations](evidence/ugc-20261105-socket-declarations.tsv) retain 36 item rows and raw parent indices without assigning parent semantics or transforms. The [554 animation declaration/candidate rows](evidence/ugc-20261105-animation-declarations.tsv) preserve names, PVIndex values and physical animation indices; matching names do not establish a runtime animation binding.
+
+The object table retains [18,593 catalog candidates](evidence/ugc-20261105-object-texture-candidates.tsv) by matching its declared indices to texture-table RecordId candidates. A scene's texture selector is still needed to establish a binding; the allowed set supplies no automatic default. The [588 context/format checks](evidence/ugc-20261105-guards.tsv), [49 texture checks](evidence/ugc-20261105-texture-guards.tsv), [90 native checks](evidence/ugc-20261105-native-guards.tsv) and [128 structure checks](evidence/ugc-20261105-structure-guards.tsv) all pass. These records describe the source and do not create a new release.
 
 ### Dolls and first-person accessories
 

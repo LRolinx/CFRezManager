@@ -570,16 +570,11 @@ internal static class CftModelTextureMappingDecoder
             return false;
         }
 
-        // Some typed texture fields point into the model directory itself.
-        if (value.StartsWith("Models/", StringComparison.OrdinalIgnoreCase))
-            return IsSupportedTextureExtension(value);
-
-        if (value.Contains('/') || value.Contains('\\'))
-        {
-            return false;
-        }
-
-        return IsSupportedTextureExtension(value);
+        // Typed fields can reference other archive folders, such as Map2/alpha.dtx.
+        // Keep these references relative to the resource root.
+        return IsSupportedTextureExtension(value) &&
+            !Path.IsPathRooted(value) && !value.Contains(':') &&
+            !value.Split('/').Any(segment => segment is "." or "..");
     }
 
     private static bool IsSupportedTextureExtension(string value)

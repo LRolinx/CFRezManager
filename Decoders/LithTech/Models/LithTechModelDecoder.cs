@@ -1153,11 +1153,7 @@ internal static class LithTechModelDecoder
             }
             else if (isModel || isShape)
             {
-                meshes = FindListsByHead(root, "mesh")
-                    .Select(ParseMesh)
-                    .Where(mesh => mesh is not null)
-                    .Cast<LithTechMesh>()
-                    .ToList();
+                meshes = ParseModelMeshes(root);
             }
             else
             {
@@ -1311,6 +1307,62 @@ internal static class LithTechModelDecoder
         }
     }
 
+    private static List<LithTechMesh> ParseModelMeshes(LtaList root)
+    {
+        var meshes = new List<LithTechMesh>();
+        Visit(root, null);
+        return meshes;
+
+        void Visit(LtaList node, LtaList? shape)
+        {
+            if (IsHead(node, "shape")) shape = node;
+            if (IsHead(node, "mesh"))
+            {
+                LithTechMesh? mesh = ParseMesh(node);
+                if (mesh is not null)
+                {
+                    if (shape is not null && TryReadShapeBinding(shape, out int[] slots, out int? renderStyle))
+                        mesh = mesh with { TextureSlotIndices = slots, RenderStyleIndex = renderStyle, HasAuthoritativeTextureBindings = true };
+                    meshes.Add(mesh);
+                }
+                return;
+            }
+            foreach (LtaList child in node.Children) Visit(child, shape);
+        }
+    }
+
+    private static bool TryReadShapeBinding(LtaList shape, out int[] slots, out int? renderStyle)
+    {
+        slots = []; renderStyle = null;
+        LtaList? indices = shape.Children.FirstOrDefault(child => IsHead(child, "texture-indices"));
+        if (indices is null || !TryReadIntegers(indices.Items.Skip(1), 0, byte.MaxValue, 4, out slots)) return false;
+        LtaList? style = shape.Children.FirstOrDefault(child => IsHead(child, "renderstyle-index"));
+        if (style is null) return true;
+        if (!TryReadIntegers(style.Items.Skip(1), 0, int.MaxValue, 1, out int[] styles) || styles.Length != 1) return false;
+        renderStyle = styles[0];
+        return true;
+    }
+
+    private static bool TryReadIntegers(IEnumerable<object> items, int minimum, int maximum, int capacity, out int[] values)
+    {
+        var result = new List<int>();
+        bool valid = Read(items); values = valid ? result.ToArray() : [];
+        return valid;
+
+        bool Read(IEnumerable<object> entries)
+        {
+            foreach (object item in entries)
+            {
+                if (item is LtaList list) { if (!Read(list.Items)) return false; }
+                else if (item is not LtaAtom atom ||
+                         !int.TryParse(atom.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value) ||
+                         value < minimum || value > maximum || result.Count >= capacity) return false;
+                else result.Add(value);
+            }
+            return true;
+        }
+    }
+
     private static LithTechMesh? ParseMesh(LtaList meshNode)
     {
         string name = GetAtomValue(meshNode.Items.Skip(1).FirstOrDefault()) ?? "Mesh";
@@ -1322,10 +1374,17 @@ internal static class LithTechModelDecoder
         }
 
         List<LithTechVector3> vertices = ParseVector3List(vertexNode);
-        List<int> triangleIndices = ParseIntList(triNode)
-            .Where(index => index >= 0 && index < vertices.Count)
-            .ToList();
-        List<LithTechVector2>? textureCoordinates = ParseTextureCoordinates(meshNode, vertices.Count);
+        if (!TryReadIntegers(triNode.Items.Skip(1), int.MinValue, int.MaxValue, int.MaxValue, out int[] rawIndices)) return null;
+        var triangleIndices = new List<int>();
+        var sourceCorners = new List<int>();
+        for (int corner = 0; corner + 2 < rawIndices.Length; corner += 3)
+        {
+            if (rawIndices[corner] < 0 || rawIndices[corner] >= vertices.Count ||
+                rawIndices[corner + 1] < 0 || rawIndices[corner + 1] >= vertices.Count ||
+                rawIndices[corner + 2] < 0 || rawIndices[corner + 2] >= vertices.Count) continue;
+            for (int offset = 0; offset < 3; offset++) { triangleIndices.Add(rawIndices[corner + offset]); sourceCorners.Add(corner + offset); }
+        }
+        List<LithTechVector2>? textureCoordinates = ParseTextureCoordinates(meshNode, vertices, triangleIndices, sourceCorners, rawIndices.Length);
         string? texturePath = FindTexturePath(meshNode);
         List<string> materialHints = FindMaterialHints(meshNode);
 
@@ -1428,9 +1487,10 @@ internal static class LithTechModelDecoder
         return result;
     }
 
-    private static List<LithTechVector2>? ParseTextureCoordinates(LtaList meshNode, int vertexCount)
+    private static List<LithTechVector2>? ParseTextureCoordinates(
+        LtaList meshNode, List<LithTechVector3> vertices, List<int> triangles, IReadOnlyList<int> sourceCorners, int rawCornerCount)
     {
-        if (vertexCount <= 0)
+        if (vertices.Count <= 0)
         {
             return null;
         }
@@ -1438,10 +1498,34 @@ internal static class LithTechModelDecoder
         foreach (LtaList coordinateNode in FindListsByHeads(meshNode, LtaTextureCoordinateHeads))
         {
             List<LithTechVector2> coordinates = ParseVector2List(coordinateNode);
-            if (coordinates.Count == vertexCount)
+            if (coordinates.Count == 0 || coordinates.Any(uv => !double.IsFinite(uv.X) || !double.IsFinite(uv.Y))) continue;
+            LtaList? faces = meshNode.Children.FirstOrDefault(child => IsHead(child, "tex-fs"));
+            if (faces is null)
             {
-                return coordinates;
+                if (coordinates.Count == vertices.Count) return coordinates;
+                continue;
             }
+
+            if (!TryReadIntegers(faces.Items.Skip(1), int.MinValue, int.MaxValue, rawCornerCount, out int[] indices) ||
+                indices.Length != rawCornerCount || sourceCorners.Any(corner => indices[corner] < 0 || indices[corner] >= coordinates.Count)) return null;
+
+            // LTA UV indices address triangle corners independently of positions.
+            // Keep source vertices and duplicate only the position/UV seams.
+            var result = Enumerable.Repeat(new LithTechVector2(0, 0), vertices.Count).ToList();
+            int[] firstUv = Enumerable.Repeat(-1, vertices.Count).ToArray();
+            var seams = new Dictionary<(int Vertex, int Uv), int>();
+            for (int corner = 0; corner < triangles.Count; corner++)
+            {
+                int vertex = triangles[corner], uv = indices[sourceCorners[corner]];
+                if (!seams.TryGetValue((vertex, uv), out int target))
+                {
+                    if (firstUv[vertex] < 0) { firstUv[vertex] = uv; target = vertex; result[target] = coordinates[uv]; }
+                    else { target = vertices.Count; vertices.Add(vertices[vertex]); result.Add(coordinates[uv]); }
+                    seams.Add((vertex, uv), target);
+                }
+                triangles[corner] = target;
+            }
+            return result;
         }
 
         return null;
