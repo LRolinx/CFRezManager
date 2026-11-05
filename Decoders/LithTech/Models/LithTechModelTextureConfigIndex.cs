@@ -4169,6 +4169,29 @@ internal static class LithTechModelTextureConfigIndex
                     }
                 }
 
+                // Unnumbered socket-item skins require a single native slot and verified exact DTX copies.
+                if (TryGetUnnumberedCharacterItemTexturePath(configItem.Path, mapping, out string characterItemTexturePath) &&
+                    modelItemsByPath.TryGetValue(
+                        GetLogicalModelResourcePath(modelResourcePath),
+                        out ExplorerItem[]? characterItemModels) &&
+                    TryGetConsistentLtcModelSlots(characterItemModels, decodedModels, out int[] characterItemSlots) &&
+                    characterItemSlots.Length == 1 && characterItemSlots[0] == 0 &&
+                    HasConsistentDecodableDtxCopies(
+                        characterItemTexturePath,
+                        textureItemsByLogicalPath,
+                        verifiedTexturePathCache))
+                {
+                    AddModelTextureSlotMapping(byModelPath, modelPath, 0, characterItemTexturePath);
+                    foreach (string contextKey in contextKeys)
+                    {
+                        AddModelTextureContextSlotMapping(
+                            byModelContext, modelPath, contextKey, 0, characterItemTexturePath);
+                    }
+
+                    modelsWithSlotSpecificBindings.Add(modelPath);
+                    continue;
+                }
+
                 if (string.Equals(
                         Path.GetFileName(configItem.Path),
                         "Parts.CFT",
@@ -10321,6 +10344,36 @@ internal static class LithTechModelTextureConfigIndex
         }
 
         return result;
+    }
+
+    private static bool TryGetUnnumberedCharacterItemTexturePath(
+        string tablePath,
+        CftModelTextureMapping mapping,
+        out string texturePath)
+    {
+        texturePath = string.Empty;
+        if (!string.Equals(Path.GetFileName(tablePath), "CharacterItem.CFT", StringComparison.OrdinalIgnoreCase) ||
+            !(string.Equals(mapping.ModelColumn, "_GRSocketItemModelFile", StringComparison.OrdinalIgnoreCase) ||
+              string.Equals(mapping.ModelColumn, "_BLSocketItemModelFile", StringComparison.OrdinalIgnoreCase)) ||
+            mapping.TextureReferences.Count == 0 ||
+            mapping.TextureReferences.Any(texture =>
+                !string.Equals(texture.Column.TrimStart('_'), "BLTexFile", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(texture.Column.TrimStart('_'), "GRTexFile", StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        string[] paths = mapping.TextureReferences.Select(texture => NormalizeKey(texture.Path))
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        if (paths.Length != 1 ||
+            !paths[0].StartsWith("ModelTextures/SocketItem/", StringComparison.OrdinalIgnoreCase) ||
+            !Path.GetExtension(paths[0]).Equals(".dtx", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        texturePath = paths[0];
+        return true;
     }
 
     private static bool IsUnindexedCftSkinFileName(string columnName)

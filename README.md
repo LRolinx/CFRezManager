@@ -190,6 +190,7 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 - 未编号 `SkinFileName` 只会在父子模型所有物理副本均解码并含槽 0，且贴图与父模型已有直接槽 0 映射完全一致时，传给动作模型槽 0；其余皮肤字段仍按明确编号匹配。
 - AI 铁扇公主缺失的 `AI_PrincessIron_HAIR.dtx` 只在 `AI_Boss_PrincessIron` 主模型、关联动作模型和槽 2 均匹配时回退到唯一存在的 `PrincessIron_PC_HAIR.dtx`；动作发丝网格与 CFT 绑定的 `PrincessIron_PC_Hair` 模型共有 1,607/1,663 个 UV 三角形。
 - `Parts.CFT` 的单贴图字段只在对应模型所有物理副本都能解码且使用同一个唯一材质槽时绑定；贴图按 CFT 精确路径解析。同一路径的 DTX 副本必须全部可解码；原始字节不同时，解码后的尺寸和像素也必须一致。
+- `CharacterItem.CFT` 的 `_BLTexFile` / `_GRTexFile` 未编号字段，仅在同一强类型行的 Socket 模型所有副本都只使用槽 0、所有字段指向同一精确 DTX 且贴图副本解码一致时绑定槽 0。带编号字段和多槽模型仍按原有槽位证据解析。
 - EvilDen CutScene02 的 Dark/Fire 主体与动作模型，只有在每个物理副本的龙网格名、UV 三角布局、声明槽位和 RenderStyle 均匹配 CFT 绑定的 socket/主模型，且 DTX 副本 MD5 一致时，才将槽 0/1/2 对应到 Map01/02/03。Uma 和石块槽不沿用这组贴图。
 - `--inspect-ltb-header`：列出匹配 LTB 副本的原始/解压头部和文件类型；模型会重试几何解码，D3D RenderStyle 会调用对应解码器并报告 style/pass 数量。`--all-renderstyles` 可一次检查并解码全部已知路径/命名的 RenderStyle。
 - `--model` 可重复指定多个模型；它们会导出到同一 OBJ，并保留各网格与材质分组。
@@ -368,7 +369,8 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 ## v1.2.5 更新
 
 - 新增随程序发布的模型贴图参考清单，区分已导出确认的槽位和 CFT 已声明但槽位待验证的关系，并记录可确认的动作模型路径。
-- 更新当前游戏目录的 CFT/LTC 盘点；FireAim Marker 的身体、手臂和配件路径已入表，贴图槽位等待聚焦导出验证。
+- 修复 `CharacterItem.CFT` 单槽配件未编号贴图字段不进入明确槽位映射的问题，导出报告现在能记录这类有直接表证据的槽 0 绑定。
+- FireAim Marker 的 11 个现存模型已聚焦导出：20 个网格槽位中 19 个导出贴图，未跳过几何。BL 头发主槽仍未绑定，CFT 声明的 3 个 `_INDEXED` 模型未找到；资源哈希和导出证据随清单保存。
 - 更新中英文说明书和 GitHub Release 文案，版本号提升到 `v1.2.5`。
 
 ## v1.2.4 更新
