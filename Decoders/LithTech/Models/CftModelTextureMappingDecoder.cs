@@ -13,7 +13,10 @@ internal sealed record CftModelTextureMapping(
     string ModelColumn,
     int ModelColumnIndex,
     bool HasTypedRowContext,
-    IReadOnlyList<string>? RelatedModelReferences = null);
+    IReadOnlyList<string>? RelatedModelReferences = null)
+{
+    public IReadOnlyList<string> ModelColumns { get; init; } = [];
+}
 
 internal sealed record CftTextureReference(
     string Path,
@@ -181,6 +184,7 @@ internal static class CftModelTextureMappingDecoder
             }
 
             var modelReferences = new Dictionary<string, (string Column, int ColumnIndex)>(StringComparer.OrdinalIgnoreCase);
+            var modelColumnsByReference = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
             var textureReferences = new List<CftTextureReference>();
             var seenTextureReferences = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var identityAliases = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -211,6 +215,13 @@ internal static class CftModelTextureMappingDecoder
                         if (IsModelReference(columnNames[column], normalized))
                         {
                             modelReferences.TryAdd(normalized, (columnNames[column], column));
+                            if (!modelColumnsByReference.TryGetValue(normalized, out List<string>? modelColumns))
+                            {
+                                modelColumns = [];
+                                modelColumnsByReference.Add(normalized, modelColumns);
+                            }
+
+                            modelColumns.Add(columnNames[column]);
                         }
                         else if (IsTextureReference(columnNames[column], normalized))
                         {
@@ -284,7 +295,14 @@ internal static class CftModelTextureMappingDecoder
 
             foreach ((string modelReference, (string modelColumn, int modelColumnIndex)) in modelReferences)
             {
-                string? modelSide = GetResourceSide(modelColumn) ?? GetResourceSide(modelReference);
+                string[] socketSides = modelColumnsByReference[modelReference]
+                    .Select(GetCharacterItemModelSide)
+                    .OfType<string>()
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                string? modelSide = socketSides.Length > 1
+                    ? null
+                    : socketSides.Length == 1 ? socketSides[0] : GetResourceSide(modelColumn) ?? GetResourceSide(modelReference);
                 CftTextureReference[] pairedTextures = SelectTextureReferences(
                     textureReferences,
                     modelReference,
@@ -303,7 +321,10 @@ internal static class CftModelTextureMappingDecoder
                         HasTypedRowContext: true,
                         RelatedModelReferences: modelReferences.Keys
                             .Where(reference => !string.Equals(reference, modelReference, StringComparison.OrdinalIgnoreCase))
-                            .ToArray()));
+                            .ToArray())
+                    {
+                        ModelColumns = modelColumnsByReference[modelReference].ToArray()
+                    });
                 }
             }
         }
@@ -577,8 +598,7 @@ internal static class CftModelTextureMappingDecoder
         // CharacterItem socket rows use BL/GRTexFile for the base skin alongside
         // BL/GRTexFile2 and later numbered fields. Preserve the base declaration;
         // the config index validates its native slot before binding it.
-        bool hasSocketItemModel = modelColumn.Equals("_GRSocketItemModelFile", StringComparison.OrdinalIgnoreCase) ||
-                                  modelColumn.Equals("_BLSocketItemModelFile", StringComparison.OrdinalIgnoreCase);
+        bool hasSocketItemModel = GetCharacterItemModelSide(modelColumn) is not null;
         // Numbered fields are explicit engine slots. Do not let a same-stem
         // texture short-circuit the rest of a row's slot list (for example,
         // TextureFile1 matching the model name while TextureFile2/3 are skins).
@@ -612,6 +632,16 @@ internal static class CftModelTextureMappingDecoder
         }
 
         return compatibleTextures;
+    }
+
+    internal static string? GetCharacterItemModelSide(string columnName)
+    {
+        return columnName.TrimStart('_').ToUpperInvariant() switch
+        {
+            "GRSOCKETITEMMODELFILE" or "GRFSOCKETITEMMODELFILE" => "GR",
+            "BLSOCKETITEMMODELFILE" or "BLFSOCKETITEMMODELFILE" => "BL",
+            _ => null
+        };
     }
 
     internal static bool TryGetTextureSlotIndex(string columnName, out int slotIndex)

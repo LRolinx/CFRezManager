@@ -23,7 +23,8 @@ CF Rez Manager is a Windows WPF tool for browsing, searching, previewing, extrac
 
 - The [model-to-texture reference register](docs/asset-mapping-register.tsv) ships with the application. It records exported slots and CFT-declared model, texture, and motion-model paths whose slots still need verification; the runtime resolver does not load it as an automatic mapping.
 - The [register field guide](docs/asset-mapping-register.md) explains statuses and blank fields. OBJ export does not preserve bone names or animation tracks; unconfirmed socket bindings stay blank.
-- The register contains 533 confirmed exported slots. Conflicting texture copies, ambiguous GR/BL fields, unresolved slots and missing resources have separate statuses. The CharacterItem batch also retains node and animation records for 272 physical models.
+- The register contains 915 confirmed exported slots, with separate statuses for conflicting texture copies, unresolved slots, missing resources and model fields that name only a directory. The two CharacterItem batches retain node, embedded animation and socket records for 272 and 91 physical models respectively; their resource sets can overlap.
+- When GR, BL or female model columns reference the same CharacterItem model, all column sources are retained. Select skins with separate contexts such as `row:CharacterItem.CFT#2372:GR` and `row:CharacterItem.CFT#2372:BL`. Models with multiple declared skins no longer use a mesh-name guess when identity or side has not been selected.
 
 ## Requirements
 

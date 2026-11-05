@@ -677,6 +677,18 @@ internal static class LithTechModelTextureConfigIndex
         };
     }
 
+    public static Func<string, bool>? CreateCharacterItemSocketMappingPresenceResolver(ExplorerItem root)
+    {
+        TextureConfigIndex index = TextureConfigIndexCache.GetValue(root, BuildIndex);
+        if (index.IsEmpty)
+        {
+            return null;
+        }
+
+        ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index);
+        return modelReference => dictionary.CharacterItemSocketModels.Contains(NormalizeModelResourcePath(modelReference));
+    }
+
     public static Func<string, bool>? CreateModelTextureSlotMappingPresenceResolver(ExplorerItem root)
     {
         TextureConfigIndex index = TextureConfigIndexCache.GetValue(root, BuildIndex);
@@ -1027,7 +1039,7 @@ internal static class LithTechModelTextureConfigIndex
         int resourceCopies = documentGroups.Sum(group => group.Count());
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
         using var writer = new StreamWriter(outputPath, false, new UTF8Encoding(true));
-        writer.WriteLine("source_resources\trow_index\trecord_id\tmodel_column\tmodel_reference\trelated_model_references\ttexture_fields\tidentity_aliases");
+        writer.WriteLine("source_resources\trow_index\trecord_id\tmodel_column\tmodel_reference\trelated_model_references\ttexture_fields\tidentity_aliases\tmodel_columns");
         int decodedDocuments = 0;
         int modelRows = 0;
         int relatedModelReferences = 0;
@@ -1080,7 +1092,8 @@ internal static class LithTechModelTextureConfigIndex
                     EscapeTsv(mapping.ModelReference),
                     EscapeTsv(string.Join(" || ", relatedModels)),
                     EscapeTsv(textures),
-                    EscapeTsv(string.Join(" || ", mapping.IdentityAliases))
+                    EscapeTsv(string.Join(" || ", mapping.IdentityAliases)),
+                    EscapeTsv(string.Join(" || ", mapping.ModelColumns))
                 ]));
             }
         }
@@ -4033,6 +4046,8 @@ internal static class LithTechModelTextureConfigIndex
         var renderStyleByModelContext = new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase);
         var ltcTextureByModelContext = new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase);
         var modelsWithSlotSpecificBindings = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var characterItemSocketModels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var characterItemBasePathsByModel = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
         var deferredCftMotionSkinBindings = new List<DeferredCftMotionSkinBinding>();
         var deferredCftIdentityModelAliasBindings = new List<DeferredCftIdentityModelAliasBinding>();
         var cftPlayerViewRoleTextureCandidates = new Dictionary<
@@ -4171,11 +4186,47 @@ internal static class LithTechModelTextureConfigIndex
 
                 // The explicit base field defines slot 0, including skins outside SocketItem.
                 // Additional slots still require numbered CFT fields and consistent physical copies.
-                if (TryGetUnnumberedCharacterItemTexturePath(configItem.Path, mapping, out string characterItemTexturePath) &&
+                bool isCharacterItemSocket = IsCharacterItemSocketMapping(configItem.Path, mapping);
+                if (isCharacterItemSocket && mapping.TextureReferences.Any(texture =>
+                        TryGetCharacterItemTextureSlotForSide(texture.Column, "GR", out _) ||
+                        TryGetCharacterItemTextureSlotForSide(texture.Column, "BL", out _)))
+                {
+                    // A declared skin remains authoritative when a physical copy
+                    // fails validation or its side has not been selected.
+                    characterItemSocketModels.Add(modelPath);
+                    modelsWithSlotSpecificBindings.Add(modelPath);
+                    if (!characterItemBasePathsByModel.TryGetValue(modelPath, out HashSet<string>? basePaths))
+                    {
+                        basePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        characterItemBasePathsByModel.Add(modelPath, basePaths);
+                    }
+
+                    foreach (CftTextureReference texture in mapping.TextureReferences.Where(texture =>
+                                 texture.Column.Equals("_GRTexFile", StringComparison.OrdinalIgnoreCase) ||
+                                 texture.Column.Equals("_BLTexFile", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        basePaths.Add(NormalizeKey(texture.Path));
+                    }
+
+                    // Missing or invalid skin files do not make another declared
+                    // skin a unique model-wide default. Retain the collision.
+                    if (basePaths.Count > 1)
+                    {
+                        foreach (string path in basePaths)
+                        {
+                            AddModelTextureSlotMapping(byModelPath, modelPath, 0, path);
+                        }
+                    }
+                }
+
+                int[] characterItemSlots = [];
+                bool hasCharacterItemSlots = isCharacterItemSocket &&
                     modelItemsByPath.TryGetValue(
                         GetLogicalModelResourcePath(modelResourcePath),
                         out ExplorerItem[]? characterItemModels) &&
-                    TryGetConsistentLtcModelSlots(characterItemModels, decodedModels, out int[] characterItemSlots) &&
+                    TryGetConsistentLtcModelSlots(characterItemModels, decodedModels, out characterItemSlots);
+                if (hasCharacterItemSlots &&
+                    TryGetUnnumberedCharacterItemTexturePath(configItem.Path, mapping, out string characterItemTexturePath) &&
                     characterItemSlots.Contains(0) &&
                     (characterItemSlots.Length == 1 || mapping.TextureReferences.Any(texture =>
                         CftModelTextureMappingDecoder.TryGetTextureSlotIndex(texture.Column, out int numberedSlot) && numberedSlot > 0)) &&
@@ -4192,6 +4243,55 @@ internal static class LithTechModelTextureConfigIndex
                     }
 
                     modelsWithSlotSpecificBindings.Add(modelPath);
+                }
+
+                if (hasCharacterItemSlots)
+                {
+                    IReadOnlyList<string> modelColumns = mapping.ModelColumns.Count > 0
+                        ? mapping.ModelColumns : [mapping.ModelColumn];
+                    string[] declaredSides = modelColumns.Select(CftModelTextureMappingDecoder.GetCharacterItemModelSide)
+                        .OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                    foreach (string side in declaredSides)
+                    {
+                        var sideTextures = new Dictionary<int, HashSet<string>>();
+                        foreach (CftTextureReference texture in mapping.TextureReferences)
+                        {
+                            if (!TryGetCharacterItemTextureSlotForSide(texture.Column, side, out int slot)) continue;
+                            if (!sideTextures.TryGetValue(slot, out HashSet<string>? paths))
+                            {
+                                paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                                sideTextures.Add(slot, paths);
+                            }
+
+                            paths.Add(NormalizeKey(texture.Path));
+                        }
+
+                        foreach ((int slot, HashSet<string> paths) in sideTextures)
+                        {
+                            if (paths.Count != 1 || !characterItemSlots.Contains(slot) ||
+                                slot == 0 && characterItemSlots.Length > 1 && !sideTextures.Keys.Any(index => index > 0))
+                            {
+                                continue;
+                            }
+
+                            string path = paths.Single();
+                            if (!path.StartsWith("ModelTextures/", StringComparison.OrdinalIgnoreCase) ||
+                                !Path.GetExtension(path).Equals(".dtx", StringComparison.OrdinalIgnoreCase) ||
+                                !HasConsistentDecodableDtxCopies(path, textureItemsByLogicalPath, verifiedTexturePathCache))
+                            {
+                                continue;
+                            }
+
+                            // A shared model keeps separate side contexts. Do not add an
+                            // unqualified binding that could silently choose the other skin.
+                            foreach (string contextKey in contextKeys)
+                            {
+                                AddModelTextureContextSlotMapping(byModelContext, modelPath, contextKey + ":" + side, slot, path);
+                            }
+
+                            modelsWithSlotSpecificBindings.Add(modelPath);
+                        }
+                    }
                 }
 
                 if (string.Equals(
@@ -5393,7 +5493,10 @@ internal static class LithTechModelTextureConfigIndex
             cftPlayerViewRoleTextureCandidates,
             cftPlayerViewRoleSlotsByModelPath,
             meshNameDerivedByModelPath,
-            meshNameDerivedByModelContext);
+            meshNameDerivedByModelContext)
+        {
+            CharacterItemSocketModels = characterItemSocketModels
+        };
     }
 
     private static void AddLtcPreviewVariantTextureBindings(
@@ -10354,9 +10457,7 @@ internal static class LithTechModelTextureConfigIndex
         out string texturePath)
     {
         texturePath = string.Empty;
-        if (!string.Equals(Path.GetFileName(tablePath), "CharacterItem.CFT", StringComparison.OrdinalIgnoreCase) ||
-            !(string.Equals(mapping.ModelColumn, "_GRSocketItemModelFile", StringComparison.OrdinalIgnoreCase) ||
-              string.Equals(mapping.ModelColumn, "_BLSocketItemModelFile", StringComparison.OrdinalIgnoreCase)) ||
+        if (!IsCharacterItemSocketMapping(tablePath, mapping) ||
             mapping.TextureReferences.Count == 0)
         {
             return false;
@@ -10376,6 +10477,27 @@ internal static class LithTechModelTextureConfigIndex
 
         texturePath = paths[0];
         return true;
+    }
+
+    private static bool IsCharacterItemSocketMapping(string tablePath, CftModelTextureMapping mapping)
+    {
+        return string.Equals(Path.GetFileName(tablePath), "CharacterItem.CFT", StringComparison.OrdinalIgnoreCase) &&
+               CftModelTextureMappingDecoder.GetCharacterItemModelSide(mapping.ModelColumn) is not null;
+    }
+
+    private static bool TryGetCharacterItemTextureSlotForSide(string columnName, string side, out int slot)
+    {
+        slot = -1;
+        string normalized = columnName.TrimStart('_');
+        string prefix = side + "TexFile";
+        if (string.Equals(normalized, prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            slot = 0;
+            return true;
+        }
+
+        return normalized.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) &&
+               CftModelTextureMappingDecoder.TryGetTextureSlotIndex(columnName, out slot);
     }
 
     private static bool IsUnindexedCftSkinFileName(string columnName)
@@ -12303,6 +12425,9 @@ internal static class LithTechModelTextureConfigIndex
         IReadOnlyDictionary<string, Dictionary<int, string?>> MeshNameDerivedByModelPath,
         IReadOnlyDictionary<string, Dictionary<int, string?>> MeshNameDerivedByModelContext)
     {
+        public IReadOnlySet<string> CharacterItemSocketModels { get; init; } =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         public static ModelTextureSlotDictionary Empty { get; } = new(
             new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase),

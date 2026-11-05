@@ -29,6 +29,8 @@ The FireAim snapshot records 17 complete physical LTB files. Checks using a trun
 
 The CharacterItem base-field snapshot records 272 complete physical LTB files, including related models. Each contains two nodes, one embedded animation and no embedded socket. The [mapping register guide](../../docs/asset-mapping-register.md) links their source hashes, 544 node records, 272 animation records, texture-copy checks and export results.
 
+The CharacterItem side snapshot adds a separate inventory of 91 physical files, which can overlap the base snapshot. It records 182 nodes, 91 embedded animations and one socket: `Effect` on node 1 of `Models/WAVE/ETC/IFF_Shoulder.LTB`. The [node](../../docs/evidence/characteritem-side-20261105-structure-nodes.tsv), [animation](../../docs/evidence/characteritem-side-20261105-structure-animations.tsv) and [socket](../../docs/evidence/characteritem-side-20261105-structure-sockets.tsv) tables retain every parsed entry. The [raw CFT fields](../../docs/evidence/characteritem-side-20261105-raw-fields.tsv) cover 140 rows; target-type enums do not establish external socket bindings. v1.2.8 also keeps GR/BL mapping contexts separate when their model paths are identical.
+
 ## Motion comparison
 
 `CompareMotion.ps1` compares explicit pairs using complete `models.tsv` and `nodes.tsv` records. The pair input needs `parent_source` and `motion_source` columns; it may also be the output file, because all input is read before writing. The script rejects missing model/node records and duplicate node indices.

@@ -126,6 +126,8 @@ internal static class LithTechModelMeshTextureResolver
             return null;
         }
 
+        Func<string, bool>? hasCharacterItemSocketMapping =
+            LithTechModelTextureConfigIndex.CreateCharacterItemSocketMappingPresenceResolver(root);
         var cache = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
         return (modelReference, meshName, slotIndex, candidateReference) =>
         {
@@ -133,6 +135,11 @@ internal static class LithTechModelMeshTextureResolver
             string normalizedMeshName = NormalizeMeshName(meshName);
             string candidateBaseName = GetCandidateBaseName(candidateReference);
             if (modelPath.Length == 0 || (normalizedMeshName.Length == 0 && candidateBaseName.Length == 0))
+            {
+                return [];
+            }
+
+            if (hasCharacterItemSocketMapping?.Invoke(modelReference) == true)
             {
                 return [];
             }

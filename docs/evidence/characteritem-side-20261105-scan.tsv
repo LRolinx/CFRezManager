@@ -1,0 +1,4 @@
+case	observed	result
+current game scan	482 archives; 308 requested resources; zero errors	passed
+current snapshot hashes	all 308 archive/path/SHA-256 tuples equal the export input snapshot	passed
+filtered REZ reconstruction	all 308 resources verified in nine rebuilt archives	passed

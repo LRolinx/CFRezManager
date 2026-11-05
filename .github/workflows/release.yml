@@ -49,6 +49,15 @@ jobs:
           body: |
             CF Rez Manager ${{ github.ref_name }}
 
+            ## v1.2.8 更新 / Highlights
+
+            - 同模型的 GR、BL 和男女角色字段保留各自来源，新增阵营上下文；390 条实际槽位验证通过，清单增加 382 条确认记录，总计 915 条。
+            - 修正未选择阵营或副本损坏时的网格名称误配，保留多套声明的冲突，不因另一套资源缺失而猜选默认皮肤。
+            - 新增 91 份 LTB 的 182 个节点、91 条内嵌动画和 1 个挂点记录；原有 533 条确认记录通过回归。
+            - Preserved all GR/BL and male/female model-column sources, with separate side contexts. Verified 390 physical slots and added 382 confirmed register entries, bringing the total to 915.
+            - Prevented mesh-name guesses from selecting a skin when side selection is absent or copies fail validation; missing resources no longer erase declared skin conflicts.
+            - Recorded 182 nodes, 91 embedded animations and one socket from 91 physical LTB files. All 533 previously confirmed register records passed regression checks.
+
             ## v1.2.7 更新 / Highlights
 
             - CFT 双击预览改为表格，显示全部已解码行、原始列名和行号，支持冻结首列、数值排序、调整列宽、滚动和复制单元格。

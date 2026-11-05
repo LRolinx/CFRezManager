@@ -1,0 +1,3 @@
+"source_resources"	"row_index"	"record_id"	"model_column"	"model_reference"	"related_model_references"	"texture_fields"	"identity_aliases"
+"rez/RF100.REZ:Table/CharacterItem.CFT#E16CD214212AEA0F81DC9B8A4DF143C6"	"1464"	"1465"	"_GRSocketItemModelFile"	"Models/SocketItem/Basic/BJ_Live/"	"Models/SocketItem/Basic/BJ_Live/BJ_Live_Goggle_BL.ltb"	"_BLTexFile:MODELTEXTURES/SOCKETITEM/BASIC/BJ_Live/BJ_Live_Goggle_BL.dtx"	"BJ_LIVE Face2"
+"rez/RF100.REZ:Table/CharacterItem.CFT#E16CD214212AEA0F81DC9B8A4DF143C6"	"1448"	"1449"	"_GRSocketItemModelFile"	"Models/SocketItem/Basic/Gunslinger/"	"Models/SocketItem/Basic/Gunslinger/Gunslinger_BACK_BL.ltb"	"_BLTexFile:MODELTEXTURES/SOCKETITEM/BASIC/Gunslinger/Gunslinger_BACK_BL.dtx"	"Gunslinger BACK"
