@@ -1,0 +1,4 @@
+"case"	"observed"	"result"
+"fresh resource scan"	"482 archives; three requested logical DTX paths; six physical files; zero errors"	"passed"
+"stored bytes match decoded pixel inventory"	"all six SHA-256 values match the recorded texture-copy inventory"	"passed"
+"index MD5 does not resolve version choice"	"all six index MD5 values equal their stored bytes; each logical path still has two different decoded pixel hashes"	"passed"

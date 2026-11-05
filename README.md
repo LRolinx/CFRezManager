@@ -25,6 +25,7 @@ CF Rez Manager 是一个 Windows WPF 工具，用来浏览、搜索、预览、�
 - [清单字段说明](docs/asset-mapping-register.md) 说明状态和空字段的含义。OBJ 导出目前不保存骨骼名称或动画轨道；未确认的骨骼挂点留空。
 - 清单已有 915 条已确认导出槽位；贴图副本冲突、未解析槽位、资源缺失和仅填写目录的模型字段分别标记。CharacterItem 两个批次分别保存了 272 份、91 份模型的节点、内嵌动画和挂点记录，两个批次可能包含相同资源。
 - 同一个 CharacterItem 模型被 GR、BL 或男女角色字段重复引用时，保留所有字段来源。两套皮肤使用独立上下文，例如 `row:CharacterItem.CFT#2372:GR` 和 `row:CharacterItem.CFT#2372:BL`；未选择身份或阵营时，存在多套声明的模型不再按网格名称猜选皮肤。
+- 多份同路径贴图只有在全部可解码、尺寸和 BGRA 像素一致时才共享。冲突副本保留各自来源及哈希，未确认游戏实际使用哪份时不自动选取；已有 915 条确认记录通过了 PNG 字节回归。
 
 ## 环境要求
 
@@ -81,6 +82,7 @@ CFRezManager/
 - `Preview/`：音频、图片、模型、文本的独立预览窗口。
 - `UI/`：主窗口和界面控件。
 - `assets/`：应用图标和随程序复制的图片资源。
+- `tools/TextureCopyCheck/`：[贴图副本回归检查](tools/TextureCopyCheck/README.md)，发布前自动执行基础用例。
 
 ## 基本使用
 

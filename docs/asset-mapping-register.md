@@ -9,7 +9,7 @@
 - `table-declared-slot-unverified`: a typed CFT row declares the model and texture fields, but the model slot has not been verified by export.
 - `model-resource-missing`: the table declares the model, but the current resource scan did not find its file. Any listed texture and motion paths remain table declarations.
 - `model-reference-incomplete`: the source field names a directory without a complete model filename. The record retains the original field and any same-side texture declaration; no model slot is established.
-- `slot-unresolved`: the model and slot were decoded, but the focused export did not establish a texture binding.
+- `slot-unresolved`: the model and slot were decoded, but the focused export did not establish a texture binding, including cases where the logical path is known but its physical copies conflict.
 
 Rows describe individual slots. A successful row can coexist with other unresolved meshes in the same OBJ export.
 
@@ -27,7 +27,17 @@ Starting with v1.2.7, opening a CFT displays all decoded rows in a table with ro
 
 ## Snapshot
 
-The register contains 937 records: 915 confirmed exported slots, four written but unverified slots, three unresolved slots, eight declarations without a matching decoded model slot, four missing model declarations and three incomplete model references. These are recorded samples, not a full-game coverage count. Repeated physical model copies are retained in the evidence tables and deduplicated in the register.
+The register contains 937 records: 915 confirmed exported slots, seven unresolved slots, eight declarations without a matching decoded model slot, four missing model declarations and three incomplete model references. No current row is marked as a written but unverified slot. These are recorded samples, not a full-game coverage count. Repeated physical model copies are retained in the evidence tables and deduplicated in the register.
+
+### Texture copy consistency
+
+v1.2.9 compares every decoded copy of a logical texture path. Matching index MD5 values or a valid MD5 on each individual file do not establish pixel equivalence. Every copy must decode with matching dimensions and BGRA pixels, including alpha. The [six recorded physical DTX copies](evidence/texture-copy-20261105-variants.tsv) cover three conflicting paths: CFPL GR headset and The_Fates_Casual GR hair/hat. All six actual MD5 values match their index entries, but each logical path has two different pixel hashes. A [fresh scan of all 482 archives](evidence/texture-copy-20261105-scan.tsv) reproduced their stored hashes. The active game copy remains unverified; directory numbering is not used to choose one.
+
+The [four prior unverified outputs](evidence/texture-copy-20261105-conflict-status.tsv) now retain their original CFT references without writing a PNG. Their per-slot export report says `export-failed`, which means the PNG was not written; both source copies can individually decode. The register marks these slots unresolved until a physical version can be established. The hair base was already unresolved for the same conflict. All [915 confirmed records](evidence/texture-copy-20261105-confirmed-regression.tsv), covering 939 physical mesh-slot witnesses, retain identical PNG bytes to v1.2.8.
+
+The GUI and command-line OBJ exporters use the same lookup policy: a matching resource that is undecodable or conflicting does not fall through to another extension or a nearby local copy. A path absent from the global index can still use local lookup. Explicit physical paths remain individually readable. Standard bitmap decoding also precedes raw-TGA recovery, preventing valid PNG metadata from changing the interpreted image dimensions.
+
+The [61 checks](evidence/texture-copy-20261105-guards.tsv) include changed first/last-row RGB and alpha, dimensions, invalid copies, reversed order, MD5 metadata, explicit physical references, recognized but invalid PNG data and PNG metadata whose encoded size resembles raw TGA. The [reusable check tool](https://github.com/LRolinx/CFRezManager/tree/main/tools/TextureCopyCheck) runs 49 synthetic cases without game files; these cases also run in the release workflow. Twelve additional checks use the recorded DTX snapshot.
 
 ### CharacterItem side bindings
 
@@ -53,7 +63,7 @@ Base fields can reference exact DTX paths anywhere under `ModelTextures/`, inclu
 
 Seven [export jobs](evidence/characteritem-base-20261105-jobs.tsv) produced 523 physical mesh-slot rows: 516 confirmed, five written but unverified, and two unresolved. Nineteen formerly unresolved rows now export; all 502 baseline written rows retain identical PNG SHA-256. One existing mesh-derived binding now uses its explicit CFT field. Every one of the 521 written rows matches the decoded pixel hash of a recorded source DTX. The [slot evidence](evidence/characteritem-base-20261105-export-slots.tsv) records the exact CFT row, physical model source, selected texture copies, pixel hash and validation status.
 
-The [486 physical DTX records](evidence/characteritem-base-20261105-texture-copies.tsv) expose three paths with different decoded pixels across archive versions: CFPL GR headset, The_Fates_Casual GR hair and GR hat. The hair base remains unresolved. Four numbered headset/hat exports are marked unverified. The initial MasterHERO hair fallback was unverified because its row declares different GR and BL base textures; the side follow-up now rejects that unqualified fallback and confirms both hair and pouch skins with explicit side contexts.
+The [486 physical DTX records](evidence/characteritem-base-20261105-texture-copies.tsv) expose three paths with different decoded pixels across archive versions: CFPL GR headset, The_Fates_Casual GR hair and GR hat. The hair base remains unresolved. Four numbered headset/hat exports were marked unverified in that snapshot; v1.2.9 no longer writes those PNGs. The initial MasterHERO hair fallback was unverified because its row declares different GR and BL base textures; the side follow-up now rejects that unqualified fallback and confirms both hair and pouch skins with explicit side contexts.
 
 Five requested DTX paths were absent from all REZ archives. They belong to numbered fields for which these decoded models have no slot. They remain declarations, rather than export failures or inferred bindings. The [260 CFT mappings](evidence/characteritem-base-20261105-cft-links.tsv) retain every original field.
 

@@ -1019,9 +1019,9 @@ public partial class MainWindow : Window
             }
 
             SetStatus("IndexingModelTextures");
-            Func<string, ImageSource?>? globalTextureResolver = exportRoot is null
+            LithTechModelTextureLoader.GlobalTextureResolverState? globalTextureResolver = exportRoot is null
                 ? null
-                : await Task.Run(() => LithTechModelTextureLoader.CreateGlobalResolver(exportRoot));
+                : await Task.Run(() => LithTechModelTextureLoader.CreateGlobalResolverState(exportRoot));
             Func<IEnumerable<string>, IReadOnlyList<string>>? textureConfigResolver = exportRoot is null
                 ? null
                 : await Task.Run(() => LithTechModelTextureConfigIndex.CreateResolver(exportRoot));
@@ -1111,7 +1111,7 @@ public partial class MainWindow : Window
         string outputPath,
         IReadOnlyList<ModelObjExportJob> jobs,
         ExplorerItem? exportRoot,
-        Func<string, ImageSource?>? globalTextureResolver,
+        LithTechModelTextureLoader.GlobalTextureResolverState? globalTextureResolver,
         Func<IEnumerable<string>, IReadOnlyList<string>>? textureConfigResolver,
         Func<string, int, IReadOnlyList<string>>? textureSlotResolver,
         Func<string, int, IReadOnlyList<string>>? inferredTextureSlotResolver,
@@ -1187,22 +1187,9 @@ public partial class MainWindow : Window
 
     private static Func<string, ImageSource?>? CreateObjTextureResolver(
         ExplorerItem item,
-        Func<string, ImageSource?>? globalTextureResolver)
+        LithTechModelTextureLoader.GlobalTextureResolverState? globalTextureResolver)
     {
-        Func<string, ImageSource?>? primaryResolver = LithTechModelTextureLoader.CreateResolver(item);
-        if (primaryResolver is null)
-        {
-            return globalTextureResolver;
-        }
-
-        if (globalTextureResolver is null)
-        {
-            return primaryResolver;
-        }
-
-        return item.Kind == ExplorerItemKind.LocalFile
-            ? texturePath => globalTextureResolver(texturePath) ?? primaryResolver(texturePath)
-            : texturePath => primaryResolver(texturePath) ?? globalTextureResolver(texturePath);
+        return LithTechObjExportCommand.CreateObjTextureResolver(item, globalTextureResolver);
     }
 
     private static bool TryLoadModelDocument(ExplorerItem item, out LithTechModelDocument? document, out string? errorMessage)

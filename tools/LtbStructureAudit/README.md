@@ -31,6 +31,8 @@ The CharacterItem base-field snapshot records 272 complete physical LTB files, i
 
 The CharacterItem side snapshot adds a separate inventory of 91 physical files, which can overlap the base snapshot. It records 182 nodes, 91 embedded animations and one socket: `Effect` on node 1 of `Models/WAVE/ETC/IFF_Shoulder.LTB`. The [node](../../docs/evidence/characteritem-side-20261105-structure-nodes.tsv), [animation](../../docs/evidence/characteritem-side-20261105-structure-animations.tsv) and [socket](../../docs/evidence/characteritem-side-20261105-structure-sockets.tsv) tables retain every parsed entry. The [raw CFT fields](../../docs/evidence/characteritem-side-20261105-raw-fields.tsv) cover 140 rows; target-type enums do not establish external socket bindings. v1.2.8 also keeps GR/BL mapping contexts separate when their model paths are identical.
 
+v1.2.9 preserves these structure records while rejecting conflicting texture copies during export. The [texture-copy inventory](../../docs/evidence/texture-copy-20261105-variants.tsv) records the six affected physical DTX files; the [copy-check tool](../TextureCopyCheck/README.md) tests pixel equivalence and fallback behavior separately from model structure parsing.
+
 ## Motion comparison
 
 `CompareMotion.ps1` compares explicit pairs using complete `models.tsv` and `nodes.tsv` records. The pair input needs `parent_source` and `motion_source` columns; it may also be the output file, because all input is read before writing. The script rejects missing model/node records and duplicate node indices.

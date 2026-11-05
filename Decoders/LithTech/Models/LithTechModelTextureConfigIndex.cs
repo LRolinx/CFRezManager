@@ -1414,7 +1414,7 @@ internal static class LithTechModelTextureConfigIndex
                 string resolverModelPath = modelItem.OutputRelativePath.Length > 0
                     ? modelItem.OutputRelativePath
                     : modelItem.Name;
-                Func<string, ImageSource?>? globalTextureResolver = LithTechModelTextureLoader.CreateGlobalResolver(root);
+                var globalTextureResolver = LithTechModelTextureLoader.CreateGlobalResolverState(root);
                 Func<string, ImageSource?>? textureResolver =
                     LithTechObjExportCommand.CreateObjTextureResolver(modelItem, globalTextureResolver);
                 var exportSource = new LithTechObjExportSource(

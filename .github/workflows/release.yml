@@ -21,6 +21,9 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
+      - name: Check texture-copy resolution
+        run: dotnet run --project ./tools/TextureCopyCheck -c Release
+
       - name: Publish Windows x64 package
         shell: pwsh
         run: |
@@ -48,6 +51,15 @@ jobs:
           files: release/CFRezManager-${{ github.ref_name }}-win-x64.zip
           body: |
             CF Rez Manager ${{ github.ref_name }}
+
+            ## v1.2.9 更新 / Highlights
+
+            - 多份同路径贴图必须全部可解码、尺寸与 BGRA 像素一致才共享；修正只检查 MD5 后选取第一份副本的问题，并阻止本地回退掩盖已发现的冲突。
+            - 修正部分合法 PNG 被按长度误读为原始 TGA 的问题。915 条确认记录对应的 939 条实际槽位保留相同 PNG 字节。
+            - 保存六份冲突 DTX 的实际 MD5、SHA-256 和像素哈希，四处旧的未验证输出改为保留引用但不写出 PNG。新增 61 项副本检查，其中 49 项在发布流程中自动执行。
+            - Shared logical texture paths now require every copy to decode with matching dimensions and BGRA pixels. Removed first-copy selection based on index MD5 and prevented local fallback from hiding conflicts.
+            - Fixed valid PNG payloads being mistaken for raw TGA by their length. All 939 physical witnesses for the 915 confirmed records retain identical PNG bytes.
+            - Recorded actual MD5, SHA-256 and pixel hashes for six conflicting DTX copies. Four prior unverified outputs now retain their references without writing a PNG. Added 61 copy checks, with 49 running automatically for releases.
 
             ## v1.2.8 更新 / Highlights
 

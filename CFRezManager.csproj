@@ -8,15 +8,16 @@
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <ApplicationIcon>assets\app-icon.ico</ApplicationIcon>
-    <Version>1.2.8</Version>
-    <AssemblyVersion>1.2.8.0</AssemblyVersion>
-    <FileVersion>1.2.8.0</FileVersion>
+    <Version>1.2.9</Version>
+    <AssemblyVersion>1.2.9.0</AssemblyVersion>
+    <FileVersion>1.2.9.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>
     <Compile Remove="Pak-CF\**" />
     <Compile Remove="artifacts\**" />
     <Compile Remove="tools\LtbStructureAudit\**" />
+    <Compile Remove="tools\TextureCopyCheck\**" />
     <EmbeddedResource Remove="Pak-CF\**" />
     <EmbeddedResource Remove="artifacts\**" />
     <None Remove="Pak-CF\**" />

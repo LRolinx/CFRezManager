@@ -202,7 +202,7 @@ internal static class LithTechObjExportCommand
             throw new InvalidOperationException($"Model queries matched {matches.Count.ToString(CultureInfo.InvariantCulture)} files; use more specific paths.");
         }
 
-        Func<string, ImageSource?>? globalTextureResolver = LithTechModelTextureLoader.CreateGlobalResolver(root);
+        var globalTextureResolver = LithTechModelTextureLoader.CreateGlobalResolverState(root);
         Func<IEnumerable<string>, IReadOnlyList<string>>? textureConfigResolver = LithTechModelTextureConfigIndex.CreateResolver(root);
         Func<string, int, IReadOnlyList<string>>? textureSlotResolver = LithTechModelTextureConfigIndex.CreateTextureSlotResolver(root);
         Func<string, int, IReadOnlyList<string>>? inferredTextureSlotResolver =
@@ -867,12 +867,12 @@ internal static class LithTechObjExportCommand
 
     internal static Func<string, ImageSource?>? CreateObjTextureResolver(
         ExplorerItem item,
-        Func<string, ImageSource?>? globalTextureResolver)
+        LithTechModelTextureLoader.GlobalTextureResolverState? globalTextureResolver)
     {
         Func<string, ImageSource?>? primaryResolver = LithTechModelTextureLoader.CreateResolver(item);
         if (primaryResolver is null)
         {
-            return globalTextureResolver;
+            return globalTextureResolver?.Resolve;
         }
 
         if (globalTextureResolver is null)
@@ -880,9 +880,8 @@ internal static class LithTechObjExportCommand
             return primaryResolver;
         }
 
-        return item.Kind == ExplorerItemKind.LocalFile
-            ? texturePath => globalTextureResolver(texturePath) ?? primaryResolver(texturePath)
-            : texturePath => primaryResolver(texturePath) ?? globalTextureResolver(texturePath);
+        return texturePath => globalTextureResolver.Resolve(texturePath) ??
+            (globalTextureResolver.HasMatchingResource(texturePath) ? null : primaryResolver(texturePath));
     }
 
     private static bool TryLoadModelDocument(ExplorerItem item, out LithTechModelDocument? document, out string? errorMessage)

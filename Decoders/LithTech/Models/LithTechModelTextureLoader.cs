@@ -13,6 +13,7 @@ internal static class LithTechModelTextureLoader
     private const int MaxLocalTextureSearchParentDepth = 5;
     private const int MaxLocalTextureSearchVisitedFiles = 200_000;
     private static readonly string[] TextureExtensions = [".dtx", ".dds", ".tga", ".png", ".jpg", ".jpeg", ".bmp", ".bin"];
+    private static readonly byte[] PngSignature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
     private static readonly ConditionalWeakTable<RezArchive, ArchiveTextureIndex> ArchiveTextureIndexCache = new();
     private static readonly ConditionalWeakTable<ExplorerItem, TextureIndex> GlobalTextureIndexCache = new();
 
@@ -52,25 +53,33 @@ internal static class LithTechModelTextureLoader
 
     public static Func<string, ImageSource?>? CreateGlobalResolver(ExplorerItem root)
     {
+        return CreateGlobalResolverState(root)?.Resolve;
+    }
+
+    internal static GlobalTextureResolverState? CreateGlobalResolverState(ExplorerItem root)
+    {
         TextureIndex textureIndex = GlobalTextureIndexCache.GetValue(root, BuildTextureIndex);
         if (textureIndex.IsEmpty)
         {
             return null;
         }
 
-        var cache = new Dictionary<string, ImageSource?>(StringComparer.OrdinalIgnoreCase);
-        return texturePath =>
+        var cache = new Dictionary<string, (ImageSource? Image, bool HasMatchingResource)>(StringComparer.OrdinalIgnoreCase);
+        (ImageSource? Image, bool HasMatchingResource) Resolve(string texturePath)
         {
             string normalized = NormalizeTexturePath(texturePath);
-            if (cache.TryGetValue(normalized, out ImageSource? cached))
+            if (cache.TryGetValue(normalized, out var cached))
             {
                 return cached;
             }
 
-            ImageSource? image = TryResolveIndexedTexture(textureIndex, normalized);
-            cache[normalized] = image;
-            return image;
-        };
+            ImageSource? image = TryResolveIndexedTexture(textureIndex, normalized, out bool hasMatchingResource);
+            return cache[normalized] = (image, hasMatchingResource);
+        }
+
+        return new GlobalTextureResolverState(
+            texturePath => Resolve(texturePath).Image,
+            texturePath => Resolve(texturePath).HasMatchingResource);
     }
 
     internal static void ClearDecodedTextureCaches(ExplorerItem root, IEnumerable<RezArchive?> archives)
@@ -147,37 +156,29 @@ internal static class LithTechModelTextureLoader
         return null;
     }
 
-    private static ImageSource? TryResolveIndexedTexture(TextureIndex textureIndex, string texturePath)
+    private static ImageSource? TryResolveIndexedTexture(TextureIndex textureIndex, string texturePath, out bool hasMatchingResource)
     {
+        hasMatchingResource = false;
         foreach (string candidate in GetTexturePathCandidates(texturePath))
         {
             string normalizedCandidate = NormalizeTexturePath(candidate);
             if (textureIndex.FilesByPath.TryGetValue(normalizedCandidate, out ExplorerItem? exactMatch))
             {
-                ImageSource? image = TryReadTextureItem(textureIndex, exactMatch);
-                if (image is not null)
-                {
-                    return image;
-                }
+                hasMatchingResource = true;
+                return TryReadTextureItem(textureIndex, exactMatch);
             }
 
             if (textureIndex.UniqueFilesBySuffix.TryGetValue(normalizedCandidate, out ExplorerItem? suffixMatch) &&
                 suffixMatch is not null)
             {
-                ImageSource? image = TryReadTextureItem(textureIndex, suffixMatch);
-                if (image is not null)
-                {
-                    return image;
-                }
+                hasMatchingResource = true;
+                return TryReadTextureItem(textureIndex, suffixMatch);
             }
 
             if (textureIndex.FilesBySuffixCandidates.TryGetValue(normalizedCandidate, out List<ExplorerItem>? suffixCandidates))
             {
-                ImageSource? image = TryReadEquivalentTextureVersions(textureIndex, suffixCandidates);
-                if (image is not null)
-                {
-                    return image;
-                }
+                hasMatchingResource = true;
+                return TryReadEquivalentTextureVersions(textureIndex, suffixCandidates);
             }
         }
 
@@ -186,20 +187,14 @@ internal static class LithTechModelTextureLoader
             if (textureIndex.UniqueFilesByName.TryGetValue(candidateName, out ExplorerItem? item) &&
                 item is not null)
             {
-                ImageSource? image = TryReadTextureItem(textureIndex, item);
-                if (image is not null)
-                {
-                    return image;
-                }
+                hasMatchingResource = true;
+                return TryReadTextureItem(textureIndex, item);
             }
 
             if (textureIndex.FilesByNameCandidates.TryGetValue(candidateName, out List<ExplorerItem>? nameCandidates))
             {
-                ImageSource? image = TryReadEquivalentTextureVersions(textureIndex, nameCandidates);
-                if (image is not null)
-                {
-                    return image;
-                }
+                hasMatchingResource = true;
+                return TryReadEquivalentTextureVersions(textureIndex, nameCandidates);
             }
         }
 
@@ -215,23 +210,9 @@ internal static class LithTechModelTextureLoader
             return null;
         }
 
-        string expectedMd5 = GetArchiveFileMd5(candidates[0]);
-        foreach (ExplorerItem candidate in candidates.OrderBy(item =>
-                     string.Equals(GetArchiveFileMd5(item), expectedMd5, StringComparison.OrdinalIgnoreCase) ? 0 : 1))
-        {
-            ImageSource? image = TryReadVerifiedTextureItem(candidate);
-            if (image is not null)
-            {
-                lock (textureIndex.ImageCache)
-                {
-                    textureIndex.ImageCache[candidate] = image;
-                }
-
-                return image;
-            }
-        }
-
-        return null;
+        return HaveEquivalentDecodedTexturePixels(candidates, item => TryReadTextureItem(textureIndex, item))
+            ? TryReadTextureItem(textureIndex, candidates[0])
+            : null;
     }
 
     private static bool HaveSameLogicalTexturePath(IReadOnlyList<ExplorerItem> candidates)
@@ -241,6 +222,18 @@ internal static class LithTechModelTextureLoader
         {
             string logicalPath = NormalizeTexturePath(
                 candidate.ArchiveFile?.FullPath ?? candidate.OutputRelativePath);
+            if (candidate.Kind == ExplorerItemKind.LocalFile)
+            {
+                foreach (string root in new[] { "ModelTextures/", "UCC/ModelAssets/UCC_Textures/", "TEX/" })
+                {
+                    int offset = logicalPath.IndexOf(root, StringComparison.OrdinalIgnoreCase);
+                    if (offset >= 0 && (offset == 0 || logicalPath[offset - 1] == '/'))
+                    {
+                        logicalPath = logicalPath[offset..];
+                        break;
+                    }
+                }
+            }
             if (string.IsNullOrWhiteSpace(logicalPath))
             {
                 return false;
@@ -257,25 +250,6 @@ internal static class LithTechModelTextureLoader
         }
 
         return expectedPath is not null;
-    }
-
-    private static string GetArchiveFileMd5(ExplorerItem item)
-    {
-        return item.Kind == ExplorerItemKind.RezFile
-            ? item.ArchiveFile?.Md5 ?? string.Empty
-            : string.Empty;
-    }
-
-    private static ImageSource? TryReadVerifiedTextureItem(ExplorerItem item)
-    {
-        if (item.Kind == ExplorerItemKind.RezFile &&
-            item.Archive is not null &&
-            item.ArchiveFile is not null)
-        {
-            return TryReadArchiveTexture(item.Archive, item.ArchiveFile, verifyIndexMd5: true);
-        }
-
-        return TryReadTextureItem(item);
     }
 
     private static ImageSource? TryResolveLocalTexture(
@@ -573,20 +547,13 @@ internal static class LithTechModelTextureLoader
         }
     }
 
-    private static ImageSource? TryReadArchiveTexture(RezArchive archive, RezFileNode file)
-    {
-        return TryReadArchiveTexture(archive, file, verifyIndexMd5: false);
-    }
-
     private static ImageSource? TryReadArchiveTexture(
         RezArchive archive,
-        RezFileNode file,
-        bool verifyIndexMd5)
+        RezFileNode file)
     {
         if (file.DataOffset < 0 ||
             file.Size < 0 ||
-            file.Size > MaxTextureBytes ||
-            (verifyIndexMd5 && (string.IsNullOrWhiteSpace(file.Md5) || file.Md5.Length != 32)))
+            file.Size > MaxTextureBytes)
         {
             return null;
         }
@@ -596,12 +563,6 @@ internal static class LithTechModelTextureLoader
             byte[] data = new byte[file.Size];
             using Stream source = RezArchiveReader.OpenFileRead(archive, file);
             source.ReadExactly(data);
-            if (verifyIndexMd5 &&
-                !string.Equals(Convert.ToHexString(MD5.HashData(data)), file.Md5, StringComparison.OrdinalIgnoreCase))
-            {
-                return null;
-            }
-
             return TryDecodeTexture(file.Extension, data);
         }
         catch
@@ -682,6 +643,13 @@ internal static class LithTechModelTextureLoader
 
     internal static bool HaveEquivalentDecodedTexturePixels(IReadOnlyList<ExplorerItem> items)
     {
+        return HaveEquivalentDecodedTexturePixels(items, TryReadTextureItem);
+    }
+
+    private static bool HaveEquivalentDecodedTexturePixels(
+        IReadOnlyList<ExplorerItem> items,
+        Func<ExplorerItem, ImageSource?> readTexture)
+    {
         if (items.Count == 0)
         {
             return false;
@@ -691,7 +659,7 @@ internal static class LithTechModelTextureLoader
         Span<byte> dimensions = stackalloc byte[sizeof(int) * 2];
         foreach (ExplorerItem item in items)
         {
-            ImageSource? source = TryReadTextureItem(item);
+            ImageSource? source = readTexture(item);
             if (source is not BitmapSource bitmap)
             {
                 return false;
@@ -708,14 +676,17 @@ internal static class LithTechModelTextureLoader
                 }
 
                 int stride = width * 4;
-                byte[] pixels = new byte[stride * height];
-                normalized.CopyPixels(pixels, stride, 0);
+                byte[] rowPixels = new byte[stride];
 
                 using IncrementalHash hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
                 BinaryPrimitives.WriteInt32LittleEndian(dimensions, width);
                 BinaryPrimitives.WriteInt32LittleEndian(dimensions[sizeof(int)..], height);
                 hash.AppendData(dimensions);
-                hash.AppendData(pixels);
+                for (int row = 0; row < height; row++)
+                {
+                    normalized.CopyPixels(new System.Windows.Int32Rect(0, row, width, 1), rowPixels, stride, 0);
+                    hash.AppendData(rowPixels);
+                }
                 string currentHash = Convert.ToHexString(hash.GetHashAndReset());
                 if (expectedHash is not null && !string.Equals(expectedHash, currentHash, StringComparison.Ordinal))
                 {
@@ -798,6 +769,12 @@ internal static class LithTechModelTextureLoader
             }
         }
 
+        if (data.AsSpan().StartsWith(PngSignature))
+        {
+            // A recognized PNG must not become raw TGA when its bitmap decode fails.
+            return TryLoadBitmapImage(data);
+        }
+
         if (string.Equals(extension, "tga", StringComparison.OrdinalIgnoreCase))
         {
             ImageSource? image = TgaThumbnailDecoder.TryDecodeOriginal(data);
@@ -805,6 +782,14 @@ internal static class LithTechModelTextureLoader
             {
                 return image;
             }
+        }
+
+        // Standard bitmap payloads must be recognized before raw-pixel TGA
+        // recovery, which can otherwise reinterpret a valid PNG by its length.
+        ImageSource? bitmapImage = TryLoadBitmapImage(data);
+        if (bitmapImage is not null)
+        {
+            return bitmapImage;
         }
 
         if (!string.Equals(extension, "dtx", StringComparison.OrdinalIgnoreCase))
@@ -834,7 +819,7 @@ internal static class LithTechModelTextureLoader
             }
         }
 
-        return TryLoadBitmapImage(data);
+        return null;
     }
 
     private static ImageSource? TryLoadBitmapImage(byte[] data)
@@ -1069,6 +1054,10 @@ internal static class LithTechModelTextureLoader
             .Replace('\\', '/')
             .TrimStart('/');
     }
+
+    internal sealed record GlobalTextureResolverState(
+        Func<string, ImageSource?> Resolve,
+        Func<string, bool> HasMatchingResource);
 
     private sealed record TextureIndex(
         Dictionary<string, ExplorerItem> FilesByPath,

@@ -25,6 +25,7 @@ CF Rez Manager is a Windows WPF tool for browsing, searching, previewing, extrac
 - The [register field guide](docs/asset-mapping-register.md) explains statuses and blank fields. OBJ export does not preserve bone names or animation tracks; unconfirmed socket bindings stay blank.
 - The register contains 915 confirmed exported slots, with separate statuses for conflicting texture copies, unresolved slots, missing resources and model fields that name only a directory. The two CharacterItem batches retain node, embedded animation and socket records for 272 and 91 physical models respectively; their resource sets can overlap.
 - When GR, BL or female model columns reference the same CharacterItem model, all column sources are retained. Select skins with separate contexts such as `row:CharacterItem.CFT#2372:GR` and `row:CharacterItem.CFT#2372:BL`. Models with multiple declared skins no longer use a mesh-name guess when identity or side has not been selected.
+- Copies at the same logical texture path are shared only when every copy decodes with matching dimensions and BGRA pixels. Conflicting copies retain their sources and hashes while the game's active version remains unverified. PNG byte regression checks preserve all 915 confirmed records.
 
 ## Requirements
 
@@ -81,6 +82,7 @@ CFRezManager/
 - `Preview/`: standalone preview windows for audio, images, models, and text.
 - `UI/`: main window and UI controls.
 - `assets/`: app icon and image resources copied with the app.
+- `tools/TextureCopyCheck/`: [texture-copy regression checks](tools/TextureCopyCheck/README.md), with the basic cases run before publication.
 
 ## Basic Use
 
