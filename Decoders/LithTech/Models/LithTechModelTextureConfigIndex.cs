@@ -4117,7 +4117,8 @@ internal static class LithTechModelTextureConfigIndex
                 continue;
             }
 
-            foreach (CftModelTextureMapping mapping in CftModelTextureMappingDecoder.Extract(cftData))
+            foreach (CftModelTextureMapping mapping in CftModelTextureMappingDecoder.Extract(cftData)
+                         .SelectMany(mapping => ExpandCharacterPvItemModels(configItem.Path, mapping, modelItemsByPath, decodedModels)))
             {
                 // Only typed rows preserve the model/texture relationship. Numbered
                 // fields are explicit engine slots. Player-view hand/arm fields are
@@ -10555,6 +10556,33 @@ internal static class LithTechModelTextureConfigIndex
     {
         return mapping.ChildModelReferences.Contains(reference, StringComparer.OrdinalIgnoreCase) ||
             Path.GetFileNameWithoutExtension(reference).Contains("motion", StringComparison.OrdinalIgnoreCase);
+    }
+
+    // CharacterPvItem stores a gendered model prefix. Each physical alias must
+    // decode with a consistent native slot set before inheriting the row skin.
+    private static IEnumerable<CftModelTextureMapping> ExpandCharacterPvItemModels(
+        string tablePath,
+        CftModelTextureMapping mapping,
+        IReadOnlyDictionary<string, ExplorerItem[]> modelItemsByPath,
+        Dictionary<string, LithTechModelDocument?> decodedModels)
+    {
+        yield return mapping;
+        if (!mapping.HasTypedRowContext ||
+            !Path.GetFileName(tablePath).Equals("CharacterPvItem.CFT", StringComparison.OrdinalIgnoreCase) ||
+            !mapping.ModelColumn.Equals("_SocketItemModelFile", StringComparison.OrdinalIgnoreCase)) yield break;
+
+        string prefix = NormalizeKey(mapping.ModelReference);
+        if (Path.HasExtension(prefix) || !prefix.StartsWith("Models/PVItem/", StringComparison.OrdinalIgnoreCase)) yield break;
+        foreach (string gender in new[] { "M", "F" })
+        {
+            string candidate = prefix + "_" + gender + ".ltb";
+            if (!modelItemsByPath.TryGetValue(GetLogicalModelResourcePath(candidate), out ExplorerItem[]? copies) ||
+                !TryGetConsistentLtcModelSlots(copies, decodedModels, out int[] slots) ||
+                !mapping.TextureReferences.Any(texture =>
+                    CftModelTextureMappingDecoder.TryGetTextureSlotIndex(texture, out int slot) && slots.Contains(slot))) continue;
+
+            yield return mapping with { ModelReference = candidate };
+        }
     }
 
     private static bool HasMatchingModelTextureSlotMapping(

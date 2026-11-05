@@ -21,9 +21,11 @@ CF Rez Manager is a Windows WPF tool for browsing, searching, previewing, extrac
 
 ## Model And Texture Records
 
+These records describe the current source. For a published package, use the documentation at its version tag.
+
 - The [model-to-texture reference register](docs/asset-mapping-register.tsv) ships with the application. It records exported slots and CFT-declared model, texture, and motion-model paths whose slots still need verification; the runtime resolver does not load it as an automatic mapping.
 - The [register field guide](docs/asset-mapping-register.md) explains statuses and blank fields. OBJ export does not preserve bone names or animation tracks; unconfirmed socket bindings stay blank.
-- The register contains 21,380 confirmed export records, with separate statuses for conflicting texture copies, unresolved slots, missing resources and incomplete model paths. CharacterType arm checks cover 1,586 row/side cases and retain nodes, embedded animations, sockets and blend masks for 704 physical models. Two spelling-based fallbacks remain unverified.
+- The register contains 22,339 confirmed export records, with separate statuses for conflicting texture copies, unresolved slots, missing resources and incomplete model paths. CharacterType arm checks cover 1,586 row/side cases and retain nodes, embedded animations, sockets and blend masks for 704 physical models. Two spelling-based fallbacks remain unverified.
 - When GR, BL or female model columns reference the same CharacterItem model, all column sources are retained. Select skins with separate contexts such as `row:CharacterItem.CFT#2372:GR` and `row:CharacterItem.CFT#2372:BL`. Models with multiple declared skins no longer use a mesh-name guess when identity or side has not been selected.
 - CharacterType arm bindings also retain side-qualified row, identity and RecordId contexts, such as `row:CharacterType.CFT#1:GR`. Shared GR/BL model paths preserve both texture declarations regardless of the filename suffix. The [check tool](tools/CharacterArmCheck/README.md) covers selectors and actual OBJ/PNG exports.
 - OBJ export stops enumerating ordinary name fallbacks after a successful texture lookup and builds the mesh-name index on demand. Related SGFX glow textures still export. Texture reports list the candidates actually enumerated for that export.
@@ -36,6 +38,7 @@ CF Rez Manager is a Windows WPF tool for browsing, searching, previewing, extrac
 - CharacterItem checks cover 5,927 complete model-reference/side cases. GRTexFile and BLTexFile columns determine the side despite filename suffixes; DTX paths mistakenly placed in model columns do not replace primary texture fields. Records retain skeleton and animation metadata for 2,666 physical files and correct 16 earlier texture paths.
 - Ten Nano character tables cover all 1,980 source rows and 1,033 model-reference cases. Base `SkinFileName` stays beside numbered skins; `SocketSkinFileName2` supplies slot 0 of the second accessory. Checks confirm 1,221 new physical slot outputs and 2,530 unchanged PNGs. A spelling fallback stays unverified; bone and motion associations remain in the evidence tables.
 - AI character and extra-skin tables cover all 1,010 rows and 1,856 primary/child model cases. Typed texture fields can reference resources under `Models/`; explicit child fields establish the relationship even without a `motion` filename. Sixteen slot outputs are new and 4,268 PNGs remain byte-identical. Structure evidence retains bones, sockets and animation metadata for 704 native models.
+- CharacterPvItem gender prefixes resolve to same-directory `_M.ltb` and `_F.ltb` files after every physical copy passes native slot checks. Doll and first-person item checks cover 932 model cases, 210 new slot outputs and two corrected female ring skins. Independent reads verify bindings and animation data for 598 models and 750 sampled poses; external attachments and active motion versions remain unselected.
 
 ## Requirements
 

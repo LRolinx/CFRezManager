@@ -40,6 +40,8 @@ The [Nano inventory](../../docs/evidence/nano-family-20261105-structure-models.t
 
 The [AI inventory](../../docs/evidence/ai-family-20261105-structure-models.tsv) adds 704 complete native models, with 27,029 nodes, 23,922 embedded animations, 1,421 sockets, 1,405 blend masks and 383 external child declarations. The [independent reader](../../docs/evidence/ai-family-20261105-structure-validation.tsv) reproduces all saved values and complete file consumption. Three LTB-extension render styles correctly emit no model details. The [340 logical model/child relationships](../../docs/evidence/ai-family-20261105-motion-compatibility.tsv) retain physical-pair comparisons, while absent child files remain separate declarations.
 
+The [doll/accessory inventory](../../docs/evidence/view-items-20261105-structure-models.tsv) records 598 complete native files and all 178 declared animation-child dependencies. It retains 12,837 nodes, 426 embedded animations, 262 sockets and 280 blend masks. Independent [structure](../../docs/evidence/view-items-20261105-structure-validation.tsv) and [channel](../../docs/evidence/view-items-20261105-channel-validation.tsv) readers reproduce every saved value, all 14,212 channels and 39,203 keyframes/events. Three render styles emit no native model details. The [child comparisons](../../docs/evidence/view-items-20261105-child-compatibility.tsv) keep hierarchy and bind-matrix differences separate from playback and attachment claims.
+
 ## Channel inspection
 
 ```powershell
