@@ -6,7 +6,7 @@ using System.Text;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
-static class Program
+static partial class Program
 {
     static readonly Assembly App = typeof(RezArchiveReader).Assembly;
     static readonly List<string> Results = ["check\tstatus"];
@@ -113,6 +113,7 @@ static class Program
         Check("successful primary does not enumerate name fallbacks", primary.Path is not null && primary.Reference == "Known.png" && primary.Written == 1);
         var sgfx = ExportCandidates(["SGFX_Test.png", "SGFX_Test_GLOW_01.png"], "sgfx", name => name.Contains("GLOW") ? glowImage : primaryImage);
         Check("SGFX still exports its auxiliary texture", sgfx.Path is not null && sgfx.Reference == "SGFX_Test.png" && sgfx.Written == 2);
+        RunBodyChecks(run);
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(output))!); File.WriteAllLines(output, Results);
         Console.WriteLine($"{Results.Count - 1} character arm checks passed. Results: {Path.GetFullPath(output)}");
         return 0;

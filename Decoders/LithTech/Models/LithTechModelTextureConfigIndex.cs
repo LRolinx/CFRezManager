@@ -4378,6 +4378,15 @@ internal static class LithTechModelTextureConfigIndex
                         explicitTextureSlots.Add(resolvedSlotIndex);
                         string texturePath = existingTexturePath ?? texture.Path;
                         AddModelTextureSlotMapping(byModelPath, modelPath, resolvedSlotIndex, texturePath);
+                        bool characterBodyField = IsCharacterBodyCftMapping(configItem.Path, mapping) &&
+                            CftModelTextureMappingDecoder.TryGetCharacterBodyTextureSlot(texture.Column, out _, out _);
+                        string[] textureContexts = contextKeys;
+                        if (characterBodyField && CftModelTextureMappingDecoder.TryGetCharacterBodyTextureSlot(texture.Column, out string textureSide, out _))
+                        {
+                            textureContexts = GetCftSideContextKeys(configItem.Path, mapping, textureSide);
+                            foreach (string contextKey in textureContexts)
+                                AddModelTextureContextSlotMapping(byModelContext, modelPath, contextKey, resolvedSlotIndex, texture.Path);
+                        }
 
                         if (existingTexturePath is not null)
                         {
@@ -4389,7 +4398,7 @@ internal static class LithTechModelTextureConfigIndex
                                 exactCftTextureSlots.Add(resolvedSlotIndex);
                             }
 
-                            foreach (string contextKey in contextKeys)
+                            foreach (string contextKey in textureContexts)
                             {
                                 AddModelTextureContextSlotMapping(
                                     byModelContext,
@@ -4441,6 +4450,13 @@ internal static class LithTechModelTextureConfigIndex
                     }
                     else if (TryGetCharacterCftBodySide(configItem.Path, mapping, texture, out string bodySide))
                     {
+                        modelsWithSlotSpecificBindings.Add(modelPath);
+                        AddModelTextureSlotMapping(byModelPath, modelPath, 0, texture.Path);
+                        if (!modelItemsByPath.TryGetValue(GetLogicalModelResourcePath(modelResourcePath), out ExplorerItem[]? candidateBodyItems) ||
+                            !TryGetConsistentLtcModelSlots(candidateBodyItems, decodedModels, out int[] candidateBodySlots) || !candidateBodySlots.Contains(0))
+                            continue;
+                        foreach (string contextKey in GetCftSideContextKeys(configItem.Path, mapping, bodySide))
+                            AddModelTextureContextSlotMapping(byModelContext, modelPath, contextKey, 0, texture.Path);
                         string? existingTexturePath = ResolveExistingCftTextureReference(
                             modelResourcePath,
                             texture.Path,
@@ -4472,6 +4488,9 @@ internal static class LithTechModelTextureConfigIndex
                                     characterBodyItems,
                                     decodedModels,
                                     out int headTextureSlot) &&
+                                !mapping.TextureReferences.Any(reference =>
+                                    CftModelTextureMappingDecoder.TryGetCharacterBodyTextureSlot(reference.Column, out string declaredSide, out int declaredSlot) &&
+                                    declaredSide == bodySide && declaredSlot == headTextureSlot) &&
                                 TryResolveCharacterFaceTextureReference(
                                     existingTexturePath,
                                     resourcePaths,
@@ -8439,38 +8458,22 @@ internal static class LithTechModelTextureConfigIndex
         out string side)
     {
         side = string.Empty;
-        if (!string.Equals(Path.GetFileName(tablePath), "CharacterType.CFT", StringComparison.OrdinalIgnoreCase))
+        if (!IsCharacterBodyCftMapping(tablePath, mapping) ||
+            !CftModelTextureMappingDecoder.TryGetCharacterBodyTextureSlot(texture.Column, out string textureSide, out int slot) || slot != 0)
         {
             return false;
         }
 
-        string modelColumn = mapping.ModelColumn;
-        const string battleRoyalPrefix = "_BattleRoyal_";
-        if (modelColumn.StartsWith(battleRoyalPrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            modelColumn = "_" + modelColumn[battleRoyalPrefix.Length..];
-        }
-
-        const string modelSuffix = "ModelFile";
-        int suffixIndex = modelColumn.LastIndexOf(modelSuffix, StringComparison.OrdinalIgnoreCase);
-        if (!modelColumn.StartsWith('_') || suffixIndex < 0 ||
-            modelColumn[(suffixIndex + modelSuffix.Length)..].Any(character => !char.IsAsciiDigit(character)))
-        {
-            return false;
-        }
-
-        string candidateSide = modelColumn[1..suffixIndex];
-        if (candidateSide is not ("GR" or "BL") ||
-            !string.Equals(texture.Column, $"_{candidateSide}TextureFile", StringComparison.OrdinalIgnoreCase) ||
-            !NormalizeModelResourcePath(mapping.ModelReference).StartsWith(
-                "Models/Character/",
-                StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        side = candidateSide;
+        side = textureSide;
         return true;
+    }
+
+    private static bool IsCharacterBodyCftMapping(string tablePath, CftModelTextureMapping mapping)
+    {
+        if (!string.Equals(Path.GetFileName(tablePath), "CharacterType.CFT", StringComparison.OrdinalIgnoreCase) ||
+            !NormalizeModelResourcePath(mapping.ModelReference).StartsWith("Models/Character/", StringComparison.OrdinalIgnoreCase)) return false;
+        IReadOnlyList<string> columns = mapping.ModelColumns.Count > 0 ? mapping.ModelColumns : [mapping.ModelColumn];
+        return columns.Any(column => CftModelTextureMappingDecoder.GetCharacterBodyModelSide(column) is not null);
     }
 
     private static string[] GetLtcContextKeys(

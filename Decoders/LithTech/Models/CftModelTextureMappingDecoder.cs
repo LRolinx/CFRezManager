@@ -300,7 +300,7 @@ internal static class CftModelTextureMappingDecoder
                     {
                         "GRPVARMMODEL" => "GR",
                         "BLPVARMMODEL" => "BL",
-                        _ => GetCharacterItemModelSide(column)
+                        _ => GetCharacterItemModelSide(column) ?? GetCharacterBodyModelSide(column)
                     })
                     .OfType<string>()
                     .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -587,7 +587,7 @@ internal static class CftModelTextureMappingDecoder
     {
         CftTextureReference[] compatibleTextures = textureReferences
             .Where(texture =>
-                HaveCompatibleResourceSides(modelSide, texture) &&
+                HaveCompatibleResourceSides(modelSide, texture, GetCharacterBodyModelSide(modelColumn) is not null) &&
                 HaveCompatibleResourceRoles(modelColumn, texture, textureReferences))
             .DistinctBy(texture => $"{texture.ColumnIndex}\n{texture.Path}", StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -600,10 +600,10 @@ internal static class CftModelTextureMappingDecoder
             return [];
         }
 
-        // CharacterItem socket rows use BL/GRTexFile for the base skin alongside
-        // BL/GRTexFile2 and later numbered fields. Preserve the base declaration;
-        // the config index validates its native slot before binding it.
+        // CharacterItem and CharacterType retain their unnumbered base skin
+        // beside numbered fields. Slot validation belongs to the config index.
         bool hasSocketItemModel = GetCharacterItemModelSide(modelColumn) is not null;
+        bool hasCharacterBodyModel = GetCharacterBodyModelSide(modelColumn) is not null;
         // Numbered fields are explicit engine slots. Do not let a same-stem
         // texture short-circuit the rest of a row's slot list (for example,
         // TextureFile1 matching the model name while TextureFile2/3 are skins).
@@ -611,7 +611,8 @@ internal static class CftModelTextureMappingDecoder
             .Where(texture => TryGetTextureSlotIndex(texture.Column, out _) ||
                 hasSocketItemModel &&
                 (texture.Column.Equals("_BLTexFile", StringComparison.OrdinalIgnoreCase) ||
-                 texture.Column.Equals("_GRTexFile", StringComparison.OrdinalIgnoreCase)))
+                 texture.Column.Equals("_GRTexFile", StringComparison.OrdinalIgnoreCase)) ||
+                hasCharacterBodyModel && TryGetCharacterBodyTextureSlot(texture.Column, out _, out _))
             .ToArray();
         if (explicitSlotTextures.Length > 0)
         {
@@ -647,6 +648,21 @@ internal static class CftModelTextureMappingDecoder
             "BLSOCKETITEMMODELFILE" or "BLFSOCKETITEMMODELFILE" => "BL",
             _ => null
         };
+    }
+
+    internal static string? GetCharacterBodyModelSide(string columnName)
+    {
+        string column = columnName.TrimStart('_').ToUpperInvariant();
+        if (column.StartsWith("BATTLEROYAL_", StringComparison.Ordinal)) column = column["BATTLEROYAL_".Length..];
+        return column switch { "GRMODELFILE" or "GRMODELFILE2" => "GR", "BLMODELFILE" or "BLMODELFILE2" => "BL", _ => null };
+    }
+
+    internal static bool TryGetCharacterBodyTextureSlot(string columnName, out string side, out int slot)
+    {
+        string column = columnName.TrimStart('_').ToUpperInvariant();
+        side = column.StartsWith("GR", StringComparison.Ordinal) ? "GR" : column.StartsWith("BL", StringComparison.Ordinal) ? "BL" : "";
+        slot = column is "GRTEXTUREFILE" or "BLTEXTUREFILE" ? 0 : column is "GRTEXTUREFILE2" or "BLTEXTUREFILE2" ? 1 : -1;
+        return slot >= 0;
     }
 
     internal static bool TryGetTextureSlotIndex(string columnName, out int slotIndex)
@@ -771,9 +787,10 @@ internal static class CftModelTextureMappingDecoder
             : index;
     }
 
-    private static bool HaveCompatibleResourceSides(string? modelSide, CftTextureReference texture)
+    private static bool HaveCompatibleResourceSides(string? modelSide, CftTextureReference texture, bool characterBody)
     {
-        string? textureSide = GetResourceSide(texture.Column) ?? GetResourceSide(texture.Path);
+        string? textureSide = characterBody && TryGetCharacterBodyTextureSlot(texture.Column, out string declaredSide, out _)
+            ? declaredSide : GetResourceSide(texture.Column) ?? GetResourceSide(texture.Path);
         return string.IsNullOrWhiteSpace(modelSide) ||
                string.IsNullOrWhiteSpace(textureSide) ||
                string.Equals(textureSide, modelSide, StringComparison.OrdinalIgnoreCase);

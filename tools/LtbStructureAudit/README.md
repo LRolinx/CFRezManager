@@ -32,6 +32,8 @@ Vertex skin data has a separate [capture check](../NativeSkinCheck/README.md). T
 
 Pass this tool's completed `--channels` report to the skin tool's `--poses` option for sampled CPU evaluation. It verifies source hashes, indexed nodes and channel payloads before sampling the first/last keys and a selected interval midpoint. The [241-pose evidence](../../docs/evidence/native-pose-20261105-validation.tsv) covers native model-space transforms and vertex positions; blending, external-child selection and game rendering remain unverified.
 
+The [body inventory](../../docs/evidence/character-bodies-20261105-structure-models.tsv) adds 947 complete physical files with 27,776 nodes, 7,502 sockets, 1,894 blend masks and 946 external child declarations. None contains an embedded animation. An [independent reader](../../docs/evidence/character-bodies-20261105-structure-validation.tsv) reproduced every retained value and consumed each file completely. Child paths remain declarations; physical motion selection and playback compatibility are unverified.
+
 ## Channel inspection
 
 ```powershell

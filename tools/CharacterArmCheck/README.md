@@ -1,4 +1,4 @@
-# Character arm context checks
+# Character context checks
 
 Run from the repository on Windows with the .NET 8 SDK:
 
@@ -8,7 +8,11 @@ dotnet run --project tools/CharacterArmCheck -c Release
 
 The tool creates a native two-piece triangle LTB, a two-row CharacterType CFT and eight small PNG textures under a unique `artifacts/character-arm-check/` directory. No game files are required. Both sides deliberately share a model whose filename ends in `_GR`; the declared model columns must retain both GR and BL skins.
 
-The 67 checks cover side-qualified row, identity and positive RecordId selectors, reused models with different row skins, ambiguous unqualified contexts, absent selectors and the distinction between row indices and record identifiers, reversed hand/arm slots, deferred fallback indexing, early success without further name guesses and retained SGFX auxiliary output. Four ordinary command-line OBJ exports must use the declared fields and preserve every texture pixel. Results default to `artifacts/character-arm-check/results.tsv`; `--output <report.tsv>` selects another path.
+The original 67 checks cover side-qualified row, identity and positive RecordId selectors, reused models with different row skins, ambiguous unqualified contexts, absent selectors and the distinction between row indices and record identifiers, reversed hand/arm slots, deferred fallback indexing, early success without further name guesses and retained SGFX auxiliary output. Four ordinary command-line OBJ exports must use the declared fields and preserve every texture pixel. Results default to `artifacts/character-arm-check/results.tsv`; `--output <report.tsv>` selects another path.
+
+An additional 101 body checks bring the total to 168. Their separate CFT keeps ordinary, ModelFile2 and BattleRoyal GR/BL columns, unnumbered base textures and TextureFile2. Model and texture filenames deliberately use the opposite side suffix. Row, identity and RecordId selectors must still choose the declared side. Eight body OBJ exports preserve both slots and pixels; a ninth keeps geometry and the second texture when the base texture is missing. An invalid physical model copy blocks base-slot binding, and a missing side does not become the other side's default.
+
+The [body snapshot](../../docs/evidence/character-bodies-20261105-export-slots.tsv) covers 3,888 row/model/side cases and 4,925 physical stage-slot witnesses. It records 283 new outputs, 11 corrected skins, 4,002 byte-identical PNGs, one stopped fallback and five unverified outputs. The [source inventory](../../docs/evidence/character-bodies-20261105-resources.tsv) and [raw fields](../../docs/evidence/character-bodies-20261105-raw-fields.tsv) retain paths, copies and declarations independently of the export result.
 
 The release workflow runs these checks before packaging. [Texture-copy checks](../TextureCopyCheck/README.md) separately verify conflicting physical resources; [structure checks](../LtbStructureAudit/README.md) cover nodes, child declarations, bindings and animation blend masks. These checks do not validate animation playback or vertex skinning.
 
