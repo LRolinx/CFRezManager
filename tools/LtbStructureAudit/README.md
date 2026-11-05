@@ -12,14 +12,17 @@ The validated layout is native D3D LTB header version 9, model version 25, inclu
 
 ## Output
 
-- `models.tsv`: source identity, file hashes, allocation and parsed counts, hierarchy/bind-matrix hashes, parse status and error.
+- `models.tsv`: source identity, file hashes, allocation and parsed counts, hierarchy/bind-matrix hashes, parse status and error. Weight-set, child-model and animation-binding counts are appended after the original columns.
 - `nodes.tsv`: node index, parent index, name, flags and the serialized global bind matrix.
 - `animations.tsv`: per-file animation names, compression types, interpolation times, keyframe counts and final keyframe times. Names repeated in different physical model copies remain separate records.
 - `sockets.tsv`: embedded socket names, target node indices and serialized rotation/position/scale values.
+- `weight-sets.tsv`: named animation blend masks, node counts and serialized float32 weights in node-index order. These are not vertex skin weights.
+- `child-models.tsv`: child index, implicit-self flag, raw declared path and serialized animation-binding count. Index 0 is the containing model and has no path string in the file.
+- `animation-bindings.tsv`: child index, binding index, animation name, dimensions and translation. Self bindings also report case-insensitive name-match counts and same-index name equality; external children are not compared with the containing model's animations. These metadata values are separate from bone keyframes.
 
-Matrix and socket values are little-endian float32 bytes encoded as hexadecimal. Hierarchy hashes cover node index, parent, name and flags sorted by index. Bind-matrix hashes compare serialized values, so different hashes do not by themselves prove incompatible poses.
+Matrix, socket, weight and binding vector values are little-endian float32 bytes encoded as hexadecimal. Hierarchy hashes cover node index, parent, name and flags sorted by index. Bind-matrix hashes compare serialized values, so different hashes do not by themselves prove incompatible poses. Duplicate or reordered binding names remain visible in the report; structural completeness does not establish a unique animation association.
 
-`structure-complete` requires the declared node, piece, LOD, weight-set, child-model, animation and socket counts to agree, bounded animation channels, and complete file consumption with at most three zero padding bytes. Detailed node, animation and socket rows are emitted only for complete files. Exit code 1 reports rejected files; exit code 2 reports invalid arguments.
+`structure-complete` requires the declared node, piece, LOD, weight-set, child-model, animation and socket counts to agree, bounded animation channels, and complete file consumption with at most three zero padding bytes. All detailed tables are emitted only for complete files. Exit code 1 reports rejected files; exit code 2 reports invalid arguments.
 
 The tool inventories animation channels without evaluating them. Matching node hierarchies is evidence for an association; animation playback, skin weights and retargeting still require validation. OBJ export remains geometry and texture export.
 
@@ -32,6 +35,16 @@ The CharacterItem base-field snapshot records 272 complete physical LTB files, i
 The CharacterItem side snapshot adds a separate inventory of 91 physical files, which can overlap the base snapshot. It records 182 nodes, 91 embedded animations and one socket: `Effect` on node 1 of `Models/WAVE/ETC/IFF_Shoulder.LTB`. The [node](../../docs/evidence/characteritem-side-20261105-structure-nodes.tsv), [animation](../../docs/evidence/characteritem-side-20261105-structure-animations.tsv) and [socket](../../docs/evidence/characteritem-side-20261105-structure-sockets.tsv) tables retain every parsed entry. The [raw CFT fields](../../docs/evidence/characteritem-side-20261105-raw-fields.tsv) cover 140 rows; target-type enums do not establish external socket bindings. v1.2.8 also keeps GR/BL mapping contexts separate when their model paths are identical.
 
 v1.2.9 preserves these structure records while rejecting conflicting texture copies during export. The [texture-copy inventory](../../docs/evidence/texture-copy-20261105-variants.tsv) records the six affected physical DTX files; the [copy-check tool](../TextureCopyCheck/README.md) tests pixel equivalence and fallback behavior separately from model structure parsing.
+
+The [combined association snapshot](../../docs/evidence/ltb-associations-20261105-models.tsv) deduplicates the three inventories into 373 physical files. It preserves 376 child entries, 8,867 animation bindings and 17 blend-weight sets. The three FireAim body files explicitly name `M-motion_blue.ltb` as an external child with zero serialized binding overrides. Their arm files have no external child. All prior structure rows and all newly recorded binary values passed independent comparison; physical motion-version selection and playback remain unverified.
+
+## Structure checks
+
+```powershell
+.\tools\LtbStructureAudit\Check.ps1
+```
+
+The script builds the tool into a unique directory under `artifacts/ltb-structure-check/`, creates 14 synthetic files without game resources and runs 40 assertions. These cover self/external child records, empty external bindings, preserved float bytes, quoted paths, duplicate/reordered/missing names, invalid counts, non-finite values, truncated records and trailing data. Invalid fixtures produce summary errors without detailed rows. Results default to `artifacts/ltb-structure-check/results.tsv`; `-Output <report.tsv>` changes that path. `-ToolDll <LtbStructureAudit.dll>` uses an existing build. The release workflow runs the checks before packaging.
 
 ## Motion comparison
 

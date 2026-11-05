@@ -21,6 +21,10 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
+      - name: Check model structure records
+        shell: pwsh
+        run: .\tools\LtbStructureAudit\Check.ps1
+
       - name: Check texture-copy resolution
         run: dotnet run --project ./tools/TextureCopyCheck -c Release
 
