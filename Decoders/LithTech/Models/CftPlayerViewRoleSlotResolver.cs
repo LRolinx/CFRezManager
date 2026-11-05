@@ -108,7 +108,18 @@ internal static class CftPlayerViewRoleSlotResolver
                          hasPairedHandArmSuffixes && mesh.Name.EndsWith("_A", StringComparison.OrdinalIgnoreCase);
             if (isHand && isArm)
             {
-                return CftPlayerViewRoleSlotMap.Empty;
+                // Asset names such as IronBeast2Arm can follow an explicit Hand
+                // role. Prefer a separate role word over a substring in that name.
+                string[] words = mesh.Name.Split(['_', '-', '.', ' ', '/', '\\'], StringSplitOptions.RemoveEmptyEntries);
+                bool handWord = words.Contains("hand", StringComparer.OrdinalIgnoreCase);
+                bool armWord = words.Contains("arm", StringComparer.OrdinalIgnoreCase);
+                if (handWord == armWord)
+                {
+                    return CftPlayerViewRoleSlotMap.Empty;
+                }
+
+                isHand = handWord;
+                isArm = armWord;
             }
 
             int[] slots = (mesh.TextureSlotIndices ?? []).Distinct().ToArray();

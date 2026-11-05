@@ -119,6 +119,7 @@ static partial class Program
         RunAiChecks(run);
         RunCharacterPvChecks(run);
         RunLtaChecks(run);
+        RunOtherCftChecks(run);
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(output))!); File.WriteAllLines(output, Results);
         Console.WriteLine($"{Results.Count - 1} character arm checks passed. Results: {Path.GetFullPath(output)}");
         return 0;

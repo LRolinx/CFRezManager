@@ -4294,42 +4294,32 @@ internal static class LithTechModelTextureConfigIndex
                     }
                 }
 
-                if (string.Equals(
-                        Path.GetFileName(configItem.Path),
-                        "Parts.CFT",
-                        StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(mapping.ModelColumn, "_ModelFileName", StringComparison.OrdinalIgnoreCase) &&
-                    mapping.TextureReferences is { Count: 1 } partsTextureReferences &&
-                    string.Equals(
-                        partsTextureReferences[0].Column.TrimStart('_'),
-                        "ModelTexFileName",
-                        StringComparison.OrdinalIgnoreCase) &&
+                if (TryGetScalarCftTextureReference(configItem.Path, mapping, out CftTextureReference scalarTexture) &&
                     modelItemsByPath.TryGetValue(
                         GetLogicalModelResourcePath(modelResourcePath),
-                        out ExplorerItem[]? partsModelItems) &&
-                    TryGetConsistentLtcModelSlots(partsModelItems, decodedModels, out int[] partsModelSlots) &&
-                    partsModelSlots.Length == 1)
+                        out ExplorerItem[]? scalarModelItems) &&
+                    TryGetConsistentLtcModelSlots(scalarModelItems, decodedModels, out int[] scalarModelSlots) &&
+                    scalarModelSlots.Length == 1)
                 {
-                    CftTextureReference partsTexture = partsTextureReferences[0];
-                    string? existingPartsTexturePath = ResolveExistingCftTextureReference(
+                    string? existingScalarTexturePath = ResolveExistingCftTextureReference(
                         modelResourcePath,
-                        partsTexture.Path,
+                        scalarTexture.Path,
                         resourceItems,
                         resourcePaths,
                         texturePathsByBaseName);
-                    bool hasExactPartsTexture = existingPartsTexturePath is not null &&
+                    bool hasExactScalarTexture = existingScalarTexturePath is not null &&
                         string.Equals(
-                            NormalizeKey(existingPartsTexturePath),
-                            NormalizeKey(partsTexture.Path),
+                            NormalizeKey(existingScalarTexturePath),
+                            NormalizeKey(scalarTexture.Path),
                             StringComparison.OrdinalIgnoreCase);
-                    int slotIndex = partsModelSlots[0];
+                    int slotIndex = scalarModelSlots[0];
                     AddModelTextureSlotMapping(
                         byModelPath,
                         modelPath,
                         slotIndex,
-                        hasExactPartsTexture ? existingPartsTexturePath! : partsTexture.Path);
-                    if (hasExactPartsTexture &&
-                        HasConsistentPhysicalResourceCopies(resourceItems, existingPartsTexturePath!))
+                        hasExactScalarTexture ? existingScalarTexturePath! : scalarTexture.Path);
+                    if (hasExactScalarTexture &&
+                        HasConsistentPhysicalResourceCopies(resourceItems, existingScalarTexturePath!))
                     {
                         foreach (string contextKey in contextKeys)
                         {
@@ -4338,7 +4328,7 @@ internal static class LithTechModelTextureConfigIndex
                                 modelPath,
                                 contextKey,
                                 slotIndex,
-                                existingPartsTexturePath!);
+                                existingScalarTexturePath!);
                         }
                     }
 
@@ -11397,6 +11387,31 @@ internal static class LithTechModelTextureConfigIndex
         }
 
         return null;
+    }
+
+    private static bool TryGetScalarCftTextureReference(
+        string tablePath,
+        CftModelTextureMapping mapping,
+        out CftTextureReference texture)
+    {
+        texture = null!;
+        (string ModelColumn, string TextureColumn) schema = Path.GetFileName(tablePath).ToUpperInvariant() switch
+        {
+            "PARTS.CFT" => ("_ModelFileName", "_ModelTexFileName"),
+            "MOUNTEDWEAPON.CFT" => ("_TRIPOD_MODEL_PATH", "_TRIPOD_TEXTURE_PATH"),
+            "CHARACTERMOTIONDATA.CFT" => ("_3rdModelFile", "_3rdTextureFile"),
+            _ => (string.Empty, string.Empty)
+        };
+        if (schema.ModelColumn.Length == 0 ||
+            !mapping.ModelColumn.Equals(schema.ModelColumn, StringComparison.OrdinalIgnoreCase) ||
+            mapping.TextureReferences is not { Count: 1 } references ||
+            !references[0].Column.TrimStart('_').Equals(schema.TextureColumn.TrimStart('_'), StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        texture = references[0];
+        return true;
     }
 
     private static bool TryResolveVerifiedCftTextureFieldSlotAlias(

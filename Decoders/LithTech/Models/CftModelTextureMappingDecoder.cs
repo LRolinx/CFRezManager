@@ -178,7 +178,9 @@ internal static class CftModelTextureMappingDecoder
         }
 
         bool hasCharacterTypeRowIndex = HasCharacterTypeRowIndex(columnNames, columnTypes, columnCount);
-        bool hasNanoCharacterSkins = columnNames.Take(columnCount).Contains("_NanoType", StringComparer.OrdinalIgnoreCase) &&
+        bool hasBaseCharacterSkins = (columnNames.Take(columnCount).Contains("_NanoType", StringComparer.OrdinalIgnoreCase) ||
+            columnNames.Take(columnCount).Contains("_ChaserType", StringComparer.OrdinalIgnoreCase) &&
+            columnNames.Take(columnCount).Contains("_PVHandArmSkinFiles", StringComparer.OrdinalIgnoreCase)) &&
             columnNames.Take(columnCount).Contains("_ModelFileName", StringComparer.OrdinalIgnoreCase) &&
             columnNames.Take(columnCount).Contains("_SkinFileName", StringComparer.OrdinalIgnoreCase);
         int position = 14 + ColumnCapacity * 64 + ColumnCapacity * sizeof(int);
@@ -320,7 +322,7 @@ internal static class CftModelTextureMappingDecoder
                     modelReference,
                     modelColumn,
                     modelSide,
-                    hasNanoCharacterSkins);
+                    hasBaseCharacterSkins);
                 if (pairedTextures.Length > 0)
                 {
                     mappings.Add(new CftModelTextureMapping(
@@ -595,7 +597,7 @@ internal static class CftModelTextureMappingDecoder
         string modelReference,
         string modelColumn,
         string? modelSide,
-        bool hasNanoCharacterSkins)
+        bool hasBaseCharacterSkins)
     {
         bool characterBody = GetCharacterBodyModelSide(modelColumn) is not null;
         bool characterItem = GetCharacterItemModelSide(modelColumn) is not null;
@@ -603,7 +605,7 @@ internal static class CftModelTextureMappingDecoder
             .Where(texture =>
                 HaveCompatibleResourceSides(modelSide, texture, characterBody, characterItem) &&
                 HaveCompatibleResourceRoles(modelColumn, texture, textureReferences))
-            .Select(texture => hasNanoCharacterSkins && TryGetNanoCharacterTextureSlot(modelColumn, texture.Column, out int slot)
+            .Select(texture => hasBaseCharacterSkins && TryGetNanoCharacterTextureSlot(modelColumn, texture.Column, out int slot)
                 ? texture with { NativeSlotIndex = slot } : texture)
             .DistinctBy(texture => $"{texture.ColumnIndex}\n{texture.Path}", StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -618,7 +620,7 @@ internal static class CftModelTextureMappingDecoder
         }
 
         // Retain declared base skins beside numbered fields. NativeSlotIndex
-        // carries the Nano schema's base/accessory interpretation.
+        // carries the character schema's base/accessory interpretation.
         bool hasSocketItemModel = GetCharacterItemModelSide(modelColumn) is not null;
         bool hasCharacterBodyModel = GetCharacterBodyModelSide(modelColumn) is not null;
         // Numbered fields are explicit engine slots. Do not let a same-stem

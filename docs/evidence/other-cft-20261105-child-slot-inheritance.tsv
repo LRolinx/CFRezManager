@@ -1,0 +1,2 @@
+"job"	"table"	"row_index"	"parent_path"	"child_path"	"child_column"	"parent_physical_copies"	"child_physical_copies"	"native_slots"	"all_copies_match"	"native_child_declaration_matches"	"texture_fields"	"animation_playback"
+"case-00324"	"Table/TigChaserTypes.CFT"	"0"	"Models\CHARACTER\TigMode\chaser.ltb"	"Models/CHARACTER/TigMode/M-Motion_chaser.ltb"	"_ChildModelFileName"	"1"	"1"	"0,1"	"true"	"true"	"_SkinFileName:ModelTextures\CHARACTER\TigMode\Chaser.dtx || _SkinFileName1:ModelTextures\CHARACTER\TigMode\QV-Chaser_hammer.dtx"	"unverified"

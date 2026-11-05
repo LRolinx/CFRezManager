@@ -1,5 +1,7 @@
 # Texture copy checks
 
+The [other-CFT comparison](../../docs/asset-mapping-register.md#other-model-tables) decodes 174 physical DTXs. Two IronBeast2 NG paths each have different pixels in their physical copies. Restored row bindings keep those conflicts unresolved and stop 16 unrelated old-skin fallbacks; every stopped image matches none of the declared copies. All 49 copy checks pass, and 253 written PNG witnesses remain byte-identical.
+
 The [UGC snapshot](../../docs/asset-mapping-register.md#ugc-assets) decodes 3,003 physical DTXs and retains 17 logical paths with conflicting pixels. Every written requested or grouped export matches a unique source pixel result; zero-alpha removal is recorded. Across those exports, 32,723 PNG witnesses remain byte-identical. The 49 synthetic copy checks pass; recorded object texture candidates do not select a physical version or a scene texture.
 
 Run from the repository on Windows with the .NET 8 SDK:

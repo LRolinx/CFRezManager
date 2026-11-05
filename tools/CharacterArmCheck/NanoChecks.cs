@@ -81,16 +81,17 @@ static partial class Program
         }
         w.Write(Encoding.ASCII.GetBytes("END" + new string(' ', 61))); w.Write((byte)0); return output.ToArray();
     }
-    static byte[] NanoModel(int[] slots)
+    static byte[] NanoModel(int[] slots, string[]? names = null)
     {
         using var output = new MemoryStream(); using var w = new BinaryWriter(output);
         w.Write((ushort)1); w.Write((ushort)9); w.Write(new byte[16]); w.Write(25u);
         uint[] allocations = new uint[15]; allocations[2] = 1; allocations[3] = (uint)slots.Length; allocations[4] = 1; allocations[8] = (uint)slots.Length;
         foreach (uint value in allocations) w.Write(value);
         Str(w, ""); w.Write(1f); w.Write(0u); w.Write((uint)slots.Length);
-        foreach (int slot in slots)
+        for (int piece = 0; piece < slots.Length; piece++)
         {
-            Str(w, "part-" + slot); w.Write(1u); w.Write(0f); w.Write(0u); w.Write(0u);
+            int slot = slots[piece];
+            Str(w, names is null ? "part-" + slot : names[piece]); w.Write(1u); w.Write(0f); w.Write(0u); w.Write(0u);
             w.Write(1u); w.Write(slot); w.Write(new byte[12]); w.Write(0); w.Write((byte)0); w.Write(4u); w.Write(102u);
             w.Write(3u); w.Write(1u); w.Write(1u); w.Write(1u); w.Write(0x11u); w.Write(new byte[12]); w.Write(0u);
             foreach (float[] vertex in new[] { new[] { 0f, 0f, 0f, 0f, 0f }, new[] { 1f, 0f, 0f, 1f, 0f }, new[] { 0f, 1f, 0f, 0f, 1f } }) foreach (float v in vertex) w.Write(v);
