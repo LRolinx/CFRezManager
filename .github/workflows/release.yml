@@ -49,6 +49,13 @@ jobs:
           body: |
             CF Rez Manager ${{ github.ref_name }}
 
+            ## v1.2.7 更新 / Highlights
+
+            - CFT 双击预览改为表格，显示全部已解码行、原始列名和行号，支持冻结首列、数值排序、调整列宽、滚动和复制单元格。
+            - 表格窗口新增“导出 XLSX...”按钮，按源表顺序导出全部行；CharacterType 和 CharacterItem 共 135,900 个单元格已核对。
+            - CFT files now open in a table showing all decoded rows, original field names and row numbers, with a frozen first column, numeric sorting, column resizing, scrolling and cell copying.
+            - Added an Export XLSX button to the table window. Exports retain source order; all 135,900 cells across CharacterType and CharacterItem were checked.
+
             ## v1.2.6 更新 / Highlights
 
             - 新增 CFT 表格 XLSX 导出，支持 REZ 内文件和散文件；文本预览显示实际行数据。CharacterType 的 900 行、70 列样本已逐值验证。

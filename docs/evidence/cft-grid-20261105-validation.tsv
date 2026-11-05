@@ -1,0 +1,11 @@
+case	source_sha256	observed	result
+CharacterType.CFT	B5EC11CF13820FF243B56A9E9460497AE4CE907154702F13556AF9223C9E6FCB	900 data rows; 70 columns including RecordId; all 63000 grid values match the independently verified source workbook	passed
+CharacterItem.CFT	54BD0D5BBDD3F91E8A975411A7F4EA442C25FDC20D9C4D5FED510B84B721783F	2700 data rows; 27 columns including RecordId; all 72900 grid values match the independently verified source workbook	passed
+column positions		duplicate names and an empty header retain their separate columns and original values	passed
+unnamed numeric column		an empty field name retains signed integer cells and numeric sorting	passed
+wrappers		plain, XOR and LZMA-XOR open as grids with identical values	passed
+text and integer values		Unicode, whitespace, leading zeros, formula-like strings and minimum/maximum int32 values retained	passed
+zero rows		all headers retained with an empty grid	passed
+grid behavior		read-only; RecordId frozen after columns are created; numeric columns sort numerically; row and column virtualization enabled	passed
+visual checks		original underscores visible in headers; numeric descending order and sequential row numbers inspected; Ctrl+End reaches row 900 and column 70	passed
+window XLSX export		Save dialog completed; success status shows 900 rows; all 63000 exported values match the source-verified workbook	passed

@@ -21,6 +21,11 @@ internal static class LocalizedText
             ["PreviewPause"] = ("\u6682\u505c", "Pause"),
             ["PreviewPlay"] = ("\u64ad\u653e", "Play"),
             ["PreviewFrame"] = ("\u5e27", "Frame"),
+            ["CftExportXlsx"] = ("导出 XLSX...", "Export XLSX..."),
+            ["CftXlsxFilter"] = ("Excel 工作簿 (*.xlsx)|*.xlsx", "Excel workbook (*.xlsx)|*.xlsx"),
+            ["CftTableSize"] = ("{0:N0} 行 · {1:N0} 列", "{0:N0} rows · {1:N0} columns"),
+            ["CftExportComplete"] = ("已导出 {0:N0} 行: {1}", "Exported {0:N0} rows: {1}"),
+            ["CftExportFailed"] = ("表格导出失败", "Table export failed"),
 
             ["ModelOuterCompressionFailed"] = ("无法解开模型外层压缩。", "Could not decompress the model wrapper."),
             ["ModelLtcNotRecognized"] = ("LTC 不是可直接识别的 LTA 文本/压缩文本，也未能用内置 LTC 解码器还原为 LTA。可配置 CFREZ_LTC_TO_LTA 作为外部兜底。", "The LTC is not directly recognizable LTA text/compressed text, and the built-in LTC decoder could not restore it to LTA. Configure CFREZ_LTC_TO_LTA as an external fallback."),

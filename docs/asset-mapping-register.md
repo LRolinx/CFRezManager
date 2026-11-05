@@ -22,7 +22,7 @@ Rows describe individual slots. A successful row can coexist with other unresolv
 - `motion_model_path` records a motion-model path declared in the same typed CFT row. It does not claim that OBJ export contains the animation.
 - OBJ currently exports geometry and textures. It does not preserve skeleton bones or animation tracks.
 
-Starting with v1.2.6, original CFT fields can also be inspected by exporting the table to XLSX from the file context menu or with `--export-cft-xlsx --input <file.cft> --output <file.xlsx>`. Its first column is the serialized `RecordId`; it is distinct from the zero-based row selector used in this register. The workbook includes all decoded rows, while text previews show at most 200.
+Starting with v1.2.7, opening a CFT displays all decoded rows in a table with row numbers, original field names, a frozen `RecordId` column and numeric sorting. Export XLSX from the preview window, the file context menu or with `--export-cft-xlsx --input <file.cft> --output <file.xlsx>`. Its first column is the serialized `RecordId`; it is distinct from the zero-based row selector used in this register. Export preserves source order regardless of preview sorting. The [preview checks](evidence/cft-grid-20261105-validation.tsv) cover both CharacterType and CharacterItem, including every cell and duplicate-column guards.
 
 ## Snapshot
 

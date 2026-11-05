@@ -94,6 +94,20 @@ internal static class PreviewTool
             byte[] data = File.ReadAllBytes(filePath);
             string? modelFallbackError = null;
 
+            if (extension.Equals("cft", StringComparison.OrdinalIgnoreCase) &&
+                CrossFireCftTableDecoder.TryDecode(data, out CrossFireCftTable? cftTable) && cftTable is not null)
+            {
+                string displayName = fileName;
+                string temporaryDirectory = Path.Combine(Path.GetTempPath(), "CFRezManager", "PreviewTool");
+                if (string.Equals(Path.GetDirectoryName(Path.GetFullPath(filePath)), temporaryDirectory, StringComparison.OrdinalIgnoreCase) &&
+                    fileName.Length > 33 && fileName[32] == '_' && Guid.TryParseExact(fileName[..32], "N", out _))
+                {
+                    displayName = fileName[33..];
+                }
+                window = new CftPreviewWindow(displayName, cftTable) { ShowInTaskbar = true };
+                return true;
+            }
+
             if (LithTechModelDecoder.IsCandidate(extension))
             {
                 if (LithTechModelDecoder.TryDecode(data, fileName, extension, out LithTechModelDocument? modelDocument, out string? modelError) &&

@@ -16,7 +16,7 @@ CF Rez Manager is a Windows WPF tool for browsing, searching, previewing, extrac
 - Pack a normal Windows folder into a new `.rez` archive.
 - Preview images, textures, audio, models, maps, script configs, and common CrossFire/LithTech resources.
 - Choose per format whether decodable image resources such as BIN, DTX, TGA, and DDS are exported as source files or standard `.png` files.
-- Export decodable CFT tables directly to `.xlsx` without installing Excel.
+- Preview CFT files as tables and export them directly to `.xlsx` without installing Excel.
 - Provide command-line batch entry points for OBJ/MTL model export, CFG scanning, and CFG decoding.
 
 ## Model And Texture Records
@@ -107,7 +107,8 @@ Common right-click actions:
 - Compressed resources: common LZMA-wrapped resources, with thumbnail badges such as `RAW`, `LZMA`, `DXT`, and `TXT`.
 - Audio: WAV, OGG, MP3, and FMOD `.bank`, with waveform thumbnails, track list, playback controls, seeking, and dynamic spectrum display. OGG/MP3 previews decode to PCM before spectrum rendering so normal audio files behave more like FMOD BANK streams.
 - Models and maps: LTC, LTB, LTA, DAT, and SPR, with thumbnails and standalone preview windows; SPR can autoplay animation frames.
-- Text and config resources: CFT, FCF, FXF, FXO, NAV, APF, REF, TXT, selected WAVE resources, CrossFire UI script `.bin`, and CFG.
+- CFT tables: all decoded rows and original field names, row numbers, a frozen `RecordId` column, numeric sorting, resizable columns and horizontal scrolling. Select cells and press `Ctrl+C` to copy.
+- Text and config resources: FCF, FXF, FXO, NAV, APF, REF, TXT, selected WAVE resources, CrossFire UI script `.bin`, and CFG.
 - CFG batch work: scan texture references, decode plain/LZMA/ENC/REZ-phase text CFG files, classify failed decodes, and render previews for binary RGB-strip CFG files.
 
 Generated thumbnails are cached in the `ThumbnailCache` folder under the program directory instead of the current Windows user profile disk. On startup, the app tries to remove the old user-profile thumbnail cache; use `Clear Cache` in `Settings` after replacing resources to remove current stale thumbnails.
@@ -156,7 +157,7 @@ Notes:
 
 ## Command-Line Tools
 
-Right-click a CFT file and select **Export XLSX...** for files inside REZ archives or extracted folders. The workbook preserves field order and adds the original `RecordId` as its first column. Strings remain text, preserving leading zeros and formula-like values. Text previews show up to 200 rows; XLSX exports include every decoded row.
+Double-click a CFT file to preview all decoded rows as a table; `Ctrl+End` jumps to the last cell. Select **Export XLSX...** in the preview window or the file context menu for files inside REZ archives or extracted folders. The workbook preserves source row and field order, regardless of preview sorting, and adds the original `RecordId` as its first column. Strings remain text, preserving leading zeros and formula-like values.
 
 ```powershell
 dotnet run --project .\CFRezManager.csproj -- --export-cft-xlsx --input ".\Extracted\Table\CharacterType.CFT" --output ".\out\CharacterType.xlsx"

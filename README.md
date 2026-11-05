@@ -16,7 +16,7 @@ CF Rez Manager 是一个 Windows WPF 工具，用来浏览、搜索、预览、�
 - 将普通 Windows 文件夹重新打包为 `.rez`。
 - 预览图片、纹理、音频、模型、地图、脚本配置和多种 CrossFire/LithTech 资源。
 - 按格式选择将 BIN、DTX、TGA、DDS 等可解码图片资源保留为源文件或导出为标准 `.png`。
-- 将可解码的 CFT 表格直接导出为 `.xlsx`，无需安装 Excel。
+- 以表格预览 CFT，并直接导出为 `.xlsx`，无需安装 Excel。
 - 提供 OBJ/MTL 模型导出、CFG 扫描和 CFG 解码等命令行批处理入口。
 
 ## 模型贴图记录
@@ -107,7 +107,8 @@ CFRezManager/
 - 压缩资源：支持常见 LZMA 外壳资源，缩略图角标会标出 `RAW`、`LZMA`、`DXT`、`TXT` 等状态。
 - 音频：WAV、OGG、MP3 和 FMOD `.bank`，支持波形缩略图、曲目列表、播放控制、进度拖动和动态频谱；OGG/MP3 预览会解码为 PCM 后生成频谱，让普通音频和 FMOD BANK 的波形表现更一致。
 - 模型和地图：LTC、LTB、LTA、DAT、SPR，可生成缩略图并打开独立预览窗口；SPR 可自动播放动画帧。
-- 文本和配置：CFT、FCF、FXF、FXO、NAV、APF、REF、TXT、部分 WAVE 资源、CrossFire UI 脚本 `.bin`、CFG。
+- CFT 表格：显示全部已解码行和原始字段列名，支持行号、冻结 `RecordId` 首列、数值排序、调整列宽和横向滚动；选中单元格后可用 `Ctrl+C` 复制。
+- 文本和配置：FCF、FXF、FXO、NAV、APF、REF、TXT、部分 WAVE 资源、CrossFire UI 脚本 `.bin`、CFG。
 - CFG 批处理：可扫描贴图引用，支持普通/LZMA/ENC/REZ phase 文本 CFG 解码，分类失败解码结果，并为二进制 RGB 条带型 CFG 生成预览。
 
 生成过的缩略图会缓存在程序目录下的 `ThumbnailCache` 文件夹中，避免持续占用当前 Windows 用户目录所在磁盘。程序启动时会尝试删除旧版用户目录缩略图缓存；资源变化后可在 `设置` 中用 `清缩略图` 清理当前缓存。
@@ -156,7 +157,7 @@ CFRezManager/
 
 ## 命令行工具
 
-CFT 文件可右键选择“导出 XLSX...”，适用于 REZ 内文件和已解包的散文件。工作簿保留字段顺序，首列为原始 `RecordId`；字符串按文本保存，保留前导零，不会作为公式执行。文本预览最多显示前 200 行，XLSX 导出包含全部已解码行。
+CFT 文件双击后打开表格预览，显示全部已解码行；`Ctrl+End` 可跳到末行末列。窗口右上角或文件右键菜单中的“导出 XLSX...”适用于 REZ 内文件和已解包的散文件。工作簿按源表顺序导出全部行，首列为原始 `RecordId`，不受预览排序影响；字符串按文本保存，保留前导零，不会作为公式执行。
 
 ```powershell
 dotnet run --project .\CFRezManager.csproj -- --export-cft-xlsx --input ".\Extracted\Table\CharacterType.CFT" --output ".\out\CharacterType.xlsx"

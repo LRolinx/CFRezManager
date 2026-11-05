@@ -23,7 +23,7 @@ Matrix and socket values are little-endian float32 bytes encoded as hexadecimal.
 
 The tool inventories animation channels without evaluating them. Matching node hierarchies is evidence for an association; animation playback, skin weights and retargeting still require validation. OBJ export remains geometry and texture export.
 
-For CFT source fields referenced by the mapping records, the main application from v1.2.6 onward can export the complete table with `--export-cft-xlsx --input <file.cft> --output <file.xlsx>`. The workbook's `RecordId` column is the serialized identifier, not a zero-based row index.
+For CFT source fields referenced by the mapping records, v1.2.7 opens the complete decoded table as a grid with row numbers, numeric sorting and a frozen `RecordId` column. Export XLSX from that window or with `--export-cft-xlsx --input <file.cft> --output <file.xlsx>`. Preview sorting does not change the exported source order. The workbook's `RecordId` column is the serialized identifier, not a zero-based row index.
 
 The FireAim snapshot records 17 complete physical LTB files. Checks using a truncated file, invalid node count, unsupported version and unexpected trailing bytes reject all four altered files and emit detailed rows only for the valid control.
 
