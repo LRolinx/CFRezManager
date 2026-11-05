@@ -996,8 +996,7 @@ internal static class LithTechModelTextureConfigIndex
                          mapping.HasTypedRowContext && mapping.RelatedModelReferences is { Count: > 0 }))
             {
                 foreach (string motionModel in mapping.RelatedModelReferences!
-                             .Where(reference => Path.GetFileNameWithoutExtension(reference)
-                                 .Contains("motion", StringComparison.OrdinalIgnoreCase))
+                             .Where(reference => IsCftMotionModelReference(mapping, reference))
                              .Distinct(StringComparer.OrdinalIgnoreCase))
                 {
                     motionLinks++;
@@ -4439,8 +4438,7 @@ internal static class LithTechModelTextureConfigIndex
                         }
 
                         foreach (string relatedModelReference in relatedModelReferences
-                                     .Where(reference => Path.GetFileNameWithoutExtension(reference)
-                                         .Contains("motion", StringComparison.OrdinalIgnoreCase))
+                                     .Where(reference => IsCftMotionModelReference(mapping, reference))
                                      .Distinct(StringComparer.OrdinalIgnoreCase))
                         {
                             deferredCftMotionSkinBindings.Add(new DeferredCftMotionSkinBinding(
@@ -4686,8 +4684,7 @@ internal static class LithTechModelTextureConfigIndex
 
                 foreach (string relatedModelReference in relatedModels)
                 {
-                    string relatedStem = Path.GetFileNameWithoutExtension(relatedModelReference);
-                    if (!relatedStem.Contains("motion", StringComparison.OrdinalIgnoreCase))
+                    if (!IsCftMotionModelReference(mapping, relatedModelReference))
                     {
                         continue;
                     }
@@ -10543,6 +10540,7 @@ internal static class LithTechModelTextureConfigIndex
     {
         string normalized = columnName.TrimStart('_');
         return normalized.Contains("model", StringComparison.OrdinalIgnoreCase) &&
+               !CftModelTextureMappingDecoder.IsChildModelColumn(columnName) &&
                !normalized.Contains("motion", StringComparison.OrdinalIgnoreCase) &&
                !normalized.Contains("socket", StringComparison.OrdinalIgnoreCase) &&
                !normalized.Contains("arm", StringComparison.OrdinalIgnoreCase) &&
@@ -10551,6 +10549,12 @@ internal static class LithTechModelTextureConfigIndex
                !normalized.Contains("playerview", StringComparison.OrdinalIgnoreCase) &&
                !normalized.Contains("weapon", StringComparison.OrdinalIgnoreCase) &&
                !normalized.Contains("projectile", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsCftMotionModelReference(CftModelTextureMapping mapping, string reference)
+    {
+        return mapping.ChildModelReferences.Contains(reference, StringComparer.OrdinalIgnoreCase) ||
+            Path.GetFileNameWithoutExtension(reference).Contains("motion", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool HasMatchingModelTextureSlotMapping(

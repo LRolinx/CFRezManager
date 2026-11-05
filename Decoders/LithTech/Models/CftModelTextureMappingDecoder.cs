@@ -16,6 +16,7 @@ internal sealed record CftModelTextureMapping(
     IReadOnlyList<string>? RelatedModelReferences = null)
 {
     public IReadOnlyList<string> ModelColumns { get; init; } = [];
+    public IReadOnlyList<string> ChildModelReferences { get; init; } = [];
 }
 
 internal sealed record CftTextureReference(
@@ -335,7 +336,11 @@ internal static class CftModelTextureMappingDecoder
                             .Where(reference => !string.Equals(reference, modelReference, StringComparison.OrdinalIgnoreCase))
                             .ToArray())
                     {
-                        ModelColumns = modelColumnsByReference[modelReference].ToArray()
+                        ModelColumns = modelColumnsByReference[modelReference].ToArray(),
+                        ChildModelReferences = modelColumnsByReference
+                            .Where(pair => !pair.Key.Equals(modelReference, StringComparison.OrdinalIgnoreCase) &&
+                                pair.Value.Any(IsChildModelColumn))
+                            .Select(pair => pair.Key).ToArray()
                     });
                 }
             }
@@ -565,6 +570,10 @@ internal static class CftModelTextureMappingDecoder
             return false;
         }
 
+        // Some typed texture fields point into the model directory itself.
+        if (value.StartsWith("Models/", StringComparison.OrdinalIgnoreCase))
+            return IsSupportedTextureExtension(value);
+
         if (value.Contains('/') || value.Contains('\\'))
         {
             return false;
@@ -604,10 +613,11 @@ internal static class CftModelTextureMappingDecoder
             .DistinctBy(texture => $"{texture.ColumnIndex}\n{texture.Path}", StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        // Motion-only assets share CFT rows with their parent model, but the
-        // numbered texture fields belong to the parent. The config index maps
-        // them onto a motion child only after validating both models' slots.
-        if (Path.GetFileNameWithoutExtension(modelReference).Contains("motion", StringComparison.OrdinalIgnoreCase))
+        // Child-model fields share a row with the parent's numbered textures.
+        // The config index applies them to a child only after validating both
+        // models' slots, including child filenames without a motion keyword.
+        if (IsChildModelColumn(modelColumn) ||
+            Path.GetFileNameWithoutExtension(modelReference).Contains("motion", StringComparison.OrdinalIgnoreCase))
         {
             return [];
         }
@@ -660,6 +670,13 @@ internal static class CftModelTextureMappingDecoder
             "BLSOCKETITEMMODELFILE" or "BLFSOCKETITEMMODELFILE" => "BL",
             _ => null
         };
+    }
+
+    internal static bool IsChildModelColumn(string columnName)
+    {
+        string column = columnName.TrimStart('_');
+        return column.Equals("ChildModelFile", StringComparison.OrdinalIgnoreCase) ||
+            column.Equals("ChildModelFileName", StringComparison.OrdinalIgnoreCase);
     }
 
     internal static bool TryGetCharacterItemTextureSlot(string columnName, out string side, out int slot)

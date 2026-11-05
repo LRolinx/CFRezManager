@@ -116,6 +116,7 @@ static partial class Program
         RunBodyChecks(run);
         RunSocketChecks(run);
         RunNanoChecks(run);
+        RunAiChecks(run);
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(output))!); File.WriteAllLines(output, Results);
         Console.WriteLine($"{Results.Count - 1} character arm checks passed. Results: {Path.GetFullPath(output)}");
         return 0;

@@ -38,6 +38,8 @@ The [full CharacterItem inventory](../../docs/evidence/characteritem-all-2026110
 
 The [Nano inventory](../../docs/evidence/nano-family-20261105-structure-models.tsv) records 103 complete native models with 6,611 nodes, 12,178 embedded animations, 333 sockets, 198 blend masks and 49 external child declarations. The [independent reader](../../docs/evidence/nano-family-20261105-structure-validation.tsv) reproduces every retained value and complete file consumption. Four additional LTB-extension resources are declared render styles with another header and correctly produce no model details. The [1,779 motion pairs](../../docs/evidence/nano-family-20261105-motion-compatibility.tsv) retain hierarchy, bind-matrix and relative child-path comparisons without selecting a physical version or proving playback.
 
+The [AI inventory](../../docs/evidence/ai-family-20261105-structure-models.tsv) adds 704 complete native models, with 27,029 nodes, 23,922 embedded animations, 1,421 sockets, 1,405 blend masks and 383 external child declarations. The [independent reader](../../docs/evidence/ai-family-20261105-structure-validation.tsv) reproduces all saved values and complete file consumption. Three LTB-extension render styles correctly emit no model details. The [340 logical model/child relationships](../../docs/evidence/ai-family-20261105-motion-compatibility.tsv) retain physical-pair comparisons, while absent child files remain separate declarations.
+
 ## Channel inspection
 
 ```powershell
