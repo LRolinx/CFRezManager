@@ -16,6 +16,8 @@ public sealed record LithTechModelDocument(
     public int VertexCount => Meshes.Sum(mesh => mesh.Vertices.Count);
 
     public int TriangleCount => Meshes.Sum(mesh => mesh.TriangleIndices.Count / 3);
+
+    public IReadOnlyList<LithTechSkeletonNode>? NativeSkeleton { get; init; }
 }
 
 internal sealed record LithTechShapeTextureBinding(
@@ -34,6 +36,8 @@ public sealed record LithTechMesh(
     int? RenderStyleIndex = null,
     bool HasAuthoritativeTextureBindings = false)
 {
+    public LithTechSkinBinding? NativeSkinning { get; init; }
+
     /// <summary>
     /// Model-data UV sets in engine order; absent or conflicting channels are null. TextureCoordinates remains UV set 1 for existing callers.
     /// </summary>
@@ -153,6 +157,23 @@ internal static class LithTechModelDecoder
     public static bool TryDecode(byte[] data, string fallbackName, out LithTechModelDocument? document)
     {
         return TryDecode(data, fallbackName, "lta", out document, out _);
+    }
+
+    public static bool TryDecodeWithSkinning(byte[] data, string fallbackName, out LithTechModelDocument? document, out string? errorMessage)
+    {
+        document = null;
+        if (data.Length > 128 * 1024 * 1024)
+        {
+            errorMessage = "Stored native model exceeds the 128 MiB skin-capture bound.";
+            return false;
+        }
+        byte[]? prepared = LzmaAloneDecoder.TryPrepareData(data);
+        if (prepared is null)
+        {
+            errorMessage = "Native model compression could not be decoded.";
+            return false;
+        }
+        return LithTechNativeLtbDecoder.TryDecodeWithSkinning(prepared, fallbackName, "Native LTB with skin bindings", data.Length, prepared.Length, out document, out errorMessage);
     }
 
     public static bool TryDecode(

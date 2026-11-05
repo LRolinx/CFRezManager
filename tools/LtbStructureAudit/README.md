@@ -26,7 +26,9 @@ Matrix, socket, weight and binding vector values are little-endian float32 bytes
 
 `structure-complete` requires the declared node, piece, LOD, weight-set, child-model, animation and socket counts to agree, bounded animation channels, and complete file consumption with at most three zero padding bytes. All detailed tables are emitted only for complete files. Exit code 1 reports rejected files; exit code 2 reports invalid arguments.
 
-The tool inventories animation data without evaluating poses. Matching node hierarchies is evidence for an association; animation playback, skin weights and retargeting still require validation. OBJ export remains geometry and texture export.
+The tool inventories animation data without evaluating poses. Matching node hierarchies is evidence for an association; animation playback and retargeting still require validation. OBJ export remains geometry and texture export.
+
+Vertex skin data has a separate [capture check](../NativeSkinCheck/README.md). The PView/arm snapshot verifies 160 LOD0 meshes, 141,464 vertices and 2,395 draw bindings against independent reads. Capture ends after the node hierarchy and therefore does not replace this audit's complete-file checks. Bone/weight decoding alone does not validate rendered deformation.
 
 ## Channel inspection
 

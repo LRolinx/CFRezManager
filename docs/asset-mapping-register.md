@@ -19,7 +19,7 @@ Rows describe individual slots. A successful row can coexist with other unresolv
 - `global_texture_slot` is the LTB skin slot; it is blank until slot evidence exists.
 - `mapping_source_or_field` names the resolver source for exported slots or the CFT field for declared relationships.
 - `skeleton_or_bone_names` records a node count and hierarchy hash when inspected; the linked node table retains every name and parent. Counts include the scene root.
-- `bone_or_socket_binding` records embedded model sockets or the raw CFT attachment target type. An embedded socket does not establish which accessory uses it. Blank values mean unknown, not absent.
+- `bone_or_socket_binding` records embedded model sockets, inspected native vertex-skin methods or the raw CFT attachment target type. The linked skin tables retain physical sources, bone indices and weighted vertex/corner counts. An embedded socket does not establish which accessory uses it. Blank values mean unknown, not absent.
 - `motion_model_path` records a motion reference from the typed CFT row or a serialized LTB child-model declaration. A logical path does not select a physical version. It does not claim that OBJ export contains the animation.
 - OBJ currently exports geometry and textures. It does not preserve skeleton bones or animation tracks.
 
@@ -41,7 +41,17 @@ The optional channel inspection records [13,088 channel payloads](evidence/pview
 
 The `rez3` and `rez4` copies of `PV-HuluXiongdi.ltb` have identical [transform payloads, encodings, key times and bind matrices](evidence/pview-motion-20261105-physical-animation-versions.tsv). Their events differ: `ShotSoundStart` on `combo_1` moves from 0 to 33 ms, and on `combo_2` from 0 to 43 ms. The [two timing differences](evidence/pview-motion-20261105-event-differences.tsv) prevent treating these files as identical animation sources. The active game copy remains unverified.
 
-An [independent standard-LZMA reader](evidence/pview-motion-20261105-channel-validation.tsv) reproduced every channel boundary, payload hash, endpoint value, key time and raw event byte from all 37 stored files. The earlier seven structure tables remain byte-identical. The [128 structure checks](evidence/pview-motion-20261105-guards.tsv) include the original 40 assertions, all four channel encodings, default channels, vertex animation, hierarchy traversal order, partial channels, non-finite samples and stale-output clearing. Their successful script exit code is also preserved for the release workflow. Animation poses and vertex skinning still require validation.
+An [independent standard-LZMA reader](evidence/pview-motion-20261105-channel-validation.tsv) reproduced every channel boundary, payload hash, endpoint value, key time and raw event byte from all 37 stored files. The earlier seven structure tables remain byte-identical. The [128 structure checks](evidence/pview-motion-20261105-guards.tsv) include the original 40 assertions, all four channel encodings, default channels, vertex animation, hierarchy traversal order, partial channels, non-finite samples and stale-output clearing. Their successful script exit code is also preserved for the release workflow. Rendered animation poses still require validation.
+
+### Native vertex-skin records
+
+The same 37 physical PView, QV and arm files contain [160 LOD0 meshes](evidence/native-skin-20261105-meshes.tsv): 88 use direct draw bindings and 72 use a rigid effector. An [independent reader](evidence/native-skin-20261105-validation.tsv) reproduced all 141,464 vertex bindings and float32 weights, 150,648 triangles, [2,395 draw groups](evidence/native-skin-20261105-draws.tsv) and all 2,146 existing hierarchy/bind-matrix records. The [1,926 bone-usage rows](evidence/native-skin-20261105-bone-usage.tsv) retain each mesh's weighted node indices, names, parent indices, vertex/corner counts and weight ranges. This adds binding evidence to 869 register rows without changing texture paths, statuses or the 3,997 confirmed-export count.
+
+Direct bindings follow the triangles actually drawn by each bone set. A set's index-buffer value is its cumulative end; its vertex range alone does not assign ownership. The optional capture API retains per-corner overrides when shared vertices use different palettes. Stored weights keep their decoded float32 values, and the final active influence is `1 - sum(previous weights)` without clamping or normalization. This snapshot has no corner overrides, undrawn vertices without a binding, or weights outside the unit interval.
+
+Matrix-palette handling has [synthetic checks](evidence/native-skin-20261105-guards.tsv), but no real sample in this snapshot. Its minimum is a range bound rather than an offset added to the raw byte index. Remapped global node indices may exceed 255; palette byte 255 is distinct from the direct bone-set terminator. The 63 checks also cover overlapping draws, malformed weights/ranges, multiple streams, serialized skeleton indices and geometry preservation.
+
+The [skin check tool](../tools/NativeSkinCheck/README.md) captures data through the node hierarchy; complete-file validation remains the separate structure audit. Ordinary preview and OBJ decoding retain their existing geometry path without allocating skin arrays. Per-mesh skin errors remain explicit while static geometry stays available. Physical motion-version selection, coordinate transforms, evaluated poses and animated export remain unverified; OBJ still exports geometry and textures.
 
 ### CharacterType arms
 

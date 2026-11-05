@@ -46,6 +46,27 @@ internal static class LithTechNativeLtbDecoder
         int decodedByteCount,
         out LithTechModelDocument? document,
         out string? errorMessage)
+        => TryDecodeCore(data, fallbackName, storageDescription, sourceByteCount, decodedByteCount, false, out document, out errorMessage);
+
+    public static bool TryDecodeWithSkinning(
+        ReadOnlySpan<byte> data,
+        string fallbackName,
+        string storageDescription,
+        int sourceByteCount,
+        int decodedByteCount,
+        out LithTechModelDocument? document,
+        out string? errorMessage)
+        => TryDecodeCore(data, fallbackName, storageDescription, sourceByteCount, decodedByteCount, true, out document, out errorMessage);
+
+    private static bool TryDecodeCore(
+        ReadOnlySpan<byte> data,
+        string fallbackName,
+        string storageDescription,
+        int sourceByteCount,
+        int decodedByteCount,
+        bool captureSkinning,
+        out LithTechModelDocument? document,
+        out string? errorMessage)
     {
         document = null;
         errorMessage = null;
@@ -68,6 +89,11 @@ internal static class LithTechNativeLtbDecoder
         }
 
         position += sizeof(uint);
+        if (captureSkinning && modelFileVersion != 25)
+        {
+            errorMessage = "Native skin binding is validated for model version 25 only.";
+            return false;
+        }
         Span<uint> allocations = stackalloc uint[AllocationWordCount];
         for (int i = 0; i < allocations.Length; i++)
         {
@@ -135,6 +161,18 @@ internal static class LithTechNativeLtbDecoder
         position += sizeof(uint);
         if (pieceCount == 0)
         {
+            if (captureSkinning)
+            {
+                var skeletonOnly = new List<LithTechSkeletonNode>();
+                if (!TryReadSkinSkeleton(data, ref position, -1, 0, (int)allocatedNodeCount, skeletonOnly, new HashSet<int>()) || skeletonOnly.Count != allocatedNodeCount)
+                {
+                    errorMessage = "Native skeleton-only hierarchy is incomplete or inconsistent.";
+                    return false;
+                }
+                document = new LithTechModelDocument(fallbackName, [], storageDescription, sourceByteCount, decodedByteCount)
+                    { NativeSkeleton = skeletonOnly.OrderBy(n => n.Index).ToArray() };
+                return true;
+            }
             if (!TryDecodeGeometrylessModel(data, ref position, allocations, allocatedNodeCount, out errorMessage))
             {
                 return false;
@@ -238,7 +276,10 @@ internal static class LithTechNativeLtbDecoder
                         meshes.Add(mesh with
                         {
                             RenderStyleIndex = renderStyleIndex,
-                            HasAuthoritativeTextureBindings = true
+                            HasAuthoritativeTextureBindings = true,
+                            NativeSkinning = captureSkinning
+                                ? LithTechNativeSkinReader.Read(data, objectBodyStart, objectEnd, renderObjectType, (int)allocatedNodeCount, mesh)
+                                : null
                         });
                     }
                     else
@@ -276,7 +317,38 @@ internal static class LithTechNativeLtbDecoder
             return false;
         }
 
-        document = new LithTechModelDocument(fallbackName, meshes, storageDescription, sourceByteCount, decodedByteCount);
+        IReadOnlyList<LithTechSkeletonNode>? skeleton = null;
+        if (captureSkinning)
+        {
+            var parsed = new List<LithTechSkeletonNode>();
+            var indices = new HashSet<int>();
+            if (!TryReadSkinSkeleton(data, ref position, -1, 0, (int)allocatedNodeCount, parsed, indices) || parsed.Count != allocatedNodeCount)
+            {
+                errorMessage = "Native skin skeleton is incomplete or inconsistent with its allocation count.";
+                return false;
+            }
+            skeleton = parsed.OrderBy(n => n.Index).ToArray();
+        }
+        document = new LithTechModelDocument(fallbackName, meshes, storageDescription, sourceByteCount, decodedByteCount) { NativeSkeleton = skeleton };
+        return true;
+    }
+
+    private static bool TryReadSkinSkeleton(ReadOnlySpan<byte> data, ref int position, int parent, int depth, int count,
+        List<LithTechSkeletonNode> nodes, HashSet<int> indices)
+    {
+        if (depth >= 256 || nodes.Count >= count || !TryReadString(data, ref position, out string name) ||
+            !TryReadUInt16(data, position, out ushort index) || index >= count || !indices.Add(index)) return false;
+        position += 2;
+        if (position >= data.Length) return false;
+        byte flags = data[position++]; float[] matrix = new float[16];
+        for (int i = 0; i < 16; i++)
+        {
+            if (!TryReadSingle(data, position, out matrix[i]) || !float.IsFinite(matrix[i])) return false;
+            position += 4;
+        }
+        if (!TryReadUInt32(data, position, out uint children) || children > count - nodes.Count - 1) return false;
+        position += 4; nodes.Add(new(index, parent, name, flags, matrix));
+        for (uint i = 0; i < children; i++) if (!TryReadSkinSkeleton(data, ref position, index, depth + 1, count, nodes, indices)) return false;
         return true;
     }
 
@@ -821,7 +893,7 @@ internal static class LithTechNativeLtbDecoder
         return true;
     }
 
-    private static bool TryGetStreamLayout(uint flags, int skinningPrefixBytes, out VertexStreamLayout layout)
+    internal static bool TryGetStreamLayout(uint flags, int skinningPrefixBytes, out VertexStreamLayout layout)
     {
         layout = default;
         bool hasPosition = (flags & VertexPosition) != 0;
@@ -932,7 +1004,7 @@ internal static class LithTechNativeLtbDecoder
         return true;
     }
 
-    private readonly record struct VertexStreamLayout(
+    internal readonly record struct VertexStreamLayout(
         int Offset,
         int Stride,
         int PositionOffset,

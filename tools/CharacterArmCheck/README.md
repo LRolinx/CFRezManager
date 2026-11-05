@@ -13,3 +13,5 @@ The 67 checks cover side-qualified row, identity and positive RecordId selectors
 The release workflow runs these checks before packaging. [Texture-copy checks](../TextureCopyCheck/README.md) separately verify conflicting physical resources; [structure checks](../LtbStructureAudit/README.md) cover nodes, child declarations, bindings and animation blend masks. These checks do not validate animation playback or vertex skinning.
 
 The structure check also covers animation channel encodings, hierarchy traversal and raw keyframe events. The [PView node map](../../docs/evidence/pview-motion-20261105-arm-node-map.tsv) records the 46 shared arm nodes separately from bind-matrix and playback validation.
+
+The separate [native skin checks](../NativeSkinCheck/README.md) verify direct draw bindings, rigid effectors and matrix-palette edge cases. The 37-file PView/arm snapshot retains verified skin hashes for 160 meshes and 141,464 vertices. These are decoded binding records; rendered arm animation remains unverified.

@@ -28,6 +28,9 @@ jobs:
         shell: pwsh
         run: .\tools\LtbStructureAudit\Check.ps1
 
+      - name: Check native vertex skin bindings
+        run: dotnet run --project ./tools/NativeSkinCheck -c Release
+
       - name: Check texture-copy resolution
         run: dotnet run --project ./tools/TextureCopyCheck -c Release
 

@@ -20,8 +20,10 @@ The snapshot needs its six-column `resource-manifest.tsv` and extracted files, w
 
 Model associations have a separate [structure check](../LtbStructureAudit/README.md#structure-checks). Its 40 assertions cover child declarations, animation bindings and node blend masks, and also run before release packaging. Passing texture-copy checks alone does not establish those relationships or animation playback.
 
-The [character arm checks](../CharacterArmCheck/README.md) cover side-qualified CFT selectors and preserve both declarations when GR and BL share a model path. All three checks run before release packaging; a matching logical texture still needs valid physical copies.
+The [character arm checks](../CharacterArmCheck/README.md) cover side-qualified CFT selectors and preserve both declarations when GR and BL share a model path. These checks run before release packaging; a matching logical texture still needs valid physical copies.
 
 The [arm texture inventory](../../docs/evidence/character-arms-20261105-texture-copies.tsv) records 1,464 decoded DTX copies and [36 conflicting logical paths](../../docs/evidence/character-arms-20261105-texture-conflicts.tsv). These conflicts remain unresolved regardless of which character context selects the path.
 
 Animation equivalence needs separate evidence. Two recorded PView copies have identical transform channels but [different sound-event timing](../../docs/evidence/pview-motion-20261105-event-differences.tsv); the [channel inspection](../LtbStructureAudit/README.md#channel-inspection) retains their exact payload and event bytes.
+
+The [native skin checks](../NativeSkinCheck/README.md) also run before packaging. They preserve default geometry and texture slots while checking optional bone/weight capture. Skin data for 160 meshes has been independently reproduced; this does not select a physical texture copy or establish rendered animation.
