@@ -4353,7 +4353,7 @@ internal static class LithTechModelTextureConfigIndex
                 string implicitCharacterBodySide = string.Empty;
                 foreach (CftTextureReference texture in mapping.TextureReferences)
                 {
-                    if (CftModelTextureMappingDecoder.TryGetTextureSlotIndex(texture.Column, out int slotIndex))
+                    if (CftModelTextureMappingDecoder.TryGetTextureSlotIndex(texture, out int slotIndex))
                     {
                         string? existingTexturePath = ResolveExistingCftTextureReference(
                             modelResourcePath,
@@ -4421,9 +4421,11 @@ internal static class LithTechModelTextureConfigIndex
                             }
                         }
                     }
-                    else if (IsPrimaryCftMotionSourceColumn(mapping.ModelColumn) &&
-                             IsUnindexedCftSkinFileName(texture.Column) &&
-                             mapping.RelatedModelReferences is { Count: > 0 } relatedModelReferences)
+                    // A primary base skin can also supply a validated motion
+                    // child; recording its own slot must not skip that link.
+                    if (IsPrimaryCftMotionSourceColumn(mapping.ModelColumn) &&
+                        IsUnindexedCftSkinFileName(texture.Column) &&
+                        mapping.RelatedModelReferences is { Count: > 0 } relatedModelReferences)
                     {
                         string? existingTexturePath = ResolveExistingCftTextureReference(
                             modelResourcePath,

@@ -115,6 +115,7 @@ static partial class Program
         Check("SGFX still exports its auxiliary texture", sgfx.Path is not null && sgfx.Reference == "SGFX_Test.png" && sgfx.Written == 2);
         RunBodyChecks(run);
         RunSocketChecks(run);
+        RunNanoChecks(run);
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(output))!); File.WriteAllLines(output, Results);
         Console.WriteLine($"{Results.Count - 1} character arm checks passed. Results: {Path.GetFullPath(output)}");
         return 0;

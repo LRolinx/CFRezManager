@@ -36,6 +36,8 @@ The [body inventory](../../docs/evidence/character-bodies-20261105-structure-mod
 
 The [full CharacterItem inventory](../../docs/evidence/characteritem-all-20261105-structure-models.tsv) covers 2,666 physical LTBs, including earlier accessory samples. It retains 8,600 nodes, 2,666 embedded animations, 109 blend masks, 2,666 self bindings and one socket. The [independent comparison](../../docs/evidence/characteritem-all-20261105-structure-validation.tsv) reproduces all records and complete file consumption. Raw attachment enums remain separate from external bone bindings, and the inventory does not evaluate poses.
 
+The [Nano inventory](../../docs/evidence/nano-family-20261105-structure-models.tsv) records 103 complete native models with 6,611 nodes, 12,178 embedded animations, 333 sockets, 198 blend masks and 49 external child declarations. The [independent reader](../../docs/evidence/nano-family-20261105-structure-validation.tsv) reproduces every retained value and complete file consumption. Four additional LTB-extension resources are declared render styles with another header and correctly produce no model details. The [1,779 motion pairs](../../docs/evidence/nano-family-20261105-motion-compatibility.tsv) retain hierarchy, bind-matrix and relative child-path comparisons without selecting a physical version or proving playback.
+
 ## Channel inspection
 
 ```powershell
