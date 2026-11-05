@@ -22,6 +22,8 @@ Rows describe individual slots. A successful row can coexist with other unresolv
 - `motion_model_path` records a motion-model path declared in the same typed CFT row. It does not claim that OBJ export contains the animation.
 - OBJ currently exports geometry and textures. It does not preserve skeleton bones or animation tracks.
 
+Original CFT fields can also be inspected by exporting the table to XLSX from the file context menu or with `--export-cft-xlsx --input <file.cft> --output <file.xlsx>`. Its first column is the serialized `RecordId`; it is distinct from the zero-based row selector used in this register. The workbook includes all decoded rows, while text previews show at most 200.
+
 ## Snapshot
 
 The register contains 533 confirmed exported slot records, five written but unverified slots, two unresolved slots, eight declarations without a matching decoded model slot, and three missing model declarations. These are recorded samples, not a full-game coverage count. Repeated physical model copies are retained in the evidence tables and deduplicated in the register.

@@ -7,6 +7,14 @@ public partial class App : System.Windows.Application
         base.OnStartup(e);
 
         ShutdownMode = System.Windows.ShutdownMode.OnMainWindowClose;
+        if (CftExportCommand.IsInvocation(e.Args))
+        {
+            ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
+            int exitCode = CftExportCommand.Run(e.Args);
+            Shutdown(exitCode);
+            return;
+        }
+
         if (TableDecodeAuditCommand.IsInvocation(e.Args))
         {
             ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;

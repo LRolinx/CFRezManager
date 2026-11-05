@@ -16,6 +16,7 @@ CF Rez Manager is a Windows WPF tool for browsing, searching, previewing, extrac
 - Pack a normal Windows folder into a new `.rez` archive.
 - Preview images, textures, audio, models, maps, script configs, and common CrossFire/LithTech resources.
 - Choose per format whether decodable image resources such as BIN, DTX, TGA, and DDS are exported as source files or standard `.png` files.
+- Export decodable CFT tables directly to `.xlsx` without installing Excel.
 - Provide command-line batch entry points for OBJ/MTL model export, CFG scanning, and CFG decoding.
 
 ## Model And Texture Records
@@ -154,6 +155,14 @@ Notes:
 - A newly packed REZ preserves content and folder structure, but does not copy the original archive's exact byte layout, offsets, timestamps, or whole-file MD5.
 
 ## Command-Line Tools
+
+Right-click a CFT file and select **Export XLSX...** for files inside REZ archives or extracted folders. The workbook preserves field order and adds the original `RecordId` as its first column. Strings remain text, preserving leading zeros and formula-like values. Text previews show up to 200 rows; XLSX exports include every decoded row.
+
+```powershell
+dotnet run --project .\CFRezManager.csproj -- --export-cft-xlsx --input ".\Extracted\Table\CharacterType.CFT" --output ".\out\CharacterType.xlsx"
+```
+
+Omit `--output` to write beside the input file. A CFT that cannot be fully decoded produces an error and leaves an existing output unchanged.
 
 Directory browsing and export scans list only files with a valid REZ header. `.REZ` data shards beside an archive remain available to the reader through that archive's index and are not treated as separate archives.
 
@@ -368,6 +377,8 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 - `--decode-cfg`: retry failed CFG files, export recovered text or binary previews, and classify high-entropy configs.
 
 ## v1.2.5 Changes
+
+- Added CFT-to-XLSX export through the context menu and command line, with actual row data in text previews. All values in the current 900-row, 70-column CharacterType sample, including RecordId, match the source and pass XLSX schema validation.
 
 - Added a model-to-texture reference register to release packages, separating exported slot mappings from CFT-declared relationships that still need slot verification, and recording declared motion-model paths.
 - Fixed `CharacterItem.CFT` base texture fields being dropped when numbered textures exist. A full-directory comparison retains all 13,600 typed model rows and every prior texture field; 260 CharacterItem rows regain base declarations.

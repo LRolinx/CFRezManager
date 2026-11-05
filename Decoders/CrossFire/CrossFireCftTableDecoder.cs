@@ -5,7 +5,10 @@ namespace CFRezManager;
 
 internal sealed record CrossFireCftRow(
     int RecordId,
-    IReadOnlyDictionary<string, object?> Values);
+    IReadOnlyDictionary<string, object?> Values)
+{
+    public IReadOnlyList<object?> ColumnValues { get; init; } = [];
+}
 
 internal sealed record CrossFireCftTable(
     IReadOnlyList<string> Columns,
@@ -169,6 +172,7 @@ internal static class CrossFireCftTableDecoder
             }
 
             var values = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+            var columnValues = new object?[columns.Count];
             for (int column = 0; column < columns.Count; column++)
             {
                 object? value;
@@ -209,13 +213,14 @@ internal static class CrossFireCftTableDecoder
                         break;
                 }
 
+                columnValues[column] = value;
                 if (!string.IsNullOrEmpty(columns[column]))
                 {
                     values[columns[column]] = value;
                 }
             }
 
-            decodedRows.Add(new CrossFireCftRow(recordId, values));
+            decodedRows.Add(new CrossFireCftRow(recordId, values) { ColumnValues = columnValues });
         }
 
         rows = decodedRows;

@@ -16,6 +16,7 @@ CF Rez Manager 是一个 Windows WPF 工具，用来浏览、搜索、预览、�
 - 将普通 Windows 文件夹重新打包为 `.rez`。
 - 预览图片、纹理、音频、模型、地图、脚本配置和多种 CrossFire/LithTech 资源。
 - 按格式选择将 BIN、DTX、TGA、DDS 等可解码图片资源保留为源文件或导出为标准 `.png`。
+- 将可解码的 CFT 表格直接导出为 `.xlsx`，无需安装 Excel。
 - 提供 OBJ/MTL 模型导出、CFG 扫描和 CFG 解码等命令行批处理入口。
 
 ## 模型贴图记录
@@ -154,6 +155,14 @@ CFRezManager/
 - 新包会保留内容和目录结构，但不会复制原包的字节级布局、偏移、时间戳或整包 MD5。
 
 ## 命令行工具
+
+CFT 文件可右键选择“导出 XLSX...”，适用于 REZ 内文件和已解包的散文件。工作簿保留字段顺序，首列为原始 `RecordId`；字符串按文本保存，保留前导零，不会作为公式执行。文本预览最多显示前 200 行，XLSX 导出包含全部已解码行。
+
+```powershell
+dotnet run --project .\CFRezManager.csproj -- --export-cft-xlsx --input ".\Extracted\Table\CharacterType.CFT" --output ".\out\CharacterType.xlsx"
+```
+
+省略 `--output` 时，工作簿写入输入文件所在目录。无法完整解码的 CFT 会报告错误，保留已有输出文件。
 
 目录视图与导出扫描只列出带有效 REZ 头的归档；同目录的 `.REZ` 数据分片由归档读取器按索引读取，不会误当成独立归档。
 
@@ -369,6 +378,8 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 - `--decode-cfg`：重试失败 CFG，导出可还原文本或二进制预览图，并分类高熵配置。
 
 ## v1.2.5 更新
+
+- 新增 CFT → XLSX 导出入口和命令行，文本预览显示实际行数据。当前 CharacterType 样本的 900 行、70 列（含 RecordId）已逐值核对，并通过 XLSX 结构校验。
 
 - 新增随程序发布的模型贴图参考清单，区分已导出确认的槽位和 CFT 已声明但槽位待验证的关系，并记录可确认的动作模型路径。
 - 修复 `CharacterItem.CFT` 在有编号贴图时丢失基础贴图字段的问题。全目录对比保留原有 13,600 条强类型模型记录及全部旧贴图字段，260 条 CharacterItem 记录补回基础字段。

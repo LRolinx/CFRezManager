@@ -185,6 +185,33 @@ internal static class ResourceTextDecoder
         document = null;
         errorMessage = null;
 
+        if (CrossFireCftTableDecoder.TryDecodeWithDiagnostics(data, out CrossFireCftTable? table,
+                out int fullDecodedBytes, out _, out _) && table is not null)
+        {
+            const int previewRows = 200;
+            var content = new StringBuilder();
+            content.AppendLine("CrossFire CFT table");
+            content.AppendLine($"File: {fileName}");
+            content.AppendLine($"Columns: {table.Columns.Count:N0}; rows: {table.Rows.Count:N0}");
+            content.AppendLine();
+            content.AppendLine("RecordId\t" + string.Join('\t', table.Columns));
+            foreach (CrossFireCftRow row in table.Rows.Take(previewRows))
+            {
+                content.Append(row.RecordId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                foreach (object? value in row.ColumnValues)
+                {
+                    content.Append('\t');
+                    content.Append(Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture)?
+                        .Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t"));
+                }
+                content.AppendLine();
+            }
+            if (table.Rows.Count > previewRows)
+                content.AppendLine($"Preview rows: {previewRows:N0} of {table.Rows.Count:N0}");
+            document = new ResourceTextDocument(content.ToString(), "CFT table", data.Length, fullDecodedBytes);
+            return true;
+        }
+
         if (!TryPreparePrefix(data, CftPrefixBytes, out byte[]? prepared, out bool compressed, out long decodedBytes) ||
             prepared is null)
         {

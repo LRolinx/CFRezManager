@@ -448,6 +448,9 @@
                                 <MenuItem x:Name="ExportObjMenuItem"
                                           Header="Export OBJ..."
                                           Click="ExportObjMenuItem_Click"/>
+                                <MenuItem x:Name="ExportCftMenuItem"
+                                          Header="导出 XLSX..."
+                                          Click="ExportCftMenuItem_Click"/>
                                 <Separator x:Name="PreviewMenuSeparator"/>
                                 <MenuItem x:Name="LocateFileMenuItem"
                                           Header="定位到文件"

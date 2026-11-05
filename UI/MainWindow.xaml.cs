@@ -327,6 +327,12 @@ public partial class MainWindow : Window
             ["CopyNameClipboardBusy"] = ("\u526a\u8d34\u677f\u6b63\u88ab\u5176\u4ed6\u7a0b\u5e8f\u5360\u7528\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5\u3002", "Clipboard is busy. Please try again."),
             ["DecodeBank"] = ("\u89e3\u7801 BANK...", "Decode BANK..."),
             ["ExportObj"] = ("\u5bfc\u51fa OBJ...", "Export OBJ..."),
+            ["ExportCft"] = ("导出 XLSX...", "Export XLSX..."),
+            ["SaveCftTitle"] = ("导出 CFT 表格", "Export CFT table"),
+            ["XlsxFileFilter"] = ("Excel 工作簿 (*.xlsx)|*.xlsx", "Excel workbook (*.xlsx)|*.xlsx"),
+            ["ExportingCft"] = ("正在导出表格: {0}", "Exporting table: {0}"),
+            ["ExportedCftResult"] = ("已导出 {0:N0} 行、{1:N0} 列: {2}", "Exported {0:N0} rows and {1:N0} columns: {2}"),
+            ["ExportCftFailed"] = ("表格导出失败", "Table export failed"),
             ["SaveObjTitle"] = ("\u4fdd\u5b58 OBJ \u6a21\u578b", "Save OBJ model"),
             ["ObjFileFilter"] = ("OBJ \u6a21\u578b (*.obj)|*.obj|\u6240\u6709\u6587\u4ef6 (*.*)|*.*", "OBJ models (*.obj)|*.obj|All files (*.*)|*.*"),
             ["PreparingModelObjExport"] = ("\u6b63\u5728\u51c6\u5907 OBJ \u5bfc\u51fa...", "Preparing OBJ export..."),
@@ -807,6 +813,35 @@ public partial class MainWindow : Window
         }
 
         await ExportModelsToObjAsync(selectedItems, outputPath);
+    }
+
+    private async void ExportCftMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        List<ExplorerItem> selectedItems = GetSelectedExplorerItems();
+        if (selectedItems.Count != 1 || selectedItems[0].IsContainer ||
+            !selectedItems[0].FileExtension.Equals("cft", StringComparison.OrdinalIgnoreCase)) return;
+        ExplorerItem item = selectedItems[0];
+        using var dialog = new Forms.SaveFileDialog
+        {
+            Title = T("SaveCftTitle"), Filter = T("XlsxFileFilter"), DefaultExt = "xlsx",
+            AddExtension = true, OverwritePrompt = true,
+            InitialDirectory = ResolveInitialDirectory(_settings.LastOutputDirectory, _selectedDirectory),
+            FileName = SanitizePathSegment(Path.GetFileNameWithoutExtension(item.Name)) + ".xlsx"
+        };
+        if (dialog.ShowDialog() != Forms.DialogResult.OK) return;
+        SetBusy(true, keepSearchEnabled: true);
+        try
+        {
+            WorkProgress.IsIndeterminate = true;
+            SetStatus("ExportingCft", item.Name);
+            CftSpreadsheetExportResult result = await Task.Run(() =>
+                CftSpreadsheetExporter.Export(ReadExplorerFileBytes(item, 128 * 1024 * 1024), dialog.FileName));
+            _settings.LastOutputDirectory = Path.GetDirectoryName(result.Path)!;
+            _settings.Save();
+            SetStatus("ExportedCftResult", result.Rows, result.Columns, result.Path);
+        }
+        catch (Exception error) { ShowError("ExportCftFailed", error); }
+        finally { SetBusy(false, keepSearchEnabled: true); }
     }
 
     private async void OpenPreviewMenuItem_Click(object sender, RoutedEventArgs e)
@@ -2604,9 +2639,15 @@ public partial class MainWindow : Window
         ExportObjMenuItem.Visibility = canExportObj ? Visibility.Visible : Visibility.Collapsed;
         ExportObjMenuItem.IsEnabled = !_isBusy && canExportObj;
         ExportObjMenuItem.Header = T("ExportObj");
+        bool canExportCft = selectedItems.Count == 1 && !selectedItems[0].IsContainer &&
+                            selectedItems[0].FileExtension.Equals("cft", StringComparison.OrdinalIgnoreCase);
+        ExportCftMenuItem.Visibility = canExportCft ? Visibility.Visible : Visibility.Collapsed;
+        ExportCftMenuItem.IsEnabled = !_isBusy && canExportCft;
+        ExportCftMenuItem.Header = T("ExportCft");
         PreviewMenuSeparator.Visibility = OpenPreviewMenuItem.Visibility == Visibility.Visible ||
                                           DecodeBankMenuItem.Visibility == Visibility.Visible ||
-                                          ExportObjMenuItem.Visibility == Visibility.Visible
+                                          ExportObjMenuItem.Visibility == Visibility.Visible ||
+                                          ExportCftMenuItem.Visibility == Visibility.Visible
             ? Visibility.Visible
             : Visibility.Collapsed;
         OpenPreviewMenuItem.IsEnabled = !_isBusy && previewItem is not null;
@@ -3133,6 +3174,7 @@ public partial class MainWindow : Window
         ExportObjMenuItem.Header = T("ExportObj");
         LocateFileMenuItem.Header = T("LocateFile");
         CopyNameMenuItem.Header = T("CopyName");
+        ExportCftMenuItem.Header = T("ExportCft");
         ExtractSelectedMenuItem.Header = T("ExtractSelectedDefault");
         SearchLabelText.Text = T("SearchLabel");
         SearchTextBox.ToolTip = T("SearchTooltip");

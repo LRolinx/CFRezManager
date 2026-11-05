@@ -23,6 +23,8 @@ Matrix and socket values are little-endian float32 bytes encoded as hexadecimal.
 
 The tool inventories animation channels without evaluating them. Matching node hierarchies is evidence for an association; animation playback, skin weights and retargeting still require validation. OBJ export remains geometry and texture export.
 
+For CFT source fields referenced by the mapping records, the main application can export the complete table with `--export-cft-xlsx --input <file.cft> --output <file.xlsx>`. The workbook's `RecordId` column is the serialized identifier, not a zero-based row index.
+
 The FireAim snapshot records 17 complete physical LTB files. Checks using a truncated file, invalid node count, unsupported version and unexpected trailing bytes reject all four altered files and emit detailed rows only for the valid control.
 
 The CharacterItem base-field snapshot records 272 complete physical LTB files, including related models. Each contains two nodes, one embedded animation and no embedded socket. The [mapping register guide](../../docs/asset-mapping-register.md) links their source hashes, 544 node records, 272 animation records, texture-copy checks and export results.
