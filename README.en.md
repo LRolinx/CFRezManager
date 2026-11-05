@@ -22,7 +22,7 @@ CF Rez Manager is a Windows WPF tool for browsing, searching, previewing, extrac
 
 - The [model-to-texture reference register](docs/asset-mapping-register.tsv) ships with the application. It records exported slots and CFT-declared model, texture, and motion-model paths whose slots still need verification; the runtime resolver does not load it as an automatic mapping.
 - The [register field guide](docs/asset-mapping-register.md) explains statuses and blank fields. OBJ export does not preserve bone names or animation tracks; unconfirmed socket bindings stay blank.
-- The [RezView animation reference](docs/rezview-animation-reference.md) records the external branch's skeleton, skinning and package design, with sample pairing checks and animation-count limits. Unity animation preview is not integrated into this version.
+- The register contains 533 confirmed exported slots. Conflicting texture copies, ambiguous GR/BL fields, unresolved slots and missing resources have separate statuses. The CharacterItem batch also retains node and animation records for 272 physical models.
 
 ## Requirements
 
@@ -372,6 +372,7 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 - Added a model-to-texture reference register to release packages, separating exported slot mappings from CFT-declared relationships that still need slot verification, and recording declared motion-model paths.
 - Fixed `CharacterItem.CFT` base texture fields being dropped when numbered textures exist. A full-directory comparison retains all 13,600 typed model rows and every prior texture field; 260 CharacterItem rows regain base declarations.
 - Focused FireAim Marker exports cover all 20 mesh-slot rows across 11 existing models, with no skipped geometry. The three CFT-declared `_INDEXED` models remain absent. Node, socket and per-motion-model animation inventories ship with the evidence tables.
+- CharacterItem base skins now accept exact paths under directories such as `Character` and `Wave`. Reviewing 260 model rows enabled 19 additional slot exports while preserving all 502 baseline texture files. Conflicting exports are marked separately from confirmed mappings.
 - Updated Chinese and English documentation and GitHub Release notes, and bumped the application version to `v1.2.5`.
 
 ## v1.2.4 Changes

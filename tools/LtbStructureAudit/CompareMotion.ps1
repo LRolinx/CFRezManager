@@ -2,8 +2,7 @@ param(
     [Parameter(Mandatory)][string]$Models,
     [Parameter(Mandatory)][string]$Nodes,
     [Parameter(Mandatory)][string]$Pairs,
-    [Parameter(Mandatory)][string]$Output,
-    [ValidateRange(1, 65536)][int]$ViewerAnimationLimit = 1024
+    [Parameter(Mandatory)][string]$Output
 )
 
 Set-StrictMode -Version Latest
@@ -55,10 +54,8 @@ $results = foreach ($pair in $pairRows) {
         parent_nonroot_nodes_with_matching_name = $matchedNonRoot.Count
         parent_duplicate_names = $parentNodes.Count - $parentNames.Count
         motion_duplicate_names = $motionNodes.Count - $motionNames.Count
-        any_name_gate_passes = ($matched.Count -gt 0).ToString().ToLowerInvariant()
+        has_shared_node_names = ($matched.Count -gt 0).ToString().ToLowerInvariant()
         root_only_name_overlap = ($matched.Count -gt 0 -and $matchedNonRoot.Count -eq 0).ToString().ToLowerInvariant()
-        viewer_animation_limit = $ViewerAnimationLimit
-        full_motion_within_viewer_animation_limit = ([int]$motion.parsed_animations -le $ViewerAnimationLimit).ToString().ToLowerInvariant()
     }
 }
 $results | Export-Csv -LiteralPath $Output -Delimiter "`t" -NoTypeInformation -Encoding utf8

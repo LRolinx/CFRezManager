@@ -22,7 +22,7 @@ CF Rez Manager 是一个 Windows WPF 工具，用来浏览、搜索、预览、�
 
 - [模型贴图参考清单](docs/asset-mapping-register.tsv) 随发布包提供，记录已成功导出的槽位，以及 CFT 已声明但槽位待验证的模型、贴图和动作模型路径；清单供复核，不作为运行时自动映射。
 - [清单字段说明](docs/asset-mapping-register.md) 说明状态和空字段的含义。OBJ 导出目前不保存骨骼名称或动画轨道；未确认的骨骼挂点留空。
-- [RezView 动画链路参考](docs/rezview-animation-reference.md) 记录外部分支的骨骼、蒙皮和动画包设计，以及样本配对和动画数量限制；当前版本尚未接入 Unity 动画预览。
+- 清单已有 533 条已确认导出槽位；贴图副本冲突、GR/BL 字段歧义、未解析槽位和资源缺失分别标记。CharacterItem 批次另存 272 份模型的节点与动画记录。
 
 ## 环境要求
 
@@ -373,6 +373,7 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 - 新增随程序发布的模型贴图参考清单，区分已导出确认的槽位和 CFT 已声明但槽位待验证的关系，并记录可确认的动作模型路径。
 - 修复 `CharacterItem.CFT` 在有编号贴图时丢失基础贴图字段的问题。全目录对比保留原有 13,600 条强类型模型记录及全部旧贴图字段，260 条 CharacterItem 记录补回基础字段。
 - FireAim Marker 的 11 个现存模型已聚焦导出全部 20 个网格槽位，未跳过几何；CFT 声明的 3 个 `_INDEXED` 模型仍未找到。骨骼节点、挂点和各动作模型的动画清单随证据表保存。
+- CharacterItem 基础贴图支持 `Character`、`Wave` 等目录中的精确路径；260 条模型记录复核后新增导出 19 条槽位，原有 502 条贴图文件保持一致。有冲突的导出另行标记，不计入确认映射。
 - 更新中英文说明书和 GitHub Release 文案，版本号提升到 `v1.2.5`。
 
 ## v1.2.4 更新

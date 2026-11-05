@@ -4169,7 +4169,8 @@ internal static class LithTechModelTextureConfigIndex
                     }
                 }
 
-                // Base socket skins bind slot 0; additional slots require numbered CFT fields.
+                // The explicit base field defines slot 0, including skins outside SocketItem.
+                // Additional slots still require numbered CFT fields and consistent physical copies.
                 if (TryGetUnnumberedCharacterItemTexturePath(configItem.Path, mapping, out string characterItemTexturePath) &&
                     modelItemsByPath.TryGetValue(
                         GetLogicalModelResourcePath(modelResourcePath),
@@ -10367,7 +10368,7 @@ internal static class LithTechModelTextureConfigIndex
             .Select(texture => NormalizeKey(texture.Path))
             .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         if (paths.Length != 1 ||
-            !paths[0].StartsWith("ModelTextures/SocketItem/", StringComparison.OrdinalIgnoreCase) ||
+            !paths[0].StartsWith("ModelTextures/", StringComparison.OrdinalIgnoreCase) ||
             !Path.GetExtension(paths[0]).Equals(".dtx", StringComparison.OrdinalIgnoreCase))
         {
             return false;
