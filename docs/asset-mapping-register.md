@@ -19,7 +19,7 @@ Rows describe individual slots. A successful row can coexist with other unresolv
 - `global_texture_slot` is the LTB skin slot; it is blank until slot evidence exists.
 - `mapping_source_or_field` names the resolver source for exported slots or the CFT field for declared relationships.
 - `skeleton_or_bone_names` records a node count and hierarchy hash when inspected; the linked node table retains every name and parent. Counts include the scene root.
-- `bone_or_socket_binding` records embedded model sockets, inspected native vertex-skin methods or the raw CFT attachment target type. The linked skin tables retain physical sources, bone indices and weighted vertex/corner counts. An embedded socket does not establish which accessory uses it. Blank values mean unknown, not absent.
+- `bone_or_socket_binding` records embedded model sockets, inspected native vertex-skin methods, sampled pose status or the raw CFT attachment target type. The linked tables retain physical sources, bone indices and weighted vertex/corner counts. An embedded socket does not establish which accessory uses it. Blank values mean unknown, not absent.
 - `motion_model_path` records a motion reference from the typed CFT row or a serialized LTB child-model declaration. A logical path does not select a physical version. It does not claim that OBJ export contains the animation.
 - OBJ currently exports geometry and textures. It does not preserve skeleton bones or animation tracks.
 
@@ -51,7 +51,17 @@ Direct bindings follow the triangles actually drawn by each bone set. A set's in
 
 Matrix-palette handling has [synthetic checks](evidence/native-skin-20261105-guards.tsv), but no real sample in this snapshot. Its minimum is a range bound rather than an offset added to the raw byte index. Remapped global node indices may exceed 255; palette byte 255 is distinct from the direct bone-set terminator. The 63 checks also cover overlapping draws, malformed weights/ranges, multiple streams, serialized skeleton indices and geometry preservation.
 
-The [skin check tool](../tools/NativeSkinCheck/README.md) captures data through the node hierarchy; complete-file validation remains the separate structure audit. Ordinary preview and OBJ decoding retain their existing geometry path without allocating skin arrays. Per-mesh skin errors remain explicit while static geometry stays available. Physical motion-version selection, coordinate transforms, evaluated poses and animated export remain unverified; OBJ still exports geometry and textures.
+The [skin check tool](../tools/NativeSkinCheck/README.md) captures data through the node hierarchy; complete-file validation remains the separate structure audit. Ordinary preview and OBJ decoding retain their existing geometry path without allocating skin arrays. Per-mesh skin errors remain explicit while static geometry stays available. Physical motion-version selection, rendered animation and animated export remain unverified; OBJ still exports geometry and textures.
+
+### Native pose samples
+
+The [pose source inventory](evidence/native-pose-20261105-sources.tsv) checks the same 37 physical files against their complete structure/channel report and stored/decoded SHA-256. Twenty-one files contain 85 embedded animations. Sampling each animation's first/last key and the midpoint of its longest positive key interval produces [241 poses](evidence/native-pose-20261105-poses.tsv). Single-key animations contribute one pose. Sixteen variants have no embedded animation; their declared external children remain unselected.
+
+The [independent comparison](evidence/native-pose-20261105-validation.tsv) covers 19,340 node pose records, each containing local/global/skin matrices, and [1,273 posed mesh records](evidence/native-pose-20261105-meshes.tsv), totaling 1,100,023 vertex positions. A separate column-vector calculation differs by at most 0.000017543 matrix units and 0.000008037 vertex units. Recorded tolerances are absolute 0.0005 plus relative 0.000005. Mesh rows retain the exact float32 position hash and bounds. Raw pose matrices and binary vertices can be regenerated locally; game resources are not committed.
+
+Evaluation uses parent-to-child animation transforms, the native rigid bind inverse and each self binding's root translation. Forty-five sampled poses have a nonzero root translation. Rotation-only nodes use their parent-relative bind offset; this snapshot has no such flags, so that behavior has synthetic coverage. Quaternion interpolation follows the shortest arc, and conversion to a matrix accounts for quaternion magnitude without changing the recorded channels. Finite skin weights are used without normalization, including per-corner overrides when needed.
+
+The [90 checks](evidence/native-pose-20261105-guards.tsv) include the original 63 skin checks and 27 pose/CPU-skin checks. [Nine input checks](evidence/native-pose-20261105-input-guards.tsv) cover source/report mismatches, partial or vertex channels, self binding names and clearing stale pose outputs. The [inspection marker](evidence/native-pose-20261105-inspection.tsv) records requested detail. This updates 869 register rows: 866 link to sampled embedded poses and three retain an unselected external child. Texture paths and statuses remain unchanged. Sampling is not continuous playback validation; animation blending, node controllers, external-child retargeting, export coordinate conversion and the game's rendered result remain unverified.
 
 ### CharacterType arms
 

@@ -30,6 +30,8 @@ The tool inventories animation data without evaluating poses. Matching node hier
 
 Vertex skin data has a separate [capture check](../NativeSkinCheck/README.md). The PView/arm snapshot verifies 160 LOD0 meshes, 141,464 vertices and 2,395 draw bindings against independent reads. Capture ends after the node hierarchy and therefore does not replace this audit's complete-file checks. Bone/weight decoding alone does not validate rendered deformation.
 
+Pass this tool's completed `--channels` report to the skin tool's `--poses` option for sampled CPU evaluation. It verifies source hashes, indexed nodes and channel payloads before sampling the first/last keys and a selected interval midpoint. The [241-pose evidence](../../docs/evidence/native-pose-20261105-validation.tsv) covers native model-space transforms and vertex positions; blending, external-child selection and game rendering remain unverified.
+
 ## Channel inspection
 
 ```powershell

@@ -31,6 +31,7 @@ CF Rez Manager is a Windows WPF tool for browsing, searching, previewing, extrac
 - The combined structure records cover 373 distinct physical LTB files, including child-model declarations, 8,867 animation bindings and 17 node blend-weight sets. All three FireAim body models internally reference `M-motion_blue.ltb`; the three arm models have no such internal reference. Physical motion-version selection and playback remain unverified.
 - The HuluXiongdi PView snapshot retains 37 model files, 85 embedded animations, 13,088 channels and 2,318 keyframes. Two base-model copies share identical transform channels but place combo sound events 33 and 43 milliseconds apart; their physical versions remain separate.
 - The source now provides optional native LTB vertex-skin capture and a [check tool](tools/NativeSkinCheck/README.md). Independent reading verified 160 meshes, 141,464 vertices and 2,395 draw groups from 37 files; binding records and weight hashes are retained. Animation playback and skeletal animation export still need validation.
+- Native pose evaluation has been independently checked at 241 sampled poses, covering 19,340 node poses and 1,100,023 vertex positions. It retains root animation translations, rotation-only nodes and per-corner draw bindings. The check tool can evaluate inspected channel reports; game rendering and animation export are not integrated yet.
 
 ## Requirements
 

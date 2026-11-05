@@ -15,3 +15,5 @@ The release workflow runs these checks before packaging. [Texture-copy checks](.
 The structure check also covers animation channel encodings, hierarchy traversal and raw keyframe events. The [PView node map](../../docs/evidence/pview-motion-20261105-arm-node-map.tsv) records the 46 shared arm nodes separately from bind-matrix and playback validation.
 
 The separate [native skin checks](../NativeSkinCheck/README.md) verify direct draw bindings, rigid effectors and matrix-palette edge cases. The 37-file PView/arm snapshot retains verified skin hashes for 160 meshes and 141,464 vertices. These are decoded binding records; rendered arm animation remains unverified.
+
+The skin tool now also evaluates sampled native poses from a completed channel report. Its [241-pose comparison](../../docs/evidence/native-pose-20261105-validation.tsv) includes the basic arm templates and preserves each physical source. CPU pose calculations do not establish an active character/weapon animation binding or change the side-qualified texture selection.

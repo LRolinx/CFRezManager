@@ -1,6 +1,7 @@
 using CFRezManager;
 using System.IO;
 using System.Reflection;
+using System.Numerics;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -18,16 +19,20 @@ static class Program
     }
     static int Main(string[] args)
     {
-        string output = "artifacts/native-skin-check", resources = ""; bool vertices = false;
+        string output = "artifacts/native-skin-check", resources = "", poses = ""; bool vertices = false;
         for (int i = 0; i < args.Length; i++)
             if (args[i] == "--output" && i + 1 < args.Length) output = args[++i];
             else if (args[i] == "--resources" && i + 1 < args.Length) resources = args[++i];
             else if (args[i] == "--vertices") vertices = true;
-            else throw new ArgumentException("Expected --resources <snapshot>, --output <directory> or --vertices.");
+            else if (args[i] == "--poses" && i + 1 < args.Length) poses = args[++i];
+            else throw new ArgumentException("Expected --resources <snapshot>, --output <directory>, --vertices or --poses <channel-report>.");
+        if (poses.Length > 0 && resources.Length == 0) throw new ArgumentException("Pose inspection requires a resource snapshot.");
         Directory.CreateDirectory(output);
         RunChecks(); File.WriteAllLines(Path.Combine(output, "checks.tsv"), Checks);
         Console.WriteLine($"{Checks.Count - 1} native skin checks passed.");
-        return resources.Length == 0 ? 0 : Audit(resources, output, vertices);
+        if (resources.Length > 0) NativePoseAudit.Reset(output);
+        int result = resources.Length == 0 ? 0 : Audit(resources, output, vertices, poses.Length > 0);
+        return result != 0 || poses.Length == 0 ? result : NativePoseAudit.Run(resources, output, poses, data => Decode(data));
     }
     static void RunChecks()
     {
@@ -91,6 +96,69 @@ static class Program
         var skeletonOnly = Decode(noPieces);
         Check("skeleton-only capture retains nodes without inventing meshes", skeletonOnly.Meshes.Count == 0 && skeletonOnly.NativeSkeleton!.Count == 3);
         Check("default decode does not capture skin arrays", Decode(direct.Data, false) is { NativeSkeleton: null } normal && normal.Meshes.All(m => m.NativeSkinning is null));
+        RunPoseChecks();
+    }
+    static void RunPoseChecks()
+    {
+        LithTechSkeletonNode Node(int index, int parent, Vector3 p, byte flags = 0)
+            => new(index, parent, "Bone" + index, flags, [1, 0, 0, p.X, 0, 1, 0, p.Y, 0, 0, 1, p.Z, 0, 0, 0, 1]);
+        LithTechNodeSample Sample(int index, Vector3 p, Quaternion? q = null) => new(index, p, q ?? Quaternion.Identity);
+        bool Near(Vector3 a, Vector3 b) => Vector3.Distance(a, b) < .0001f;
+        var nodes = new[] { Node(0, 1, new(10, 2, 0)), Node(1, -1, new(10, 0, 0)) };
+        var bind = new[] { Sample(1, new(10, 0, 0)), Sample(0, new(0, 2, 0)) };
+        var binding = new LithTechVertexSkin(0, -1, -1, -1, 1, 0, 0, 0);
+        Vector3 Skin(LithTechNativePose pose) => LithTechPoseEvaluator.SkinVertex(new(10, 3, 0), binding, pose.SkinTransforms);
+        var bindPose = LithTechPoseEvaluator.Evaluate(nodes, bind, bind, 0);
+        Check("bind pose preserves source vertex", Near(Skin(bindPose), new(10, 3, 0)));
+        var z90 = Quaternion.CreateFromAxisAngle(Vector3.UnitZ, MathF.PI / 2);
+        var frame = new[] { Sample(0, new(0, 2, 0)), Sample(1, new(20, 0, 0), z90) };
+        var pose = LithTechPoseEvaluator.Evaluate(nodes.Reverse().ToArray(), frame, frame, 0);
+        Check("pose composes parent rotation and child translation by index", Near(pose.GlobalTransforms[0].Translation, new(18, 0, 0)));
+        Check("skin applies inverse bind before animated global transform", Near(Skin(pose), new(17, 0, 0)));
+        var shifted = LithTechPoseEvaluator.Evaluate(nodes, frame, frame, 0, new(5, 0, 0));
+        Check("animation translation applies once at the root", Near(Skin(shifted), new(22, 0, 0)));
+        var rotationOnly = new[] { nodes[0] with { Flags = 2 }, nodes[1] };
+        var movedChild = new[] { Sample(0, new(999, 999, 999)), frame[1] };
+        Check("rotation-only child uses its parent-relative bind offset", Near(Skin(LithTechPoseEvaluator.Evaluate(rotationOnly, movedChild, movedChild, 0)), new(17, 0, 0)));
+        var rotatedBind = new[] {
+            nodes[0] with { GlobalBindMatrix = new float[] { 0, -1, 0, 8, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 } },
+            nodes[1] with { GlobalBindMatrix = new float[] { 0, -1, 0, 10, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 } } };
+        var rotatedSamples = new[] { Sample(0, new(0, 2, 0)), Sample(1, new(10, 0, 0), z90) };
+        var rotatedPose = LithTechPoseEvaluator.Evaluate(rotatedBind, rotatedSamples, rotatedSamples, 0);
+        Check("rotated inverse bind preserves its source-space vertex", Near(LithTechPoseEvaluator.SkinVertex(new(7, 0, 0), binding, rotatedPose.SkinTransforms), new(7, 0, 0)));
+        var rotatedOnly = new[] { rotatedBind[0] with { Flags = 2 }, rotatedBind[1] };
+        Check("rotation-only offset accounts for rotated parent bind basis", Near(LithTechPoseEvaluator.Evaluate(rotatedOnly, movedChild, movedChild, 0).GlobalTransforms[0].Translation, new(18, 0, 0)));
+        var rootOnly = new[] { Node(0, -1, Vector3.Zero, 2) };
+        var moveRoot = new[] { Sample(0, new(999, 999, 999)) };
+        Check("rotation-only root ignores translation and animation shift", LithTechPoseEvaluator.Evaluate(rootOnly, moveRoot, moveRoot, 0, Vector3.One).GlobalTransforms[0].Translation == Vector3.Zero);
+        var single = new[] { Node(0, -1, Vector3.Zero) };
+        var left = new[] { Sample(0, Vector3.Zero) }; var right = new[] { Sample(0, new(10, 4, 0)) };
+        Check("positions interpolate linearly", Near(LithTechPoseEvaluator.Evaluate(single, left, right, .25f).GlobalTransforms[0].Translation, new(2.5f, 1, 0)));
+        Vector3 Turn(Quaternion a, Quaternion b, float f) => Vector3.Transform(Vector3.UnitX, LithTechPoseEvaluator.Evaluate(single, [Sample(0, Vector3.Zero, a)], [Sample(0, Vector3.Zero, b)], f).GlobalTransforms[0]);
+        var a170 = Quaternion.CreateFromAxisAngle(Vector3.UnitZ, MathF.PI * 170 / 180); var b170 = Quaternion.CreateFromAxisAngle(Vector3.UnitZ, -MathF.PI * 170 / 180);
+        Check("quaternion interpolation takes the shortest arc", Near(Turn(a170, b170, .5f), -Vector3.UnitX));
+        Check("opposite quaternion signs preserve the same rotation", Near(Turn(z90, -z90, .5f), Vector3.UnitY));
+        Check("non-unit quaternion magnitude does not scale geometry", Near(Turn(z90 * 3, z90 * 3, 0), Vector3.UnitY));
+        Check("nearby quaternion interpolation retains a finite rotation", Near(Turn(Quaternion.Identity, Quaternion.CreateFromAxisAngle(Vector3.UnitZ, .001f), .5f), new(MathF.Cos(.0005f), MathF.Sin(.0005f), 0)));
+        var weighted = new LithTechVertexSkin(0, 1, -1, -1, .25f, .75f, 0, 0);
+        Check("CPU skin blends transformed vertices without normalization", Near(LithTechPoseEvaluator.SkinVertex(new(0, 0, 0), weighted, [Matrix4x4.CreateTranslation(2, 0, 0), Matrix4x4.CreateTranslation(4, 0, 0)]), new(3.5f, 0, 0)));
+        Check("CPU skin retains finite negative influences", Near(LithTechPoseEvaluator.SkinVertex(new(0, 0, 0), weighted with { Weight0 = 1.5f, Weight1 = -.5f }, [Matrix4x4.CreateTranslation(2, 0, 0), Matrix4x4.CreateTranslation(4, 0, 0)]), new(1, 0, 0)));
+        var shared = Decode(Make(mode: "overlap").Data).Meshes[0]; var sharedSkin = shared.NativeSkinning!;
+        Matrix4x4[] sharedPose = [Matrix4x4.Identity, Matrix4x4.CreateTranslation(1, 0, 0), Matrix4x4.CreateTranslation(2, 0, 0)];
+        Check("CPU skin respects different palettes on shared triangle corners", Near(LithTechPoseEvaluator.SkinVertex(shared.Vertices[0], sharedSkin.GetCornerSkin(0, 0), sharedPose), new(1, 0, 0))
+            && Near(LithTechPoseEvaluator.SkinVertex(shared.Vertices[0], sharedSkin.GetCornerSkin(3, 0), sharedPose), new(2, 0, 0)));
+        void Bad(string name, Action run) { bool rejected = false; try { run(); } catch (InvalidDataException) { rejected = true; } Check(name, rejected); }
+        Bad("pose rejects duplicate samples", () => LithTechPoseEvaluator.Evaluate(nodes, [bind[0], bind[0]], bind, 0));
+        Bad("pose rejects missing samples", () => LithTechPoseEvaluator.Evaluate(nodes, [bind[0]], bind, 0));
+        Bad("pose rejects missing root", () => LithTechPoseEvaluator.Evaluate([nodes[0], nodes[1] with { ParentIndex = 0 }], bind, bind, 0));
+        Bad("pose rejects disconnected parent cycle", () => LithTechPoseEvaluator.Evaluate([Node(0, -1, default), Node(1, 2, default), Node(2, 1, default)], [Sample(0, default), Sample(1, default), Sample(2, default)], [Sample(0, default), Sample(1, default), Sample(2, default)], 0));
+        Bad("pose rejects multiple roots", () => LithTechPoseEvaluator.Evaluate([nodes[0] with { ParentIndex = -1 }, nodes[1]], bind, bind, 0));
+        Bad("pose rejects zero quaternions even at the other endpoint", () => LithTechPoseEvaluator.Evaluate(single, [new(0, default, default)], left, 1));
+        Bad("pose rejects non-finite samples", () => LithTechPoseEvaluator.Evaluate(single, [Sample(0, new(float.NaN, 0, 0))], left, 0));
+        Bad("pose rejects extrapolation", () => LithTechPoseEvaluator.Evaluate(single, left, left, 1.1f));
+        Bad("pose rejects non-finite fractions", () => LithTechPoseEvaluator.Evaluate(single, left, left, float.NaN));
+        Bad("CPU skin rejects unbound vertices", () => LithTechPoseEvaluator.SkinVertex(new(0, 0, 0), new(-1, -1, -1, -1, 0, 0, 0, 0), pose.SkinTransforms));
+        Bad("CPU skin rejects weighted nodes outside pose", () => LithTechPoseEvaluator.SkinVertex(new(0, 0, 0), binding with { Node0 = 5 }, pose.SkinTransforms));
     }
     sealed record Fixture(byte[] Data, int NodeCount, int Weights, int SecondWeights, int Bones, int IndexEnd, int FirstVertex, int PaletteIndices, int Remap, int Effector, int SecondNodeIndex, int ThirdNodeIndex, int PieceCount, int SkeletonStart);
     static Fixture Make(string mode = "direct", int nodes = 3, bool normals = true, bool duplicate = false, float[]? weights = null)
@@ -171,7 +239,7 @@ static class Program
         foreach (int slot in mesh.TextureSlotIndices ?? []) w.Write(slot); w.Write(mesh.RenderStyleIndex ?? -1); w.Write(mesh.HasAuthoritativeTextureBindings);
         return Convert.ToHexString(SHA256.HashData(data.ToArray()));
     }
-    static int Audit(string root, string output, bool vertices)
+    static int Audit(string root, string output, bool vertices, bool poses)
     {
         var meshes = new List<string> { "source\tmesh\tmethod\tvertices\ttriangles\tnodes\tdraws\tcorner_overrides\twithout_draw_binding\toutside_unit_interval\tgeometry_sha256\tskin_sha256\tweight_stream\tweight_decoded_byte_offset\tweight_vertex_stride\tstored_weights_per_vertex\tpalette_min\tpalette_max\tpalette_remap\terror" };
         var draws = new List<string> { "source\tmesh\tdraw\tindex_start\tindex_count\tvertex_first\tvertex_count\tnodes" };
@@ -181,7 +249,7 @@ static class Program
         using var cornerRows = new StreamWriter(Path.Combine(output, "corner-overrides.tsv"), false, new UTF8Encoding(false));
         vertexRows.WriteLine("source\tmesh\tvertex\tnodes_i32_hex\tweights_f32_hex");
         cornerRows.WriteLine("source\tmesh\tcorner\tvertex\tnodes_i32_hex\tweights_f32_hex");
-        File.WriteAllText(Path.Combine(output, "inspection.tsv"), "inspection\trequested\nvertex-values\t" + (vertices ? "true" : "false") + "\n");
+        File.WriteAllText(Path.Combine(output, "inspection.tsv"), "inspection\trequested\nvertex-values\t" + (vertices ? "true" : "false") + "\nnative-poses\t" + (poses ? "true" : "false") + "\n");
         int failed = 0;
         foreach (string line in File.ReadLines(Path.Combine(root, "resource-manifest.tsv")).Skip(1))
         {

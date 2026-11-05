@@ -27,3 +27,5 @@ The [arm texture inventory](../../docs/evidence/character-arms-20261105-texture-
 Animation equivalence needs separate evidence. Two recorded PView copies have identical transform channels but [different sound-event timing](../../docs/evidence/pview-motion-20261105-event-differences.tsv); the [channel inspection](../LtbStructureAudit/README.md#channel-inspection) retains their exact payload and event bytes.
 
 The [native skin checks](../NativeSkinCheck/README.md) also run before packaging. They preserve default geometry and texture slots while checking optional bone/weight capture. Skin data for 160 meshes has been independently reproduced; this does not select a physical texture copy or establish rendered animation.
+
+The same tool's pose checks now cover root animation shifts, parent transforms and CPU skinning. The [pose evidence](../../docs/evidence/native-pose-20261105-sources.tsv) keeps the two PView copies separate and retains the unselected external children. These calculations do not resolve texture-copy conflicts or animation event differences.
