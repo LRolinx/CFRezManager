@@ -377,7 +377,7 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 - `--scan-cfg`：扫描 CFG，提取贴图引用，输出 TXT/CSV 报告。
 - `--decode-cfg`：重试失败 CFG，导出可还原文本或二进制预览图，并分类高熵配置。
 
-## v1.2.5 更新
+## v1.2.6 更新
 
 - 新增 CFT → XLSX 导出入口和命令行，文本预览显示实际行数据。当前 CharacterType 样本的 900 行、70 列（含 RecordId）已逐值核对，并通过 XLSX 结构校验。
 
@@ -385,7 +385,7 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 - 修复 `CharacterItem.CFT` 在有编号贴图时丢失基础贴图字段的问题。全目录对比保留原有 13,600 条强类型模型记录及全部旧贴图字段，260 条 CharacterItem 记录补回基础字段。
 - FireAim Marker 的 11 个现存模型已聚焦导出全部 20 个网格槽位，未跳过几何；CFT 声明的 3 个 `_INDEXED` 模型仍未找到。骨骼节点、挂点和各动作模型的动画清单随证据表保存。
 - CharacterItem 基础贴图支持 `Character`、`Wave` 等目录中的精确路径；260 条模型记录复核后新增导出 19 条槽位，原有 502 条贴图文件保持一致。有冲突的导出另行标记，不计入确认映射。
-- 更新中英文说明书和 GitHub Release 文案，版本号提升到 `v1.2.5`。
+- 更新中英文说明书和 GitHub Release 文案，版本号提升到 `v1.2.6`。
 
 ## v1.2.4 更新
 

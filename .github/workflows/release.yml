@@ -49,7 +49,7 @@ jobs:
           body: |
             CF Rez Manager ${{ github.ref_name }}
 
-            ## v1.2.5 更新 / Highlights
+            ## v1.2.6 更新 / Highlights
 
             - 新增 CFT 表格 XLSX 导出，支持 REZ 内文件和散文件；文本预览显示实际行数据。CharacterType 的 900 行、70 列样本已逐值验证。
             - 新增随程序发布的模型贴图参考清单，区分已导出槽位与 CFT 已声明但待验证的关系，并记录动作模型路径。

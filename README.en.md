@@ -376,7 +376,7 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 - `--scan-cfg`: scan CFG files, extract texture references, and write TXT/CSV reports.
 - `--decode-cfg`: retry failed CFG files, export recovered text or binary previews, and classify high-entropy configs.
 
-## v1.2.5 Changes
+## v1.2.6 Changes
 
 - Added CFT-to-XLSX export through the context menu and command line, with actual row data in text previews. All values in the current 900-row, 70-column CharacterType sample, including RecordId, match the source and pass XLSX schema validation.
 
@@ -384,7 +384,7 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 - Fixed `CharacterItem.CFT` base texture fields being dropped when numbered textures exist. A full-directory comparison retains all 13,600 typed model rows and every prior texture field; 260 CharacterItem rows regain base declarations.
 - Focused FireAim Marker exports cover all 20 mesh-slot rows across 11 existing models, with no skipped geometry. The three CFT-declared `_INDEXED` models remain absent. Node, socket and per-motion-model animation inventories ship with the evidence tables.
 - CharacterItem base skins now accept exact paths under directories such as `Character` and `Wave`. Reviewing 260 model rows enabled 19 additional slot exports while preserving all 502 baseline texture files. Conflicting exports are marked separately from confirmed mappings.
-- Updated Chinese and English documentation and GitHub Release notes, and bumped the application version to `v1.2.5`.
+- Updated Chinese and English documentation and GitHub Release notes, and bumped the application version to `v1.2.6`.
 
 ## v1.2.4 Changes
 
