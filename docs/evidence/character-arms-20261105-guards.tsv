@@ -1,0 +1,68 @@
+check	status
+native triangle fixture has two authoritative slots	passed
+row:CharacterType.CFT#0:GR slot 0	passed
+row:CharacterType.CFT#0:GR slot 1	passed
+A100:GR slot 0	passed
+A100:GR slot 1	passed
+recordid:CharacterType.CFT#101:GR slot 0	passed
+recordid:CharacterType.CFT#101:GR slot 1	passed
+CLI row 0 GR succeeds	passed
+CLI row 0 GR has two slot rows	passed
+CLI row 0 GR slot 0 uses declared context	passed
+CLI row 0 GR slot 0 retains pixels	passed
+CLI row 0 GR slot 1 uses declared context	passed
+CLI row 0 GR slot 1 retains pixels	passed
+row:CharacterType.CFT#0:BL slot 0	passed
+row:CharacterType.CFT#0:BL slot 1	passed
+A100:BL slot 0	passed
+A100:BL slot 1	passed
+recordid:CharacterType.CFT#101:BL slot 0	passed
+recordid:CharacterType.CFT#101:BL slot 1	passed
+CLI row 0 BL succeeds	passed
+CLI row 0 BL has two slot rows	passed
+CLI row 0 BL slot 0 uses declared context	passed
+CLI row 0 BL slot 0 retains pixels	passed
+CLI row 0 BL slot 1 uses declared context	passed
+CLI row 0 BL slot 1 retains pixels	passed
+row:CharacterType.CFT#1:GR slot 0	passed
+row:CharacterType.CFT#1:GR slot 1	passed
+A101:GR slot 0	passed
+A101:GR slot 1	passed
+recordid:CharacterType.CFT#202:GR slot 0	passed
+recordid:CharacterType.CFT#202:GR slot 1	passed
+CLI row 1 GR succeeds	passed
+CLI row 1 GR has two slot rows	passed
+CLI row 1 GR slot 0 uses declared context	passed
+CLI row 1 GR slot 0 retains pixels	passed
+CLI row 1 GR slot 1 uses declared context	passed
+CLI row 1 GR slot 1 retains pixels	passed
+row:CharacterType.CFT#1:BL slot 0	passed
+row:CharacterType.CFT#1:BL slot 1	passed
+A101:BL slot 0	passed
+A101:BL slot 1	passed
+recordid:CharacterType.CFT#202:BL slot 0	passed
+recordid:CharacterType.CFT#202:BL slot 1	passed
+CLI row 1 BL succeeds	passed
+CLI row 1 BL has two slot rows	passed
+CLI row 1 BL slot 0 uses declared context	passed
+CLI row 1 BL slot 0 retains pixels	passed
+CLI row 1 BL slot 1 uses declared context	passed
+CLI row 1 BL slot 1 retains pixels	passed
+ambiguous or absent row:CharacterType.CFT#0 slot 0	passed
+ambiguous or absent row:CharacterType.CFT#0 slot 1	passed
+ambiguous or absent row:CharacterType.CFT#1 slot 0	passed
+ambiguous or absent row:CharacterType.CFT#1 slot 1	passed
+ambiguous or absent row:CharacterType.CFT#101:GR slot 0	passed
+ambiguous or absent row:CharacterType.CFT#101:GR slot 1	passed
+ambiguous or absent recordid:CharacterType.CFT#1:GR slot 0	passed
+ambiguous or absent recordid:CharacterType.CFT#1:GR slot 1	passed
+ambiguous or absent row:CharacterType.CFT#99:BL slot 0	passed
+ambiguous or absent row:CharacterType.CFT#99:BL slot 1	passed
+reversed slots with generic hand mesh GR slot 0	passed
+reversed slots with generic hand mesh GR slot 1	passed
+reversed slots with generic hand mesh BL slot 0	passed
+reversed slots with generic hand mesh BL slot 1	passed
+creating mesh fallback does not build its index	passed
+requested mesh fallback builds its index	passed
+successful primary does not enumerate name fallbacks	passed
+SGFX still exports its auxiliary texture	passed

@@ -116,6 +116,13 @@ internal static class LithTechModelMeshTextureResolver
 
     public static Func<string, string, int, string, IReadOnlyList<string>>? CreateResolver(ExplorerItem root)
     {
+        var resolver = new Lazy<Func<string, string, int, string, IReadOnlyList<string>>?>(() => CreateResolverCore(root));
+        return (modelReference, meshName, slotIndex, candidateReference) =>
+            resolver.Value?.Invoke(modelReference, meshName, slotIndex, candidateReference) ?? [];
+    }
+
+    private static Func<string, string, int, string, IReadOnlyList<string>>? CreateResolverCore(ExplorerItem root)
+    {
         MeshTextureIndex index = IndexCache.GetValue(root, BuildIndex);
         if (index.UniqueDtxByBaseName.Count == 0 &&
             index.UniquePlayerViewDtxByBaseName.Count == 0 &&

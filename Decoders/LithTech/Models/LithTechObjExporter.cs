@@ -656,8 +656,23 @@ internal static class LithTechObjExporter
         bool hasModelSlotSpecificBindings = source.ModelTextureSlotMappingPresenceResolver is not null &&
                                             source.ModelTextureSlotMappingPresenceResolver(source.ResourcePath);
         string materialHintKey = string.Join("|", materialHints.Take(8));
-        List<string> inferredTextureCandidates = EnumerateTextureCandidates(mesh, source).ToList();
-        string inferredTextureKey = inferredTextureCandidates.FirstOrDefault() ?? string.Empty;
+        var inferredTextureCandidates = new List<string>();
+        using IEnumerator<string> candidateEnumerator = EnumerateTextureCandidates(mesh, source).GetEnumerator();
+        bool hasFirstCandidate = candidateEnumerator.MoveNext();
+        string inferredTextureKey = hasFirstCandidate ? candidateEnumerator.Current : string.Empty;
+        if (hasFirstCandidate) inferredTextureCandidates.Add(inferredTextureKey);
+        IEnumerable<string> EnumerateAndRecordCandidates()
+        {
+            if (hasFirstCandidate)
+            {
+                yield return inferredTextureKey;
+            }
+            while (candidateEnumerator.MoveNext())
+            {
+                inferredTextureCandidates.Add(candidateEnumerator.Current);
+                yield return candidateEnumerator.Current;
+            }
+        }
         string materialKey = !string.IsNullOrEmpty(textureKey)
             ? $"texture:{textureKey}"
             : !string.IsNullOrWhiteSpace(materialHintKey)
@@ -668,7 +683,7 @@ internal static class LithTechObjExporter
         if (materialByKey.TryGetValue(materialKey, out ObjMaterial? existing))
         {
             string? cachedResolvedReference = !string.IsNullOrWhiteSpace(existing.TextureRelativePath)
-                ? inferredTextureCandidates.FirstOrDefault(candidate =>
+                ? EnumerateAndRecordCandidates().FirstOrDefault(candidate =>
                     exportedTextureByCandidate.TryGetValue(NormalizeTextureKey(candidate), out string? cachedPath) &&
                     string.Equals(cachedPath, existing.TextureRelativePath, StringComparison.OrdinalIgnoreCase))
                 : null;
@@ -691,7 +706,7 @@ internal static class LithTechObjExporter
         (double r, double g, double b) = FallbackColors[meshIndex % FallbackColors.Length];
         string? resolvedTextureReference = null;
         string? textureRelativePath = TryExportBestTexture(
-            inferredTextureCandidates,
+            EnumerateAndRecordCandidates(),
             textureResolver,
             outputDirectory,
             textureDirectory,
@@ -2589,10 +2604,10 @@ internal static class LithTechObjExporter
         out string? resolvedReference)
     {
         resolvedReference = null;
-        List<string> distinctCandidates = textureCandidates.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        for (int index = 0; index < distinctCandidates.Count; index++)
+        using IEnumerator<string> candidates = textureCandidates.Distinct(StringComparer.OrdinalIgnoreCase).GetEnumerator();
+        while (candidates.MoveNext())
         {
-            string textureCandidate = distinctCandidates[index];
+            string textureCandidate = candidates.Current;
             string? textureRelativePath = TryExportTexture(
                 textureCandidate,
                 textureResolver,
@@ -2605,16 +2620,23 @@ internal static class LithTechObjExporter
             if (!string.IsNullOrWhiteSpace(textureRelativePath))
             {
                 resolvedReference = textureCandidate;
-                ExportRelatedSgfxTextures(
-                    distinctCandidates.Skip(index + 1),
-                    textureCandidate,
-                    textureResolver,
-                    outputDirectory,
-                    textureDirectory,
-                    textureDirectoryName,
-                    usedTextureNames,
-                    exportedTextureByCandidate,
-                    exportedTextureByBitmap);
+                if (!string.IsNullOrEmpty(GetSgfxRelatedTextureBase(textureCandidate)))
+                {
+                    IEnumerable<string> RemainingCandidates()
+                    {
+                        while (candidates.MoveNext()) yield return candidates.Current;
+                    }
+                    ExportRelatedSgfxTextures(
+                        RemainingCandidates(),
+                        textureCandidate,
+                        textureResolver,
+                        outputDirectory,
+                        textureDirectory,
+                        textureDirectoryName,
+                        usedTextureNames,
+                        exportedTextureByCandidate,
+                        exportedTextureByBitmap);
+                }
                 return textureRelativePath;
             }
         }

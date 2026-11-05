@@ -18,6 +18,7 @@
     <Compile Remove="artifacts\**" />
     <Compile Remove="tools\LtbStructureAudit\**" />
     <Compile Remove="tools\TextureCopyCheck\**" />
+    <Compile Remove="tools\CharacterArmCheck\**" />
     <EmbeddedResource Remove="Pak-CF\**" />
     <EmbeddedResource Remove="artifacts\**" />
     <None Remove="Pak-CF\**" />

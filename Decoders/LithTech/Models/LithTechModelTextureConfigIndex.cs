@@ -4599,7 +4599,10 @@ internal static class LithTechModelTextureConfigIndex
                                 continue;
                             }
 
-                            foreach (string contextKey in contextKeys)
+                            string[] roleContextKeys = TryGetCftPlayerViewTextureSide(texture.Column, out string roleSide)
+                                ? GetCftSideContextKeys(configItem.Path, mapping, roleSide)
+                                : contextKeys;
+                            foreach (string contextKey in roleContextKeys)
                             {
                                 AddModelTextureContextSlotMapping(
                                     byModelContext,

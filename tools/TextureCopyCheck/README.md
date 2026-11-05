@@ -19,3 +19,7 @@ dotnet run --project tools/TextureCopyCheck -c Release -- --resources C:\Snapsho
 The snapshot needs its six-column `resource-manifest.tsv` and extracted files, with two physical copies of each of those three logical DTX paths. The checks reject unqualified conflicting paths in either order and retain access to each explicit physical path. Raw game resources are not included in the repository.
 
 Model associations have a separate [structure check](../LtbStructureAudit/README.md#structure-checks). Its 40 assertions cover child declarations, animation bindings and node blend masks, and also run before release packaging. Passing texture-copy checks alone does not establish those relationships or animation playback.
+
+The [character arm checks](../CharacterArmCheck/README.md) cover side-qualified CFT selectors and preserve both declarations when GR and BL share a model path. All three checks run before release packaging; a matching logical texture still needs valid physical copies.
+
+The [arm texture inventory](../../docs/evidence/character-arms-20261105-texture-copies.tsv) records 1,464 decoded DTX copies and [36 conflicting logical paths](../../docs/evidence/character-arms-20261105-texture-conflicts.tsv). These conflicts remain unresolved regardless of which character context selects the path.

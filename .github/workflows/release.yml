@@ -21,6 +21,9 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
+      - name: Check character arm contexts
+        run: dotnet run --project ./tools/CharacterArmCheck -c Release
+
       - name: Check model structure records
         shell: pwsh
         run: .\tools\LtbStructureAudit\Check.ps1

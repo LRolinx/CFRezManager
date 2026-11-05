@@ -26,6 +26,10 @@ Matrix, socket, weight and binding vector values are little-endian float32 bytes
 
 The tool inventories animation channels without evaluating them. Matching node hierarchies is evidence for an association; animation playback, skin weights and retargeting still require validation. OBJ export remains geometry and texture export.
 
+CharacterType arm selection has a separate [context check](../CharacterArmCheck/README.md): side-qualified row, identity and RecordId selectors must retain their own skins when several characters or sides share an arm model. Structure completeness alone does not verify that skin selection.
+
+The [arm inventory](../../docs/evidence/character-arms-20261105-structure-models.tsv) covers 704 complete physical files, with 32,384 nodes, 704 embedded animations and 1,913 sockets. Each has a 46-node hierarchy, one blend mask, one implicit self child and one animation binding. No external child is serialized in these files. The [raw CFT fields](../../docs/evidence/character-arms-20261105-raw-fields.tsv) preserve row-level body-child references separately; they do not prove arm animation playback.
+
 For CFT source fields referenced by the mapping records, v1.2.7 opens the complete decoded table as a grid with row numbers, numeric sorting and a frozen `RecordId` column. Export XLSX from that window or with `--export-cft-xlsx --input <file.cft> --output <file.xlsx>`. Preview sorting does not change the exported source order. The workbook's `RecordId` column is the serialized identifier, not a zero-based row index.
 
 The FireAim snapshot records 17 complete physical LTB files. Checks using a truncated file, invalid node count, unsupported version and unexpected trailing bytes reject all four altered files and emit detailed rows only for the valid control.

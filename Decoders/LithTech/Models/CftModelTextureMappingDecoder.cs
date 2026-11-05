@@ -295,14 +295,19 @@ internal static class CftModelTextureMappingDecoder
 
             foreach ((string modelReference, (string modelColumn, int modelColumnIndex)) in modelReferences)
             {
-                string[] socketSides = modelColumnsByReference[modelReference]
-                    .Select(GetCharacterItemModelSide)
+                string[] declaredSides = modelColumnsByReference[modelReference]
+                    .Select(column => column.TrimStart('_').ToUpperInvariant() switch
+                    {
+                        "GRPVARMMODEL" => "GR",
+                        "BLPVARMMODEL" => "BL",
+                        _ => GetCharacterItemModelSide(column)
+                    })
                     .OfType<string>()
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToArray();
-                string? modelSide = socketSides.Length > 1
+                string? modelSide = declaredSides.Length > 1
                     ? null
-                    : socketSides.Length == 1 ? socketSides[0] : GetResourceSide(modelColumn) ?? GetResourceSide(modelReference);
+                    : declaredSides.Length == 1 ? declaredSides[0] : GetResourceSide(modelColumn) ?? GetResourceSide(modelReference);
                 CftTextureReference[] pairedTextures = SelectTextureReferences(
                     textureReferences,
                     modelReference,
