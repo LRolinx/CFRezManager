@@ -52,11 +52,11 @@ jobs:
             ## v1.2.5 更新 / Highlights
 
             - 新增随程序发布的模型贴图参考清单，区分已导出槽位与 CFT 已声明但待验证的关系，并记录动作模型路径。
-            - 修复 CharacterItem.CFT 单槽配件未编号贴图字段的明确槽位绑定，要求精确 DTX 与所有模型、贴图副本校验通过。
-            - FireAim Marker 的 11 个现存模型已验证 19/20 个网格槽位；资源哈希、CFT 关系和导出证据随包提供。
+            - 修复 CharacterItem.CFT 在编号贴图存在时丢失基础字段的问题，基础槽绑定要求精确 DTX 与所有模型、贴图副本校验通过。
+            - FireAim Marker 的 11 个现存模型已验证全部 20 个网格槽位；资源哈希、骨骼节点、挂点和动画清单随包提供。
             - Added a model-to-texture reference register to the package, separating exported slots from CFT-declared relationships still awaiting slot verification, and recording motion-model paths.
-            - Fixed explicit slot mappings for unnumbered CharacterItem.CFT textures on single-slot accessories, requiring exact DTX paths and consistent model/texture copies.
-            - Verified 19/20 mesh-slot rows across 11 existing FireAim Marker models; the package includes resource hashes, CFT links, and export evidence.
+            - Fixed CharacterItem.CFT base texture fields being dropped beside numbered textures, requiring exact DTX paths and consistent model/texture copies for base-slot binding.
+            - Verified all 20 mesh-slot rows across 11 existing FireAim Marker models; the package includes resource hashes, node/socket inventories and animation lists.
 
             ## v1.2.4 更新 / Highlights
 

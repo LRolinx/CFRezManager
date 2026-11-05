@@ -4169,13 +4169,15 @@ internal static class LithTechModelTextureConfigIndex
                     }
                 }
 
-                // Unnumbered socket-item skins require a single native slot and verified exact DTX copies.
+                // Base socket skins bind slot 0; additional slots require numbered CFT fields.
                 if (TryGetUnnumberedCharacterItemTexturePath(configItem.Path, mapping, out string characterItemTexturePath) &&
                     modelItemsByPath.TryGetValue(
                         GetLogicalModelResourcePath(modelResourcePath),
                         out ExplorerItem[]? characterItemModels) &&
                     TryGetConsistentLtcModelSlots(characterItemModels, decodedModels, out int[] characterItemSlots) &&
-                    characterItemSlots.Length == 1 && characterItemSlots[0] == 0 &&
+                    characterItemSlots.Contains(0) &&
+                    (characterItemSlots.Length == 1 || mapping.TextureReferences.Any(texture =>
+                        CftModelTextureMappingDecoder.TryGetTextureSlotIndex(texture.Column, out int numberedSlot) && numberedSlot > 0)) &&
                     HasConsistentDecodableDtxCopies(
                         characterItemTexturePath,
                         textureItemsByLogicalPath,
@@ -4189,7 +4191,6 @@ internal static class LithTechModelTextureConfigIndex
                     }
 
                     modelsWithSlotSpecificBindings.Add(modelPath);
-                    continue;
                 }
 
                 if (string.Equals(
@@ -10355,15 +10356,15 @@ internal static class LithTechModelTextureConfigIndex
         if (!string.Equals(Path.GetFileName(tablePath), "CharacterItem.CFT", StringComparison.OrdinalIgnoreCase) ||
             !(string.Equals(mapping.ModelColumn, "_GRSocketItemModelFile", StringComparison.OrdinalIgnoreCase) ||
               string.Equals(mapping.ModelColumn, "_BLSocketItemModelFile", StringComparison.OrdinalIgnoreCase)) ||
-            mapping.TextureReferences.Count == 0 ||
-            mapping.TextureReferences.Any(texture =>
-                !string.Equals(texture.Column.TrimStart('_'), "BLTexFile", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(texture.Column.TrimStart('_'), "GRTexFile", StringComparison.OrdinalIgnoreCase)))
+            mapping.TextureReferences.Count == 0)
         {
             return false;
         }
 
-        string[] paths = mapping.TextureReferences.Select(texture => NormalizeKey(texture.Path))
+        string[] paths = mapping.TextureReferences.Where(texture =>
+                string.Equals(texture.Column.TrimStart('_'), "BLTexFile", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(texture.Column.TrimStart('_'), "GRTexFile", StringComparison.OrdinalIgnoreCase))
+            .Select(texture => NormalizeKey(texture.Path))
             .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         if (paths.Length != 1 ||
             !paths[0].StartsWith("ModelTextures/SocketItem/", StringComparison.OrdinalIgnoreCase) ||

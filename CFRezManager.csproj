@@ -16,6 +16,7 @@
   <ItemGroup>
     <Compile Remove="Pak-CF\**" />
     <Compile Remove="artifacts\**" />
+    <Compile Remove="tools\LtbStructureAudit\**" />
     <EmbeddedResource Remove="Pak-CF\**" />
     <EmbeddedResource Remove="artifacts\**" />
     <None Remove="Pak-CF\**" />

@@ -574,11 +574,19 @@ internal static class CftModelTextureMappingDecoder
             return [];
         }
 
+        // CharacterItem socket rows use BL/GRTexFile for the base skin alongside
+        // BL/GRTexFile2 and later numbered fields. Preserve the base declaration;
+        // the config index validates its native slot before binding it.
+        bool hasSocketItemModel = modelColumn.Equals("_GRSocketItemModelFile", StringComparison.OrdinalIgnoreCase) ||
+                                  modelColumn.Equals("_BLSocketItemModelFile", StringComparison.OrdinalIgnoreCase);
         // Numbered fields are explicit engine slots. Do not let a same-stem
         // texture short-circuit the rest of a row's slot list (for example,
         // TextureFile1 matching the model name while TextureFile2/3 are skins).
         CftTextureReference[] explicitSlotTextures = compatibleTextures
-            .Where(texture => TryGetTextureSlotIndex(texture.Column, out _))
+            .Where(texture => TryGetTextureSlotIndex(texture.Column, out _) ||
+                hasSocketItemModel &&
+                (texture.Column.Equals("_BLTexFile", StringComparison.OrdinalIgnoreCase) ||
+                 texture.Column.Equals("_GRTexFile", StringComparison.OrdinalIgnoreCase)))
             .ToArray();
         if (explicitSlotTextures.Length > 0)
         {

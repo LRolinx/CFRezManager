@@ -2,4 +2,6 @@ case	expected	observed	result
 single-slot original	exported slot 0	exported slot 0	passed
 invalid DTX duplicate	no explicit slot mapping	unresolved slot 0	passed
 inconsistent model duplicate	no explicit slot mapping	all three mesh rows unresolved	passed
-numbered hair field	slot 1 unchanged, BL slot 0 unresolved	slot 1 exported, BL slot 0 unresolved	passed
+base and numbered hair fields	both slots 0 and 1 from CFT	all four BL/GR mesh-slot rows exported from CFT	passed
+invalid base DTX duplicate	base slot 0 rejected, numbered slot 1 retained	slot 0 unresolved, slot 1 exported	passed
+full CFT relation regression	all existing typed rows and texture fields retained	13600 rows retained; 260 CharacterItem rows gained base fields; zero old fields removed	passed
