@@ -86,3 +86,5 @@ The [598-file doll/accessory comparison](../../docs/evidence/view-items-20261105
 The focused SwatElite Renewal export and structure audit record texture slots, nodes, sockets and animation metadata, but this model has not been processed by this tool's vertex-skin or sampled-pose checks. Its playback and skinning remain unverified.
 
 The WildWest SP arm now has a complete structure record, but this tool has not inspected its vertex skin or sampled poses. The two missing texture slots, 46 indexed nodes, three sockets and animation metadata are tracked separately; a matching skeleton or animation name does not establish a texture, skin or playback binding.
+
+The [CharacterType logical arm bindings](../../docs/evidence/character-arms-20261114-logical-bindings.tsv) retain skeleton and animation summaries beside 80 model-slot links. These records do not validate vertex skinning or playback, and the physical DTX copies remain conflicted.

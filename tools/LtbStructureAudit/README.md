@@ -105,3 +105,5 @@ The script builds the tool into a unique directory under `artifacts/ltb-structur
 ```
 
 The output includes name overlap, non-root matches, duplicate names and hierarchy/bind-matrix equality. `has_shared_node_names` means only that at least one node name overlaps. It does not establish a valid animation binding. The FireAim arms share `Scene Root` alone; none of their non-root names match the motion source.
+
+Character arm mapping evidence now includes a [logical slot summary](../../docs/evidence/character-arms-20261114-logical-bindings.tsv) for 22 models, with node counts, hierarchy and bind-pose hashes, sockets, blend masks and animation metadata. The underlying node and animation records remain in their separate tables; this summary does not verify playback or skinning.
