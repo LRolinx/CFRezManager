@@ -54,3 +54,5 @@ The [doll/accessory inventory](../../docs/evidence/view-items-20261105-texture-c
 
 
 The [CharacterType arm binding table](../../docs/evidence/character-arms-20261114-logical-bindings.tsv) records 36 directly referenced DTX paths across 80 logical slots. Every path has multiple physical copies with different decoded pixel hashes, so this snapshot leaves the active version unresolved.
+
+The separate [female GR arm exports](../../docs/evidence/character-arms-20261114-sidefield-exports.tsv) use `ModelTextures/PlayerView/FVIEW_ARM_SOV_BL.DTX`, which has one physical copy in the inspected resources. Twelve row selectors export `Object05` slot 1 with matching PNG hashes; the `_BL` filename suffix does not change the `_GRPVArmTextureFile` declaration's side.

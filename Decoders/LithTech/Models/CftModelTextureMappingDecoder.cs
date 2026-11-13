@@ -304,6 +304,12 @@ internal static class CftModelTextureMappingDecoder
 
             foreach ((string modelReference, (string modelColumn, int modelColumnIndex)) in modelReferences)
             {
+                bool hasBothPlayerViewArmModels = modelColumnsByReference.Values
+                    .SelectMany(columns => columns)
+                    .Any(column => column.Equals("_GRPVArmModel", StringComparison.OrdinalIgnoreCase)) &&
+                    modelColumnsByReference.Values
+                        .SelectMany(columns => columns)
+                        .Any(column => column.Equals("_BLPVArmModel", StringComparison.OrdinalIgnoreCase));
                 string[] declaredSides = modelColumnsByReference[modelReference]
                     .Select(column => column.TrimStart('_').ToUpperInvariant() switch
                     {
@@ -322,7 +328,8 @@ internal static class CftModelTextureMappingDecoder
                     modelReference,
                     modelColumn,
                     modelSide,
-                    hasBaseCharacterSkins);
+                    hasBaseCharacterSkins,
+                    hasBothPlayerViewArmModels);
                 if (pairedTextures.Length > 0)
                 {
                     mappings.Add(new CftModelTextureMapping(
@@ -597,13 +604,19 @@ internal static class CftModelTextureMappingDecoder
         string modelReference,
         string modelColumn,
         string? modelSide,
-        bool hasBaseCharacterSkins)
+        bool hasBaseCharacterSkins,
+        bool hasBothPlayerViewArmModels)
     {
         bool characterBody = GetCharacterBodyModelSide(modelColumn) is not null;
         bool characterItem = GetCharacterItemModelSide(modelColumn) is not null;
         CftTextureReference[] compatibleTextures = textureReferences
             .Where(texture =>
-                HaveCompatibleResourceSides(modelSide, texture, characterBody, characterItem) &&
+                HaveCompatibleResourceSides(
+                    modelSide,
+                    texture,
+                    characterBody,
+                    characterItem,
+                    hasBothPlayerViewArmModels) &&
                 HaveCompatibleResourceRoles(modelColumn, texture, textureReferences))
             .Select(texture => hasBaseCharacterSkins && TryGetNanoCharacterTextureSlot(modelColumn, texture.Column, out int slot)
                 ? texture with { NativeSlotIndex = slot } : texture)
@@ -867,11 +880,19 @@ internal static class CftModelTextureMappingDecoder
             : index;
     }
 
-    private static bool HaveCompatibleResourceSides(string? modelSide, CftTextureReference texture, bool characterBody, bool characterItem)
+    private static bool HaveCompatibleResourceSides(
+        string? modelSide,
+        CftTextureReference texture,
+        bool characterBody,
+        bool characterItem,
+        bool hasBothPlayerViewArmModels)
     {
         string? textureSide = characterBody && TryGetCharacterBodyTextureSlot(texture.Column, out string declaredSide, out _)
             ? declaredSide : characterItem && TryGetCharacterItemTextureSlot(texture.Column, out string itemSide, out _)
-                ? itemSide : GetResourceSide(texture.Column) ?? GetResourceSide(texture.Path);
+                ? itemSide : hasBothPlayerViewArmModels &&
+                    CftPlayerViewRoleSlotResolver.TryGetTextureSide(texture.Column, out string playerViewSide)
+                    ? playerViewSide
+                    : GetResourceSide(texture.Column) ?? GetResourceSide(texture.Path);
         return string.IsNullOrWhiteSpace(modelSide) ||
                string.IsNullOrWhiteSpace(textureSide) ||
                string.Equals(textureSide, modelSide, StringComparison.OrdinalIgnoreCase);

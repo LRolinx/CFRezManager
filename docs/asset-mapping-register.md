@@ -28,7 +28,7 @@ Starting with v1.2.7, opening a CFT displays all decoded rows in a table with ro
 
 ## Snapshot
 
-The register contains 32,510 records: 27,299 confirmed exports, 2,658 unresolved slots, 123 written but unverified slots, 446 texture declarations without a matching decoded slot, 1,810 missing-model declarations, three incomplete model references and 171 model-only declarations. Records include explicit row and side contexts, so several records can describe different selected skins on the same model slot. These are recorded samples, not a full-game coverage count. Physical model copies remain separate in the evidence tables and are deduplicated by context, logical model, mesh name and slot in the register.
+The register contains 32,510 records: 27,311 confirmed exports, 2,646 unresolved slots, 123 written but unverified slots, 446 texture declarations without a matching decoded slot, 1,810 missing-model declarations, three incomplete model references and 171 model-only declarations. Records include explicit row and side contexts, so several records can describe different selected skins on the same model slot. These are recorded samples, not a full-game coverage count. Physical model copies remain separate in the evidence tables and are deduplicated by context, logical model, mesh name and slot in the register.
 
 ### CFT catalog and node templates
 
@@ -59,6 +59,8 @@ The structure audit records 46 nodes, hierarchy SHA-256 `11CE859F57370EFD72F0E29
 ### Character arm bindings with conflicting DTX copies
 
 The [logical binding table](evidence/character-arms-20261114-logical-bindings.tsv) records 80 model-slot associations from 30 CharacterType rows, covering 22 arm models and 36 DTX paths. Each row matches a CFT model reference and texture field to a mesh slot using the recorded role evidence. All 36 DTX paths have multiple physical copies with different decoded pixel hashes, so these are confirmed logical bindings but not verified exports; the active game copy is still unknown. The table also summarizes each model's 46-node hierarchy, bind-pose hash, sockets, blend mask and animation. The [node](evidence/character-arms-20261105-nodes.tsv), [animation](evidence/character-arms-20261105-animations.tsv), [socket](evidence/character-arms-20261105-sockets.tsv) and [physical texture-copy](evidence/character-arms-20261105-texture-copies.tsv) tables retain the underlying records. Animation playback and the active DTX version remain unverified.
+
+A separate CFT field-side correction now exports `Object05` slot 1 for 12 female GR row contexts using `_GRPVArmTextureFile`: rows 7, 11, 71, 72, 83, 109, 110, 149, 205, 285, 671 and 672. These rows also declare `_BLPVArmModel`; when both arm-model columns exist, the `GRPV`/`BLPV` texture-field prefix selects the side even if the DTX path ends in `_BL`. The shared `ModelTextures/PlayerView/FVIEW_ARM_SOV_BL.DTX` has one physical copy (stored SHA-256 `25F9AD911E236C960B16167709524F035BDB0A6C3C22B333544F0B4AA46060C`), and all 12 written PNGs have the same SHA-256. The [focused export table](evidence/character-arms-20261114-sidefield-exports.tsv) records each selector, source, model copy, slot, DTX/PNG hashes, 46-node skeleton summary, embedded animation, sockets and weight set. It does not verify animation playback or attachment behavior.
 
 ### WildWest SP arm model
 

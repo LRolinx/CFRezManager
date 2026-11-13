@@ -89,4 +89,6 @@ The focused SwatElite Renewal export and structure audit record texture slots, n
 
 The WildWest SP arm now has a complete structure record, but this tool has not inspected its vertex skin or sampled poses. The two missing texture slots, 46 indexed nodes, three sockets and animation metadata are tracked separately; a matching skeleton or animation name does not establish a texture, skin or playback binding.
 
+The 12 focused female GR arm texture exports also point to `Arm_WOMAN_GR`. Their [evidence record](../../docs/evidence/character-arms-20261114-sidefield-exports.tsv) stores texture hashes with the model's node, animation, socket and weight-set summaries. This texture evidence does not add a new skinning or pose comparison; the existing native skin records remain the source for those checks.
+
 The [CharacterType logical arm bindings](../../docs/evidence/character-arms-20261114-logical-bindings.tsv) retain skeleton and animation summaries beside 80 model-slot links. These records do not validate vertex skinning or playback, and the physical DTX copies remain conflicted.

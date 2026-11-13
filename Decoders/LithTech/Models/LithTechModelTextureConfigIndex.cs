@@ -8315,34 +8315,7 @@ internal static class LithTechModelTextureConfigIndex
 
     private static bool TryGetCftPlayerViewTextureSide(string columnName, out string side)
     {
-        side = string.Empty;
-        if (!CftPlayerViewRoleSlotResolver.TryGetTextureRole(columnName, out CftPlayerViewTextureRole role))
-        {
-            return false;
-        }
-
-        string normalizedColumn = columnName.TrimStart('_');
-        string roleField = role == CftPlayerViewTextureRole.Hand
-            ? "PVHandTextureFile"
-            : "PVArmTextureFile";
-        int roleFieldIndex = normalizedColumn.IndexOf(roleField, StringComparison.OrdinalIgnoreCase);
-        if (roleFieldIndex <= 0)
-        {
-            return false;
-        }
-
-        string prefix = normalizedColumn[..roleFieldIndex].TrimEnd('_');
-        foreach (string candidateSide in new[] { "BL", "GR" })
-        {
-            if (string.Equals(prefix, candidateSide, StringComparison.OrdinalIgnoreCase) ||
-                prefix.EndsWith("_" + candidateSide, StringComparison.OrdinalIgnoreCase))
-            {
-                side = candidateSide;
-                return true;
-            }
-        }
-
-        return false;
+        return CftPlayerViewRoleSlotResolver.TryGetTextureSide(columnName, out side);
     }
 
     private static void AddCftPlayerViewRoleTextureCandidate(

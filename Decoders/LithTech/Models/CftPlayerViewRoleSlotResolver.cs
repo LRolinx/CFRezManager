@@ -46,6 +46,38 @@ internal static class CftPlayerViewRoleSlotResolver
         return false;
     }
 
+    public static bool TryGetTextureSide(string columnName, out string side)
+    {
+        side = string.Empty;
+        if (!TryGetTextureRole(columnName, out CftPlayerViewTextureRole role))
+        {
+            return false;
+        }
+
+        string normalizedColumn = columnName.TrimStart('_');
+        string roleField = role == CftPlayerViewTextureRole.Hand
+            ? "PVHandTextureFile"
+            : "PVArmTextureFile";
+        int roleFieldIndex = normalizedColumn.IndexOf(roleField, StringComparison.OrdinalIgnoreCase);
+        if (roleFieldIndex <= 0)
+        {
+            return false;
+        }
+
+        string prefix = normalizedColumn[..roleFieldIndex].TrimEnd('_');
+        foreach (string candidateSide in new[] { "BL", "GR" })
+        {
+            if (string.Equals(prefix, candidateSide, StringComparison.OrdinalIgnoreCase) ||
+                prefix.EndsWith("_" + candidateSide, StringComparison.OrdinalIgnoreCase))
+            {
+                side = candidateSide;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public static CftPlayerViewRoleSlotMap Resolve(
         IReadOnlyList<LithTechModelDocument> documents,
         bool hasHandTextureReference,
