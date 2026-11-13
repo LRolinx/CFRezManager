@@ -28,7 +28,7 @@ Starting with v1.2.7, opening a CFT displays all decoded rows in a table with ro
 
 ## Snapshot
 
-The register contains 32,508 records: 27,293 confirmed exports, 2,662 unresolved slots, 123 written but unverified slots, 446 texture declarations without a matching decoded slot, 1,810 missing-model declarations, three incomplete model references and 171 model-only declarations. Records include explicit row and side contexts, so several records can describe different selected skins on the same model slot. These are recorded samples, not a full-game coverage count. Physical model copies remain separate in the evidence tables and are deduplicated by context, logical model, mesh name and slot in the register.
+The register contains 32,510 records: 27,295 confirmed exports, 2,662 unresolved slots, 123 written but unverified slots, 446 texture declarations without a matching decoded slot, 1,810 missing-model declarations, three incomplete model references and 171 model-only declarations. Records include explicit row and side contexts, so several records can describe different selected skins on the same model slot. These are recorded samples, not a full-game coverage count. Physical model copies remain separate in the evidence tables and are deduplicated by context, logical model, mesh name and slot in the register.
 
 ### CFT catalog and node templates
 
@@ -49,6 +49,12 @@ Variant texture validation is deferred until a structurally valid, unbound targe
 The `Models/Weapons/QV-D.E_DemonicBeast_R.ltb` record confirms slot 0 as `ModelTextures/Weapons/QV-D.E_DemonicBeast.dtx` under `preview:3000000:3080`. The OBJ export wrote one mesh and one texture with no missing textures. The `item:3080` selector also wrote the same image, but used `mesh-resolver` fallback; that selector is not evidence of a direct CFT/LTC binding. Source hashes and both selector results are in the [resource manifest](evidence/demonicbeast-20261114-resource-manifest.tsv), [export summary](evidence/demonicbeast-20261114-context-exports.tsv) and [slot reports](evidence/demonicbeast-20261114-preview-slots.tsv), [item-slots.tsv](evidence/demonicbeast-20261114-item-slots.tsv).
 
 Native structure inspection confirms two nodes (`Scene Root`, `Bone01`), one embedded animation (`QV-D.E_DemonicBeast_R`), two sockets (`gunfire`, `ACC_SD`) on `Bone01`, and no external child model. The [structure summary](evidence/demonicbeast-20261114-models.tsv) links the [node](evidence/demonicbeast-20261114-nodes.tsv), [animation](evidence/demonicbeast-20261114-animations.tsv), [socket](evidence/demonicbeast-20261114-sockets.tsv) and [child-model](evidence/demonicbeast-20261114-child-models.tsv) records. OBJ export still contains geometry and textures only.
+
+### SwatElite Renewal arm model
+
+The related legacy model `Models/PLAYERVIEW/ArmModel/Arm_SwatElite_Renewal_GR.LTB` now exports both mesh slots under the A0017 context. CharacterType row 18 declares the matching SWAT-ELITE hand BL and arm GR textures; the model path itself is not a direct CFT field. The existing mesh-resolver alias connects `SwatEliteRenewal` to `SWAT-ELITE`. The focused export produced two meshes and two textures with no missing or invalid resources. The [slot report](evidence/swat-elite-renewal-20261114-export-slots.tsv), [context summary](evidence/swat-elite-renewal-20261114-context-export.tsv), and [source hashes](evidence/swat-elite-renewal-20261114-resources.tsv) retain the result.
+
+The structure audit records 46 nodes, hierarchy SHA-256 `11CE859F57370EFD72F0E293E7D5599D12086E2FB40227AC65E185AFC81B0CEE`, sockets `Ring01@13`, `Ring02@11` and `Bracelet01@25`, plus one embedded animation with four keyframes ending at 100 ms. The [structure summary](evidence/swat-elite-renewal-20261114-structure-models.tsv), [nodes](evidence/swat-elite-renewal-20261114-nodes.tsv), [sockets](evidence/swat-elite-renewal-20261114-sockets.tsv) and [animation records](evidence/swat-elite-renewal-20261114-animations.tsv) preserve these details. Animation playback remains unverified.
 
 ### Other model tables
 

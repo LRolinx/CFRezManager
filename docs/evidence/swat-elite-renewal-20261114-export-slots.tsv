@@ -1,0 +1,3 @@
+source_path	mesh_name	texture_context	local_stage_index	global_skin_slot	mapping_source	texture_reference	exported_texture_path	export_status	has_uv	uv_set_count	uv_source_stream_index
+Models/PLAYERVIEW/ArmModel/Arm_SwatElite_Renewal_GR.LTB	FVIEW_HAND_SwatEliteRenewal_BL	A0017	0	0	mesh-resolver	rez/rf017/ModelTextures/PLAYERVIEW/FVIEW_HAND_SWAT-ELITE_BL.DTX	Arm_SwatElite_Renewal_GR_A0017_textures/FVIEW_HAND_SWAT-ELITE_BL.png	exported	true	1	0
+Models/PLAYERVIEW/ArmModel/Arm_SwatElite_Renewal_GR.LTB	FVIEW_ARM_SwatEliteRenewal_GR	A0017	0	1	mesh-resolver	rez/rf017/ModelTextures/PLAYERVIEW/FVIEW_ARM_SWAT-ELITE_GR.DTX	Arm_SwatElite_Renewal_GR_A0017_textures/FVIEW_ARM_SWAT-ELITE_GR.png	exported	true	1	0

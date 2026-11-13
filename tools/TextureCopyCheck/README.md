@@ -30,6 +30,8 @@ The [character arm checks](../CharacterArmCheck/README.md) cover side-qualified 
 
 The [arm texture inventory](../../docs/evidence/character-arms-20261105-texture-copies.tsv) records 1,464 decoded DTX copies and [36 conflicting logical paths](../../docs/evidence/character-arms-20261105-texture-conflicts.tsv). These conflicts remain unresolved regardless of which character context selects the path.
 
+The SwatElite Renewal export uses the hand BL and arm GR paths declared by CharacterType row 18/A0017. The focused resource manifest finds one physical DTX copy at each logical path; their hashes and exported slot results are recorded [here](../../docs/evidence/swat-elite-renewal-20261114-resources.tsv) and [here](../../docs/evidence/swat-elite-renewal-20261114-export-slots.tsv). This snapshot does not add a separate run of the synthetic copy-check suite.
+
 Animation equivalence needs separate evidence. Two recorded PView copies have identical transform channels but [different sound-event timing](../../docs/evidence/pview-motion-20261105-event-differences.tsv); the [channel inspection](../LtbStructureAudit/README.md#channel-inspection) retains their exact payload and event bytes.
 
 The [native skin checks](../NativeSkinCheck/README.md) also run before packaging. They preserve default geometry and texture slots while checking optional bone/weight capture. Skin data for 160 meshes has been independently reproduced; this does not select a physical texture copy or establish rendered animation.

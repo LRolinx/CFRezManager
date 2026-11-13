@@ -38,4 +38,6 @@ The structure check also covers animation channel encodings, hierarchy traversal
 
 The separate [native skin checks](../NativeSkinCheck/README.md) verify direct draw bindings, rigid effectors and matrix-palette edge cases. The 37-file PView/arm snapshot retains verified skin hashes for 160 meshes and 141,464 vertices. These are decoded binding records; rendered arm animation remains unverified.
 
+The focused A0017 export for `Arm_SwatElite_Renewal_GR.LTB` produced both hand BL and arm GR textures declared by CharacterType row 18. This is a related legacy model reached through the existing `SwatEliteRenewal` to `SWAT-ELITE` mesh alias, not a direct model field. See the [slot evidence](../../docs/evidence/swat-elite-renewal-20261114-export-slots.tsv); animation playback remains unverified.
+
 The skin tool now also evaluates sampled native poses from a completed channel report. Its [241-pose comparison](../../docs/evidence/native-pose-20261105-validation.tsv) includes the basic arm templates and preserves each physical source. CPU pose calculations do not establish an active character/weapon animation binding or change the side-qualified texture selection.
