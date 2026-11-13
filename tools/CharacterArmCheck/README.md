@@ -40,4 +40,6 @@ The separate [native skin checks](../NativeSkinCheck/README.md) verify direct dr
 
 The focused A0017 export for `Arm_SwatElite_Renewal_GR.LTB` produced both hand BL and arm GR textures declared by CharacterType row 18. This is a related legacy model reached through the existing `SwatEliteRenewal` to `SWAT-ELITE` mesh alias, not a direct model field. See the [slot evidence](../../docs/evidence/swat-elite-renewal-20261114-export-slots.tsv); animation playback remains unverified.
 
+`Arm_WildWest_SP.LTB` remains unresolved: the archive inventory has the model but no typed CFT texture binding or SP hand/arm DTX path. Its two mesh signatures match none of the scanned BLGR/Santa arm meshes, and the A9350 context export leaves both slots missing. The [audit table](../../docs/evidence/wildwest-sp-20261114-binding-audit.tsv) records the negative mapping result beside its structure evidence.
+
 The skin tool now also evaluates sampled native poses from a completed channel report. Its [241-pose comparison](../../docs/evidence/native-pose-20261105-validation.tsv) includes the basic arm templates and preserves each physical source. CPU pose calculations do not establish an active character/weapon animation binding or change the side-qualified texture selection.

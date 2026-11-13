@@ -1,0 +1,3 @@
+source_path	mesh_name	texture_context	local_stage_index	global_skin_slot	mapping_source	texture_reference	exported_texture_path	export_status	has_uv
+Models/PLAYERVIEW/ArmModel/Arm_WildWest_SP.LTB	default	A9350	0	0	context-slot			unresolved	true
+Models/PLAYERVIEW/ArmModel/Arm_WildWest_SP.LTB	Fview-Arm	A9350	0	1	context-slot			unresolved	true
