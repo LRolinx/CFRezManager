@@ -28,7 +28,7 @@ Starting with v1.2.7, opening a CFT displays all decoded rows in a table with ro
 
 ## Snapshot
 
-The register contains 32,510 records: 27,295 confirmed exports, 2,662 unresolved slots, 123 written but unverified slots, 446 texture declarations without a matching decoded slot, 1,810 missing-model declarations, three incomplete model references and 171 model-only declarations. Records include explicit row and side contexts, so several records can describe different selected skins on the same model slot. These are recorded samples, not a full-game coverage count. Physical model copies remain separate in the evidence tables and are deduplicated by context, logical model, mesh name and slot in the register.
+The register contains 32,510 records: 27,299 confirmed exports, 2,658 unresolved slots, 123 written but unverified slots, 446 texture declarations without a matching decoded slot, 1,810 missing-model declarations, three incomplete model references and 171 model-only declarations. Records include explicit row and side contexts, so several records can describe different selected skins on the same model slot. These are recorded samples, not a full-game coverage count. Physical model copies remain separate in the evidence tables and are deduplicated by context, logical model, mesh name and slot in the register.
 
 ### CFT catalog and node templates
 
@@ -173,6 +173,8 @@ The previous register also contained affected unqualified row selectors. Sixteen
 The [2,666 complete LTB records](evidence/characteritem-all-20261105-structure-models.tsv) retain [8,600 nodes](evidence/characteritem-all-20261105-nodes.tsv), [2,666 embedded animations](evidence/characteritem-all-20261105-animations.tsv), [109 blend masks](evidence/characteritem-all-20261105-weight-sets.tsv) and [2,666 self animation bindings](evidence/characteritem-all-20261105-animation-bindings.tsv). There are no external child declarations in this snapshot. The sole [socket](evidence/characteritem-all-20261105-sockets.tsv) is retained by physical source; raw CFT target types do not establish external body-bone bindings. An [independent full-file reader](evidence/characteritem-all-20261105-structure-validation.tsv) reproduced every saved node, animation, socket, blend-mask and binding value. Playback and vertex-skin compatibility remain unverified.
 
 This batch adds 6,050 records: 5,966 confirmed exports, 54 unresolved slots, 15 missing-model declarations and 15 declarations without a matching native slot. [237 context checks](evidence/characteritem-all-20261105-guards.tsv) include the previous 168 arm/body checks and 69 socket-item checks. They cover field ownership, opposite filename suffixes, shared models, row/identity/RecordId selectors, partial exports and original DTX pixels. The body missing-texture fixture uses a unique never-created reference so earlier local exports cannot be recovered by filename and affect its result.
+
+Separate BL-only and GR-only `CharacterItem.CFT#160` exports confirm slot 0 on `Box02` for both Clan Backpack models and produce identical PNGs. Both sides declare the same DTX, which has one decoded physical copy. `Plane01` slots 1–4 still have empty CFT texture fields and remain unresolved. The [export record](evidence/characteritem-socket-export-20261114.tsv) stores texture and output-pixel hashes, three node names per model, hierarchy and bind-pose hashes, and one embedded animation per model. Both models have zero sockets; external attachment and animation playback remain unverified.
 
 ### CharacterType bodies
 

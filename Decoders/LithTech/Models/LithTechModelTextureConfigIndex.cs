@@ -4210,7 +4210,8 @@ internal static class LithTechModelTextureConfigIndex
                 }
 
                 // The explicit base field defines slot 0, including skins outside SocketItem.
-                // Additional slots still require numbered CFT fields and consistent physical copies.
+                // Keep this known slot even when higher model slots have no CFT texture yet;
+                // those slots stay unresolved and do not block a partial export.
                 bool isCharacterItemSocket = IsCharacterItemSocketMapping(configItem.Path, mapping);
                 if (isCharacterItemSocket && mapping.TextureReferences.Any(texture =>
                         TryGetCharacterItemTextureSlotForSide(texture.Column, "GR", out _) ||
@@ -4253,18 +4254,35 @@ internal static class LithTechModelTextureConfigIndex
                 if (hasCharacterItemSlots &&
                     TryGetUnnumberedCharacterItemTexturePath(configItem.Path, mapping, out string characterItemTexturePath) &&
                     characterItemSlots.Contains(0) &&
-                    (characterItemSlots.Length == 1 || mapping.TextureReferences.Any(texture =>
-                        CftModelTextureMappingDecoder.TryGetTextureSlotIndex(texture.Column, out int numberedSlot) && numberedSlot > 0)) &&
                     HasConsistentDecodableDtxCopies(
                         characterItemTexturePath,
                         textureItemsByLogicalPath,
                         verifiedTexturePathCache))
                 {
                     AddModelTextureSlotMapping(byModelPath, modelPath, 0, characterItemTexturePath);
+                    string[] baseTextureSides = new[] { "GR", "BL" }
+                        .Where(side => mapping.TextureReferences.Any(texture =>
+                            TryGetCharacterItemTextureSlotForSide(texture.Column, side, out int slot) &&
+                            slot == 0 &&
+                            string.Equals(
+                                NormalizeKey(texture.Path),
+                                NormalizeKey(characterItemTexturePath),
+                                StringComparison.OrdinalIgnoreCase)))
+                        .ToArray();
                     foreach (string contextKey in contextKeys)
                     {
                         AddModelTextureContextSlotMapping(
                             byModelContext, modelPath, contextKey, 0, characterItemTexturePath);
+
+                        foreach (string side in baseTextureSides)
+                        {
+                            AddModelTextureContextSlotMapping(
+                                byModelContext,
+                                modelPath,
+                                $"{contextKey}:{side}",
+                                0,
+                                characterItemTexturePath);
+                        }
                     }
 
                     modelsWithSlotSpecificBindings.Add(modelPath);
