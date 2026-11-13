@@ -93,4 +93,4 @@ The 12 focused female GR arm texture exports also point to `Arm_WOMAN_GR`. Their
 
 The [CharacterType logical arm bindings](../../docs/evidence/character-arms-20261114-logical-bindings.tsv) retain skeleton and animation summaries beside 80 model-slot links. These records do not validate vertex skinning or playback, and the physical DTX copies remain conflicted.
 
-The register also records nine KingsMission target contexts on the AI racing Silver model's verified texture slot 0. Its five nodes, zero embedded clips and zero sockets remain separate from the external playback check; see the [mapping evidence](../../docs/evidence/kingsmission-post-end-20261114.tsv).
+The register also records nine KingsMission target contexts on the AI racing Silver model's verified texture slot 0 and 47 duplicate texture columns mapped to their row's confirmed slot. The target model's five nodes, zero embedded clips and zero sockets remain separate from the external playback check; see the [target evidence](../../docs/evidence/kingsmission-post-end-20261114.tsv) and [column evidence](../../docs/evidence/kingsmission-duplicate-texture-columns-20261114.tsv).
