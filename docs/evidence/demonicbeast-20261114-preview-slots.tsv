@@ -1,0 +1,2 @@
+source_path	mesh_name	texture_context	local_stage_index	global_skin_slot	mapping_source	texture_reference	exported_texture_path	export_status	has_uv	uv_set_count	uv_source_stream_index
+rez4\RF016\Models\WEAPONS\QV-D.E_DemonicBeast_R.LTB	QV-D.E_DemonicBeast	preview:3000000:3080	0	0	context-slot	ModelTextures/WEAPONS/QV-D.E_DemonicBeast.dtx	demonicbeast-preview-context_textures/QV-D.E_DemonicBeast.png	exported	true	1	0

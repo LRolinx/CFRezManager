@@ -6,7 +6,7 @@ Run on Windows with the .NET 8 SDK:
 dotnet run --project tools/NativeSkinCheck -c Release
 ```
 
-The tool runs 90 checks without game files and writes `artifacts/native-skin-check/checks.tsv`. The original 63 cover direct draws, rigid effectors, global/remapped matrix palettes, slot 255 and node indices above 255, overlapping vertex ranges, per-corner overrides, unused vertices, multiple streams, raw/implicit weights and invalid ranges or skeletons. Another 27 cover native pose transforms and CPU skinning. Ordinary geometry, UV sets, texture slots and render-style indices must remain unchanged. The release workflow runs these checks before packaging.
+The tool runs 90 checks without game files and writes `artifacts/native-skin-check/checks.tsv`. The original 63 cover direct draws, rigid effectors, global/remapped matrix palettes, slot 255 and node indices above 255, overlapping vertex ranges, per-corner overrides, unused vertices, multiple streams, raw/implicit weights and invalid ranges or skeletons. Another 27 cover native pose transforms and CPU skinning. Ordinary geometry, UV sets, texture slots and render-style indices must remain unchanged. The shared texture mapper scopes CFT/LTC work to a requested model and reuses agreed slot layouts per physical group. The release workflow runs these checks before packaging.
 
 ## Inspect a resource snapshot
 

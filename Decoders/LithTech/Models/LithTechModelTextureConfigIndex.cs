@@ -65,6 +65,8 @@ internal static class LithTechModelTextureConfigIndex
         };
     }
 
+    private sealed record ConsistentLtcModelSlotsResult(bool IsConsistent, int[] Slots);
+
     private const int MaxConfigBytes = 1024 * 1024;
     private const int MaxCftBytes = 4 * 1024 * 1024;
     private const int MaxLtcBytes = 16 * 1024 * 1024;
@@ -72,9 +74,11 @@ internal static class LithTechModelTextureConfigIndex
     private const int MaxClientShellBytes = 192 * 1024 * 1024;
     private const int MaxInferredTextureBytes = 64 * 1024 * 1024;
     private const int MaxCachedSlotMappingModelDocuments = 128;
+    private const int MaxCachedScopedModelTextureDictionaries = 8;
     private const int MaxTextureSlotIndex = byte.MaxValue;
     private static readonly ConditionalWeakTable<ExplorerItem, TextureConfigIndex> TextureConfigIndexCache = new();
     private static readonly ConditionalWeakTable<IReadOnlyList<ExplorerItem>, PhysicalResourceCopyIndex> PhysicalResourceCopyIndexCache = new();
+    private static readonly ConditionalWeakTable<IReadOnlyList<ExplorerItem>, ConsistentLtcModelSlotsResult> ConsistentLtcModelSlotsCache = new();
 
     private static readonly string[] ConfigExtensions =
     [
@@ -408,7 +412,7 @@ internal static class LithTechModelTextureConfigIndex
                 return [];
             }
 
-            ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index);
+            ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index, modelPath);
             if (dictionary.ByModelPath.TryGetValue(modelPath, out Dictionary<int, string?>? directSlots) &&
                 directSlots.ContainsKey(slotIndex))
             {
@@ -440,7 +444,7 @@ internal static class LithTechModelTextureConfigIndex
                 return [];
             }
 
-            ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index);
+            ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index, modelPath);
             string key = $"{modelPath}\0{contextKey}";
             if (dictionary.ByModelContext.TryGetValue(key, out Dictionary<int, string?>? directSlots) &&
                 directSlots.ContainsKey(slotIndex))
@@ -472,7 +476,7 @@ internal static class LithTechModelTextureConfigIndex
                 return [];
             }
 
-            ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index);
+            ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index, modelPath);
             if (dictionary.ByModelPath.TryGetValue(modelPath, out Dictionary<int, string?>? directSlots) &&
                 directSlots.ContainsKey(slotIndex))
             {
@@ -505,7 +509,7 @@ internal static class LithTechModelTextureConfigIndex
                 return [];
             }
 
-            ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index);
+            ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index, modelPath);
             if (dictionary.ByModelPath.TryGetValue(modelPath, out Dictionary<int, string?>? directSlots) &&
                 directSlots.ContainsKey(slotIndex))
             {
@@ -548,7 +552,7 @@ internal static class LithTechModelTextureConfigIndex
                 return [];
             }
 
-            ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index);
+            ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index, modelPath);
             string key = $"{modelPath}\0{contextKey}";
             if (dictionary.ByModelContext.TryGetValue(key, out Dictionary<int, string?>? directContextSlots) &&
                 directContextSlots.ContainsKey(slotIndex))
@@ -591,7 +595,7 @@ internal static class LithTechModelTextureConfigIndex
                 return [];
             }
 
-            ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index);
+            ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index, modelPath);
             if (dictionary.ByModelPath.TryGetValue(modelPath, out Dictionary<int, string?>? directSlots) &&
                 directSlots.ContainsKey(slotIndex))
             {
@@ -625,7 +629,7 @@ internal static class LithTechModelTextureConfigIndex
                 return [];
             }
 
-            ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index);
+            ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index, modelPath);
             string key = $"{modelPath}\0{contextKey}";
             if (dictionary.ByModelContext.TryGetValue(key, out Dictionary<int, string?>? directSlots) &&
                 directSlots.ContainsKey(slotIndex))
@@ -660,7 +664,7 @@ internal static class LithTechModelTextureConfigIndex
                 return [];
             }
 
-            ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index);
+            ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index, modelPath);
             string key = $"{NormalizeExtensionlessModelReference(modelPath)}\0{contextKey}";
             if (dictionary.ByModelContext.TryGetValue(key, out Dictionary<int, string?>? directSlots) &&
                 directSlots.ContainsKey(slotIndex))
@@ -686,8 +690,12 @@ internal static class LithTechModelTextureConfigIndex
             return null;
         }
 
-        ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index);
-        return modelReference => dictionary.CharacterItemSocketModels.Contains(NormalizeModelResourcePath(modelReference));
+        return modelReference =>
+        {
+            string modelPath = NormalizeModelResourcePath(modelReference);
+            return modelPath.Length > 0 &&
+                   GetModelTextureSlotDictionary(index, modelPath).CharacterItemSocketModels.Contains(modelPath);
+        };
     }
 
     public static Func<string, bool>? CreateModelTextureSlotMappingPresenceResolver(ExplorerItem root)
@@ -701,7 +709,7 @@ internal static class LithTechModelTextureConfigIndex
         return modelReference =>
         {
             string modelPath = NormalizeModelResourcePath(modelReference);
-            ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index);
+            ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index, modelPath);
             return modelPath.Length > 0 &&
                    (dictionary.ModelsWithSlotSpecificBindings.Contains(modelPath) ||
                     dictionary.ByModelPath.TryGetValue(modelPath, out Dictionary<int, string?>? slots) &&
@@ -735,7 +743,7 @@ internal static class LithTechModelTextureConfigIndex
             string modelPath = NormalizeModelResourcePath(modelReference);
             string contextKey = NormalizeLooseKey(context);
             if (modelPath.Length == 0 || contextKey.Length == 0 || slotIndex is < 0 or > MaxTextureSlotIndex) return [];
-            ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index);
+            ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index, modelPath);
             string key = $"{modelPath}\0{contextKey}";
             if (dictionary.ByModelContext.TryGetValue(key, out Dictionary<int, string?>? directSlots) && directSlots.ContainsKey(slotIndex))
                 return [];
@@ -762,7 +770,7 @@ internal static class LithTechModelTextureConfigIndex
             if (modelPath.Length == 0 || contextKey.Length == 0 || slotIndex is < 0 or > MaxTextureSlotIndex)
                 return [];
 
-            ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index);
+            ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index, modelPath);
             string key = $"{modelPath}\0{contextKey}";
             if (dictionary.ByModelContext.TryGetValue(key, out Dictionary<int, string?>? directSlots) &&
                 directSlots.ContainsKey(slotIndex))
@@ -783,7 +791,7 @@ internal static class LithTechModelTextureConfigIndex
             string modelPath = NormalizeModelResourcePath(modelReference);
             string contextKey = NormalizeLooseKey(context);
             if (modelPath.Length == 0 || contextKey.Length == 0 || slotIndex is < 0 or > MaxTextureSlotIndex) return [];
-            ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index);
+            ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index, modelPath);
             string key = $"{modelPath}\0{contextKey}";
             if (dictionary.ByModelContext.TryGetValue(key, out Dictionary<int, string?>? directSlots) && directSlots.ContainsKey(slotIndex))
                 return [];
@@ -801,7 +809,7 @@ internal static class LithTechModelTextureConfigIndex
         {
             string modelPath = NormalizeModelResourcePath(modelReference);
             if (modelPath.Length == 0 || slotIndex is < 0 or > MaxTextureSlotIndex) return [];
-            ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index);
+            ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index, modelPath);
             return dictionary.WeaponPreviewVariantByModelPath.TryGetValue(modelPath, out Dictionary<int, string?>? slots) &&
                    slots.TryGetValue(slotIndex, out string? texture) && !string.IsNullOrWhiteSpace(texture)
                 ? [texture] : [];
@@ -4024,8 +4032,14 @@ internal static class LithTechModelTextureConfigIndex
         IReadOnlyList<ExplorerItem> modelResourceItems,
         IReadOnlySet<string> resourcePaths,
         IReadOnlyDictionary<string, IReadOnlyList<string>> modelPathsByBaseName,
-        IReadOnlyDictionary<string, IReadOnlyList<string>> texturePathsByBaseName)
+        IReadOnlyDictionary<string, IReadOnlyList<string>> texturePathsByBaseName,
+        IReadOnlySet<string>? modelScopePaths = null)
     {
+        IReadOnlyList<ExplorerItem> scopedModelResourceItems = modelScopePaths is null
+            ? modelResourceItems
+            : modelResourceItems
+                .Where(item => modelScopePaths.Contains(NormalizeModelResourcePath(GetModelResourcePath(item))))
+                .ToArray();
         var byModelPath = new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase);
         var byModelContext = new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase);
         var meshNameDerivedByModelPath = new Dictionary<string, Dictionary<int, string?>>(StringComparer.OrdinalIgnoreCase);
@@ -4057,7 +4071,7 @@ internal static class LithTechModelTextureConfigIndex
         var typedLtcPlayerViewModels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var playerViewModelContentHashByPath = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         var ltcContextKeysByModelPath = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
-        var modelItemsByPath = modelResourceItems
+        var modelItemsByPath = scopedModelResourceItems
             .Where(item => string.Equals(item.FileExtension, "ltb", StringComparison.OrdinalIgnoreCase))
             .Select(item => (Item: item, ResourcePath: GetModelResourcePath(item)))
             .Select(pair => (pair.Item, pair.ResourcePath, LogicalPath: GetLogicalModelResourcePath(pair.ResourcePath)))
@@ -4067,7 +4081,7 @@ internal static class LithTechModelTextureConfigIndex
                 group => group.Key,
                 group => group.Select(pair => pair.Item).ToArray(),
                 StringComparer.OrdinalIgnoreCase);
-        var modelItemsByExtensionlessPath = modelResourceItems
+        var modelItemsByExtensionlessPath = scopedModelResourceItems
             .Select(item => (Item: item, ResourcePath: GetModelResourcePath(item)))
             .Select(pair => (
                 pair.Item,
@@ -4087,7 +4101,7 @@ internal static class LithTechModelTextureConfigIndex
                 group => group.Key,
                 group => group.Select(pair => pair.Item).ToArray(),
                 StringComparer.OrdinalIgnoreCase);
-        var modelItemsByPlayerViewRolePath = modelResourceItems
+        var modelItemsByPlayerViewRolePath = scopedModelResourceItems
             .Where(item => string.Equals(item.FileExtension, "ltb", StringComparison.OrdinalIgnoreCase))
             .Select(item => (Item: item, RolePath: NormalizeModelResourcePath(GetModelResourcePath(item))))
             .Where(pair => pair.RolePath.Length > 0)
@@ -4118,7 +4132,16 @@ internal static class LithTechModelTextureConfigIndex
                 continue;
             }
 
-            foreach (CftModelTextureMapping mapping in CftModelTextureMappingDecoder.Extract(cftData)
+            IEnumerable<CftModelTextureMapping> cftMappings = CftModelTextureMappingDecoder.Extract(cftData);
+            if (modelScopePaths is not null)
+            {
+                cftMappings = cftMappings.Where(mapping => IsCftModelTextureMappingInScope(
+                    configItem.Path,
+                    mapping,
+                    modelScopePaths));
+            }
+
+            foreach (CftModelTextureMapping mapping in cftMappings
                          .SelectMany(mapping => ExpandCharacterPvItemModels(configItem.Path, mapping, modelItemsByPath, decodedModels)))
             {
                 // Only typed rows preserve the model/texture relationship. Numbered
@@ -4131,7 +4154,8 @@ internal static class LithTechModelTextureConfigIndex
 
                 string modelResourcePath = NormalizeKey(mapping.ModelReference);
                 string modelPath = NormalizeExtensionlessModelReference(modelResourcePath);
-                if (modelPath.Length == 0)
+                if (modelPath.Length == 0 ||
+                    modelScopePaths is not null && !modelScopePaths.Contains(modelPath))
                 {
                     continue;
                 }
@@ -4881,6 +4905,7 @@ internal static class LithTechModelTextureConfigIndex
                 ltcItems,
                 ltcMappingCache,
                 modelItemsByPath,
+                GetAvailableLogicalLtbModelPaths(modelResourceItems),
                 resourcePaths,
                 texturePathsByBaseName,
                 decodedModels);
@@ -4916,7 +4941,8 @@ internal static class LithTechModelTextureConfigIndex
             {
                 string modelPath = NormalizeExtensionlessModelReference(mapping.ModelReference);
                 string roleModelPath = NormalizeModelResourcePath(mapping.ModelReference);
-                if (modelPath.Length == 0)
+                if (modelPath.Length == 0 ||
+                    modelScopePaths is not null && !modelScopePaths.Contains(modelPath))
                 {
                     continue;
                 }
@@ -5175,6 +5201,11 @@ internal static class LithTechModelTextureConfigIndex
 
                 string logicalModelPath = GetLogicalModelResourcePath(NormalizeKey(mapping.ModelReference));
                 string modelPath = NormalizeExtensionlessModelReference(mapping.ModelReference);
+                if (modelScopePaths is not null && !modelScopePaths.Contains(modelPath))
+                {
+                    continue;
+                }
+
                 CrossFireLtcTextureFieldReference[] textureReferences = mapping.TextureFieldReferences
                     .OrderBy(reference => GetLtcTextureFieldOrdinal(reference.FieldName))
                     .ThenBy(reference => reference.FieldName, StringComparer.OrdinalIgnoreCase)
@@ -5283,13 +5314,14 @@ internal static class LithTechModelTextureConfigIndex
         }
 
         foreach (ModelMaterialComponentTextureMapping mapping in GetModelMaterialComponentTextureMappings(
-                     modelResourceItems,
+                     scopedModelResourceItems,
                      resourcePaths,
                      modelPathsByBaseName,
                      texturePathsByBaseName))
         {
             string modelPath = NormalizeExtensionlessModelReference(mapping.ModelReference);
             if (modelPath.Length == 0 ||
+                modelScopePaths is not null && !modelScopePaths.Contains(modelPath) ||
                 byModelPath.TryGetValue(modelPath, out Dictionary<int, string?>? existingSlots) &&
                 existingSlots.ContainsKey(mapping.TextureSlotIndex))
             {
@@ -8544,6 +8576,7 @@ internal static class LithTechModelTextureConfigIndex
         IReadOnlyList<ExplorerItem> ltcItems,
         IReadOnlyDictionary<string, IReadOnlyList<CrossFireLtcModelTextureMapping>> ltcMappingCache,
         IReadOnlyDictionary<string, ExplorerItem[]> modelItemsByPath,
+        IReadOnlySet<string> allModelPaths,
         IReadOnlySet<string> resourcePaths,
         IReadOnlyDictionary<string, IReadOnlyList<string>> texturePathsByBaseName,
         Dictionary<string, LithTechModelDocument?> decodedModels)
@@ -8566,7 +8599,7 @@ internal static class LithTechModelTextureConfigIndex
                 string logicalModelPath = GetLogicalModelResourcePath(NormalizeKey(mapping.ModelReference));
                 if (mapping.IdentityAliases.Count == 0 ||
                     mapping.TextureFieldReferences.Count == 0 ||
-                    logicalModelPath.Length == 0 || modelItemsByPath.ContainsKey(logicalModelPath) ||
+                    logicalModelPath.Length == 0 || allModelPaths.Contains(logicalModelPath) ||
                     mapping.TextureFieldReferences.Any(textureReference =>
                         TryGetLtcPlayerViewTextureOrdinal(mapping.ModelField, textureReference.FieldName, out _)))
                 {
@@ -8673,6 +8706,17 @@ internal static class LithTechModelTextureConfigIndex
         Dictionary<string, LithTechModelDocument?> decodedModels,
         out int[] slots)
     {
+        ConsistentLtcModelSlotsResult result = ConsistentLtcModelSlotsCache.GetValue(
+            modelItems,
+            copies => BuildConsistentLtcModelSlots(copies, decodedModels));
+        slots = result.Slots;
+        return result.IsConsistent;
+    }
+
+    private static ConsistentLtcModelSlotsResult BuildConsistentLtcModelSlots(
+        IReadOnlyList<ExplorerItem> modelItems,
+        Dictionary<string, LithTechModelDocument?> decodedModels)
+    {
         int[]? mappedSlots = null;
         foreach (ExplorerItem modelItem in modelItems)
         {
@@ -8682,8 +8726,7 @@ internal static class LithTechModelTextureConfigIndex
                 decodedModels);
             if (document is null)
             {
-                slots = [];
-                return false;
+                return new ConsistentLtcModelSlotsResult(false, []);
             }
 
             int[] currentSlots = document.Meshes
@@ -8694,15 +8737,14 @@ internal static class LithTechModelTextureConfigIndex
             if (currentSlots.Length == 0 ||
                 mappedSlots is not null && !mappedSlots.SequenceEqual(currentSlots))
             {
-                slots = [];
-                return false;
+                return new ConsistentLtcModelSlotsResult(false, []);
             }
 
             mappedSlots ??= currentSlots;
         }
 
-        slots = mappedSlots ?? [];
-        return slots.Length > 0;
+        int[] slots = mappedSlots ?? [];
+        return new ConsistentLtcModelSlotsResult(slots.Length > 0, slots);
     }
 
     private static bool TryGetConsistentCharacterHeadTextureSlot(
@@ -10813,7 +10855,7 @@ internal static class LithTechModelTextureConfigIndex
         string modelPath,
         int slotIndex)
     {
-        ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index);
+        ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index, modelPath);
         return dictionary.ByModelPath.TryGetValue(modelPath, out Dictionary<int, string?>? slots) &&
                slots.TryGetValue(slotIndex, out string? texture) &&
                !string.IsNullOrWhiteSpace(texture)
@@ -10827,7 +10869,7 @@ internal static class LithTechModelTextureConfigIndex
         string contextKey,
         int slotIndex)
     {
-        ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index);
+        ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index, modelPath);
         string key = $"{modelPath}\0{contextKey}";
         return dictionary.ByModelContext.TryGetValue(key, out Dictionary<int, string?>? slots) &&
                slots.TryGetValue(slotIndex, out string? texture) &&
@@ -10841,7 +10883,7 @@ internal static class LithTechModelTextureConfigIndex
         string modelPath,
         int slotIndex)
     {
-        ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index);
+        ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index, modelPath);
         if (dictionary.ByModelPath.TryGetValue(modelPath, out Dictionary<int, string?>? directSlots) &&
             directSlots.ContainsKey(slotIndex))
         {
@@ -10864,7 +10906,7 @@ internal static class LithTechModelTextureConfigIndex
         string modelPath,
         int slotIndex)
     {
-        ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index);
+        ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index, modelPath);
         if (dictionary.ByModelPath.TryGetValue(modelPath, out Dictionary<int, string?>? directSlots) &&
             directSlots.ContainsKey(slotIndex))
         {
@@ -10884,7 +10926,7 @@ internal static class LithTechModelTextureConfigIndex
         string contextKey,
         int slotIndex)
     {
-        ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index);
+        ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index, modelPath);
         string key = $"{modelPath}\0{contextKey}";
         if (dictionary.ByModelContext.TryGetValue(key, out Dictionary<int, string?>? directSlots) &&
             directSlots.ContainsKey(slotIndex))
@@ -10904,7 +10946,7 @@ internal static class LithTechModelTextureConfigIndex
         string modelPath,
         int slotIndex)
     {
-        ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index);
+        ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index, modelPath);
         if (HasTextureSlotMapping(
                 modelPath,
                 slotIndex,
@@ -10935,7 +10977,7 @@ internal static class LithTechModelTextureConfigIndex
         string contextKey,
         int slotIndex)
     {
-        ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index);
+        ModelTextureSlotDictionary dictionary = GetModelTextureSlotDictionary(index, modelPath);
         string key = $"{modelPath}\0{contextKey}";
         if (HasTextureSlotMapping(
                 modelPath,
@@ -11009,6 +11051,325 @@ internal static class LithTechModelTextureConfigIndex
         return resolved is not null ? [resolved] : [];
     }
 
+    private static ModelTextureSlotDictionary GetModelTextureSlotDictionary(
+        TextureConfigIndex index,
+        string normalizedModelPath)
+    {
+        // Resolver callers already canonicalize model references. NormalizeModelResourcePath
+        // is not idempotent for extensionless names whose stem contains a dot.
+        string modelPath = NormalizeKey(normalizedModelPath);
+        if (modelPath.Length == 0 || !IsKnownModelPathRoot(modelPath))
+        {
+            return GetModelTextureSlotDictionary(index);
+        }
+
+        lock (index.ModelTextureSlotDictionarySync)
+        {
+            if (index.ModelTextureSlotDictionaryBuilt)
+            {
+                return index.ModelTextureSlotDictionary ?? ModelTextureSlotDictionary.Empty;
+            }
+
+            if (index.ScopedModelTextureSlotDictionaries.TryGetValue(
+                    modelPath,
+                    out ModelTextureSlotDictionary? cached))
+            {
+                return cached;
+            }
+
+            HashSet<string> modelScopePaths = BuildScopedModelTexturePathSet(index, modelPath);
+            ModelTextureSlotDictionary scoped = BuildModelTextureSlotDictionary(
+                index.AllItems,
+                index.ResourceItems,
+                index.LtcItems,
+                index.CrossFireScriptItems,
+                index.ModelResourceItems,
+                index.ResourcePaths,
+                index.ModelPathsByBaseName,
+                index.TexturePathsByBaseName,
+                modelScopePaths);
+            if (!HasScopedModelTextureSlotEvidence(scoped, modelPath))
+            {
+                return GetModelTextureSlotDictionary(index);
+            }
+
+            if (index.ScopedModelTextureSlotDictionaries.Count >= MaxCachedScopedModelTextureDictionaries)
+            {
+                while (index.ScopedModelTextureSlotDictionaryOrder.Count > 0)
+                {
+                    string oldest = index.ScopedModelTextureSlotDictionaryOrder.Dequeue();
+                    if (index.ScopedModelTextureSlotDictionaries.Remove(oldest))
+                    {
+                        break;
+                    }
+                }
+            }
+
+            index.ScopedModelTextureSlotDictionaries.Add(modelPath, scoped);
+            index.ScopedModelTextureSlotDictionaryOrder.Enqueue(modelPath);
+            return scoped;
+        }
+    }
+
+    private static HashSet<string> BuildScopedModelTexturePathSet(
+        TextureConfigIndex index,
+        string targetModelPath)
+    {
+        var scopedModelPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            targetModelPath
+        };
+        var parsedCftCopies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (TextureConfigItem configItem in index.AllItems)
+        {
+            if (!string.Equals(configItem.Item.FileExtension, "cft", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            string cacheKey = configItem.Item.ArchiveFile?.Md5 is { Length: > 0 } archiveHash
+                ? "md5:" + archiveHash
+                : NormalizeKey(configItem.Path);
+            if (!parsedCftCopies.Add(cacheKey))
+            {
+                continue;
+            }
+
+            byte[]? cftData = TryReadItemBytes(configItem.Item, MaxCftBytes);
+            if (cftData is null)
+            {
+                continue;
+            }
+
+            foreach (CftModelTextureMapping mapping in CftModelTextureMappingDecoder.Extract(cftData))
+            {
+                if (!mapping.HasTypedRowContext)
+                {
+                    continue;
+                }
+
+                string modelPath = NormalizeExtensionlessModelReference(mapping.ModelReference);
+                string[] relatedModelPaths = (mapping.RelatedModelReferences ?? [])
+                    .Concat(mapping.ChildModelReferences)
+                    .Select(NormalizeExtensionlessModelReference)
+                    .Where(path => path.Length > 0)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                bool isGenderedCharacterPvItemModel =
+                    string.Equals(
+                        Path.GetFileName(configItem.Path),
+                        "CharacterPvItem.CFT",
+                        StringComparison.OrdinalIgnoreCase) &&
+                    mapping.ModelColumn.Equals("_SocketItemModelFile", StringComparison.OrdinalIgnoreCase) &&
+                    IsCharacterPvItemGenderPrefixForModel(mapping.ModelReference, targetModelPath);
+                if (!string.Equals(modelPath, targetModelPath, StringComparison.OrdinalIgnoreCase) &&
+                    !relatedModelPaths.Contains(targetModelPath, StringComparer.OrdinalIgnoreCase) &&
+                    !isGenderedCharacterPvItemModel)
+                {
+                    continue;
+                }
+
+                if (modelPath.Length > 0)
+                {
+                    scopedModelPaths.Add(modelPath);
+                }
+
+                scopedModelPaths.UnionWith(relatedModelPaths);
+            }
+        }
+
+        AddPlayerViewTextureModelScopePaths(scopedModelPaths, index.ModelResourceItems);
+        return scopedModelPaths;
+    }
+
+    private static bool IsCftModelTextureMappingInScope(
+        string tablePath,
+        CftModelTextureMapping mapping,
+        IReadOnlySet<string> modelScopePaths)
+    {
+        if (!mapping.HasTypedRowContext)
+        {
+            return false;
+        }
+
+        string modelPath = NormalizeExtensionlessModelReference(mapping.ModelReference);
+        if (modelScopePaths.Contains(modelPath) ||
+            (mapping.RelatedModelReferences ?? [])
+            .Concat(mapping.ChildModelReferences)
+            .Select(NormalizeExtensionlessModelReference)
+            .Any(modelScopePaths.Contains))
+        {
+            return true;
+        }
+
+        return string.Equals(
+                   Path.GetFileName(tablePath),
+                   "CharacterPvItem.CFT",
+                   StringComparison.OrdinalIgnoreCase) &&
+               mapping.ModelColumn.Equals("_SocketItemModelFile", StringComparison.OrdinalIgnoreCase) &&
+               modelScopePaths.Any(scopedPath =>
+                   IsCharacterPvItemGenderPrefixForModel(mapping.ModelReference, scopedPath));
+    }
+
+    private static HashSet<string> GetAvailableLogicalLtbModelPaths(
+        IReadOnlyList<ExplorerItem> modelResourceItems)
+    {
+        return modelResourceItems
+            .Where(item => string.Equals(item.FileExtension, "ltb", StringComparison.OrdinalIgnoreCase))
+            .Select(item => GetLogicalModelResourcePath(GetModelResourcePath(item)))
+            .Where(path => path.Length > 0)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static bool IsCharacterPvItemGenderPrefixForModel(string modelReference, string modelPath)
+    {
+        string prefix = NormalizeKey(modelReference);
+        if (Path.HasExtension(prefix) ||
+            !prefix.StartsWith("Models/PVItem/", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return string.Equals(
+                   NormalizeExtensionlessModelReference(prefix + "_M.ltb"),
+                   modelPath,
+                   StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(
+                   NormalizeExtensionlessModelReference(prefix + "_F.ltb"),
+                   modelPath,
+                   StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void AddPlayerViewTextureModelScopePaths(
+        HashSet<string> scopedModelPaths,
+        IReadOnlyList<ExplorerItem> modelResourceItems)
+    {
+        var availableModelPaths = modelResourceItems
+            .Where(item => string.Equals(item.FileExtension, "ltb", StringComparison.OrdinalIgnoreCase))
+            .Select(item => NormalizeModelResourcePath(GetModelResourcePath(item)))
+            .Where(path => path.Length > 0)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        string[] variantSuffixes = ["_BL", "_GR", "_SP", "_WOMAN_BL", "_WOMAN_GR", "_WOMAN_SP"];
+
+        foreach (string seedPath in scopedModelPaths.ToArray())
+        {
+            if (!seedPath.StartsWith("Models/PLAYERVIEW/PV-", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            string basePath = seedPath;
+            foreach (string suffix in variantSuffixes.OrderByDescending(value => value.Length))
+            {
+                if (!basePath.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                basePath = basePath[..^suffix.Length];
+                break;
+            }
+
+            scopedModelPaths.Add(basePath);
+            foreach (string suffix in variantSuffixes)
+            {
+                string variantPath = basePath + suffix;
+                if (availableModelPaths.Contains(variantPath))
+                {
+                    scopedModelPaths.Add(variantPath);
+                }
+            }
+        }
+
+        foreach (string playerViewPath in scopedModelPaths.ToArray())
+        {
+            if (!playerViewPath.StartsWith("Models/PLAYERVIEW/PV-", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            string[] nameParts = Path.GetFileName(playerViewPath).Split('_', StringSplitOptions.RemoveEmptyEntries);
+            for (int index = nameParts.Length - 2; index >= 0; index--)
+            {
+                string side = nameParts[index + 1];
+                if (!side.Equals("BL", StringComparison.OrdinalIgnoreCase) &&
+                    !side.Equals("GR", StringComparison.OrdinalIgnoreCase) &&
+                    !side.Equals("SP", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                string armModelName = $"Arm_{nameParts[index]}_{side}";
+                foreach (string armModelPath in new[]
+                         {
+                             $"ArmModel/{armModelName}",
+                             $"Models/PLAYERVIEW/ArmModel/{armModelName}",
+                             $"Models/PLAYERVIEW/{armModelName}"
+                         })
+                {
+                    string normalizedArmPath = NormalizeModelResourcePath(armModelPath);
+                    if (availableModelPaths.Contains(normalizedArmPath))
+                    {
+                        scopedModelPaths.Add(normalizedArmPath);
+                        break;
+                    }
+                }
+
+                break;
+            }
+        }
+    }
+
+    private static bool HasScopedModelTextureSlotEvidence(
+        ModelTextureSlotDictionary dictionary,
+        string modelPath)
+    {
+        string contextPrefix = modelPath + "\0";
+        return dictionary.CharacterItemSocketModels.Contains(modelPath) ||
+               dictionary.ModelsWithSlotSpecificBindings.Contains(modelPath) ||
+               ContainsModelPathMapping(dictionary.ByModelPath, modelPath) ||
+               ContainsModelPathMapping(dictionary.InferredByModelPath, modelPath) ||
+               ContainsModelPathMapping(dictionary.PreviewCharacterRoleByModelPath, modelPath) ||
+               dictionary.CftPlayerViewRoleSlotsByModelPath.ContainsKey(modelPath) ||
+               ContainsModelPathMapping(dictionary.EquivalentArmByModelPath, modelPath) ||
+               ContainsModelPathMapping(dictionary.LtcPreviewVariantByModelPath, modelPath) ||
+               ContainsModelPathMapping(dictionary.PreviewNormalizedBasenameByModelPath, modelPath) ||
+               ContainsModelPathMapping(dictionary.VariantSlotUvByModelPath, modelPath) ||
+               ContainsModelPathMapping(dictionary.VariantSlotUvContentEquivalentByModelPath, modelPath) ||
+               ContainsModelPathMapping(dictionary.VariantSlotUvContentEquivalentDetailByModelPath, modelPath) ||
+               ContainsModelPathMapping(dictionary.MotionParentSlotByModelPath, modelPath) ||
+               ContainsModelPathMapping(dictionary.WeaponPreviewVariantByModelPath, modelPath) ||
+               ContainsModelPathMapping(dictionary.MeshNameDerivedByModelPath, modelPath) ||
+               HasModelContextEvidence(dictionary.ByModelContext, contextPrefix) ||
+               HasModelContextEvidence(dictionary.InferredByModelContext, contextPrefix) ||
+               dictionary.CftIdentityModelAliasByModelContext.Keys.Any(key =>
+                   key.StartsWith(contextPrefix, StringComparison.OrdinalIgnoreCase)) ||
+               dictionary.EquivalentArmByModelContext.Keys.Any(key =>
+                   key.StartsWith(contextPrefix, StringComparison.OrdinalIgnoreCase)) ||
+               dictionary.LtcPreviewVariantByModelContext.Keys.Any(key =>
+                   key.StartsWith(contextPrefix, StringComparison.OrdinalIgnoreCase)) ||
+               dictionary.MotionParentSlotByModelContext.Keys.Any(key =>
+                   key.StartsWith(contextPrefix, StringComparison.OrdinalIgnoreCase)) ||
+               HasModelContextEvidence(dictionary.RenderStyleByModelContext, contextPrefix) ||
+               HasModelContextEvidence(dictionary.LtcTextureByModelContext, contextPrefix) ||
+               HasModelContextEvidence(dictionary.WeaponPreviewVariantByModelContext, contextPrefix) ||
+               HasModelContextEvidence(dictionary.MeshNameDerivedByModelContext, contextPrefix);
+    }
+
+    private static bool ContainsModelPathMapping(
+        IReadOnlyDictionary<string, Dictionary<int, string?>> mappings,
+        string modelPath)
+    {
+        return mappings.TryGetValue(modelPath, out Dictionary<int, string?>? slots) && slots.Count > 0;
+    }
+
+    private static bool HasModelContextEvidence(
+        IReadOnlyDictionary<string, Dictionary<int, string?>> mappings,
+        string modelContextPrefix)
+    {
+        return mappings.Keys.Any(key => key.StartsWith(modelContextPrefix, StringComparison.OrdinalIgnoreCase));
+    }
+
     private static ModelTextureSlotDictionary GetModelTextureSlotDictionary(TextureConfigIndex index)
     {
         lock (index.ModelTextureSlotDictionarySync)
@@ -11028,6 +11389,8 @@ internal static class LithTechModelTextureConfigIndex
                 index.ModelPathsByBaseName,
                 index.TexturePathsByBaseName);
             index.ModelTextureSlotDictionaryBuilt = true;
+            index.ScopedModelTextureSlotDictionaries.Clear();
+            index.ScopedModelTextureSlotDictionaryOrder.Clear();
             return index.ModelTextureSlotDictionary;
         }
     }
@@ -12479,6 +12842,9 @@ internal static class LithTechModelTextureConfigIndex
         public object ModelTextureSlotDictionarySync { get; } = new();
         public bool ModelTextureSlotDictionaryBuilt { get; set; }
         public ModelTextureSlotDictionary? ModelTextureSlotDictionary { get; set; }
+        public Dictionary<string, ModelTextureSlotDictionary> ScopedModelTextureSlotDictionaries { get; } =
+            new(StringComparer.OrdinalIgnoreCase);
+        public Queue<string> ScopedModelTextureSlotDictionaryOrder { get; } = new();
         public bool IsEmpty => ByName.Count == 0 &&
                                ByLooseName.Count == 0 &&
                                AllItems.Count == 0 &&

@@ -1,0 +1,2 @@
+source_path	mesh_name	texture_context	local_stage_index	global_skin_slot	mapping_source	texture_reference	exported_texture_path	export_status	has_uv	uv_set_count	uv_source_stream_index
+rez4\RF016\Models\WEAPONS\QV-D.E_DemonicBeast_R.LTB	QV-D.E_DemonicBeast	item:3080	0	0	mesh-resolver	rez4/RF017/ModelTextures/WEAPONS/QV-D.E_DemonicBeast.DTX	demonicbeast-item-context_textures/QV-D.E_DemonicBeast.png	exported	true	1	0

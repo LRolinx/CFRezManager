@@ -1,0 +1,3 @@
+job	model_path	context	physical_sources	decoded_sources	meshes	textures	missing_textures	invalid_meshes	status	error
+"demonicbeast-item-context"	"MODELS/WEAPONS/QV-D.E_DemonicBeast_R.LTB"	"item:3080"	"1"	"1"	"1"	"1"	"0"	"0"	"exported"	""
+"demonicbeast-preview-context"	"MODELS/WEAPONS/QV-D.E_DemonicBeast_R.LTB"	"preview:3000000:3080"	"1"	"1"	"1"	"1"	"0"	"0"	"exported"	""
