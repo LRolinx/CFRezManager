@@ -28,7 +28,9 @@ Starting with v1.2.7, opening a CFT displays all decoded rows in a table with ro
 
 ## Snapshot
 
-The register contains 32,519 records: 27,367 confirmed exports, 2,646 unresolved slots, 123 written but unverified slots, 399 texture declarations without a matching decoded slot, 1,810 missing-model declarations, three incomplete model references and 171 model-only declarations. Records include explicit row and side contexts, so several records can describe different selected skins on the same model slot. These are recorded samples, not a full-game coverage count. Physical model copies remain separate in the evidence tables and are deduplicated by context, logical model, mesh name and slot in the register.
+The register contains 32,519 records: 27,374 confirmed exports, 2,646 unresolved slots, 123 written but unverified slots, 392 texture declarations without a matching decoded slot, 1,810 missing-model declarations, three incomplete model references and 171 model-only declarations. Records include explicit row and side contexts, so several records can describe different selected skins on the same model slot. These are recorded samples, not a full-game coverage count. Physical model copies remain separate in the evidence tables and are deduplicated by context, logical model, mesh name and slot in the register.
+
+Seven role-specific records in CharacterItem.CFT row 693 and AICharacter.CFT rows 148 and 157 reuse slot 0 because each numbered texture field equals its base field. The [duplicate-field evidence](evidence/cft-duplicate-texture-fields-20261114.tsv) keeps the source fields, model and texture paths, mesh, skeleton, attachment, motion model and decoded pixel hash. A repeated field does not add a second native texture slot.
 
 ### CFT catalog and node templates
 
