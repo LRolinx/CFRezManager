@@ -28,7 +28,7 @@ Starting with v1.2.7, opening a CFT displays all decoded rows in a table with ro
 
 ## Snapshot
 
-The register contains 32,510 records: 27,311 confirmed exports, 2,646 unresolved slots, 123 written but unverified slots, 446 texture declarations without a matching decoded slot, 1,810 missing-model declarations, three incomplete model references and 171 model-only declarations. Records include explicit row and side contexts, so several records can describe different selected skins on the same model slot. These are recorded samples, not a full-game coverage count. Physical model copies remain separate in the evidence tables and are deduplicated by context, logical model, mesh name and slot in the register.
+The register contains 32,519 records: 27,320 confirmed exports, 2,646 unresolved slots, 123 written but unverified slots, 446 texture declarations without a matching decoded slot, 1,810 missing-model declarations, three incomplete model references and 171 model-only declarations. Records include explicit row and side contexts, so several records can describe different selected skins on the same model slot. These are recorded samples, not a full-game coverage count. Physical model copies remain separate in the evidence tables and are deduplicated by context, logical model, mesh name and slot in the register.
 
 ### CFT catalog and node templates
 
@@ -69,6 +69,10 @@ A separate CFT field-side correction now exports `Object05` slot 1 for 12 female
 The native structure audit is complete: 46 nodes, three sockets, one four-key animation ending at 100 ms, one `BaseTracker` blend mask and an implicit self child. Its animation self-binding name and index match. All [node names](evidence/wildwest-sp-20261114-nodes.tsv), [sockets](evidence/wildwest-sp-20261114-sockets.tsv), [animation metadata](evidence/wildwest-sp-20261114-animations.tsv), [child records](evidence/wildwest-sp-20261114-child-models.tsv) and [binding data](evidence/wildwest-sp-20261114-animation-bindings.tsv) are saved; playback remains unverified.
 
 ### Other model tables
+
+#### KingsMission post-END target records
+
+The CFT trailer contains ten row-shaped records keyed to record IDs 46–55. IDs 46–54 repeat `NUMBER_TARGET_37` through `NUMBER_TARGET_45` with `AI_TARGET_SILVER.ltb` and `AI_TARGET_SILVER.dtx`; the exact model, mesh and slot-0 texture export is already verified under AICharacter record 132. These nine contexts are recorded separately because their scale (1.0) and hitbox type (44) differ from the typed rows (0.8 and 94). Record 55 repeats the typed `LASERTRAP` SoccerBall pair and does not add a duplicate register entry. The linked model has five nodes, no embedded animation clips or sockets, and two child-model references; external playback remains unverified. The 514-byte prefix and 48-byte suffix around the parsed records remain uninterpreted. [Offsets, source hashes and field values](evidence/kingsmission-post-end-20261114.tsv).
 
 The [ten-table inventory](evidence/other-cft-20261105-tables.tsv) covers Character, CharacterMotionData, KingsMissionObjectInfo, MountedWeapon, MoveObject, NobleGoldSetInfo, Parts, TigChaserTypes, VVIPObserveChar and VVIPSetInfo. It preserves all 504 rows and [8,967 field values](evidence/other-cft-20261105-raw-fields.tsv). The [341 model cases](evidence/other-cft-20261105-cft-validation.tsv) retain 60 existing ArmModel path aliases, explicit GR/BL selectors and separate motion references. All 262 typed model rows in these tables are covered. The complete CFT report still has 13,595 typed rows; its only [changed row](evidence/other-cft-20261105-cft-delta.tsv) restores Chaser's base skin beside SkinFileName1. Its PV hand/arm fields remain separate from body skins. Two tables retain unexplained non-padding data after END, with trailer hashes recorded separately.
 

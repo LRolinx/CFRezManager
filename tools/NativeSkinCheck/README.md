@@ -92,3 +92,5 @@ The WildWest SP arm now has a complete structure record, but this tool has not i
 The 12 focused female GR arm texture exports also point to `Arm_WOMAN_GR`. Their [evidence record](../../docs/evidence/character-arms-20261114-sidefield-exports.tsv) stores texture hashes with the model's node, animation, socket and weight-set summaries. This texture evidence does not add a new skinning or pose comparison; the existing native skin records remain the source for those checks.
 
 The [CharacterType logical arm bindings](../../docs/evidence/character-arms-20261114-logical-bindings.tsv) retain skeleton and animation summaries beside 80 model-slot links. These records do not validate vertex skinning or playback, and the physical DTX copies remain conflicted.
+
+The register also records nine KingsMission target contexts on the AI racing Silver model's verified texture slot 0. Its five nodes, zero embedded clips and zero sockets remain separate from the external playback check; see the [mapping evidence](../../docs/evidence/kingsmission-post-end-20261114.tsv).
