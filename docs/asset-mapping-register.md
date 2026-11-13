@@ -32,6 +32,10 @@ The register contains 32,519 records: 27,376 confirmed exports, 2,646 unresolved
 
 Seven role-specific records in CharacterItem.CFT row 693 and AICharacter.CFT rows 148 and 157 reuse slot 0 because each numbered texture field equals its base field. The [duplicate-field evidence](evidence/cft-duplicate-texture-fields-20261114.tsv) keeps the source fields, model and texture paths, mesh, skeleton, attachment, motion model and decoded pixel hash. A repeated field does not add a second native texture slot.
 
+### Incomplete socket-item model paths
+
+Three `model-reference-incomplete` records keep a model field that names only a directory. `CharacterItem.CFT#1448:GR` and `#1464:GR` retain the same-row BL models and textures as separately confirmed slot-0 mappings; their GR model fields remain incomplete. `CharacterItem.CFT#1472:GR` declares `T_NEW_SWAT_POUCH_GR.dtx`, which is confirmed at slot 0 on `NEW_SWAT_POUCH_GR.LTB` in four other CFT rows. That model path is different from the `SWAT_X/` directory, so the related-model candidate does not establish the SWAT_X binding. Node names, animation summaries, hashes and source archives are recorded in the [mapping register](asset-mapping-register.tsv) with links to the physical evidence tables. All three statuses remain incomplete.
+
 ### Blitz Buster SP hair alias
 
 CharacterItem.CFT row selector 1808 (serialized `RecordId` 1809) declares the missing `Blitz_Buster_HAT_SP.dtx` path in `_BLTexFile2` and `_GRTexFile2`. Its `_GRSocketItemModelFile` points to `Blitz_Buster_Hair_SP.ltb`; the guarded alias maps the eligible texture field to `Blitz_Buster_HAIR_SP.dtx`, native slot 0 on the single mesh `V214_Blitz_Buster_GR_hiar`. The guard requires every physical model copy to share the one-mesh, one-slot layout and every matching DTX copy to decode consistently. The separate BL context for `_BLTexFile2` does not satisfy the model-column guard and remains `table-declared-slot-unverified`; its base `_BLTexFile` slot 0 is recorded separately.
