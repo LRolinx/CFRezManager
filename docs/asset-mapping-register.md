@@ -28,9 +28,15 @@ Starting with v1.2.7, opening a CFT displays all decoded rows in a table with ro
 
 ## Snapshot
 
-The register contains 32,519 records: 27,374 confirmed exports, 2,646 unresolved slots, 123 written but unverified slots, 392 texture declarations without a matching decoded slot, 1,810 missing-model declarations, three incomplete model references and 171 model-only declarations. Records include explicit row and side contexts, so several records can describe different selected skins on the same model slot. These are recorded samples, not a full-game coverage count. Physical model copies remain separate in the evidence tables and are deduplicated by context, logical model, mesh name and slot in the register.
+The register contains 32,519 records: 27,376 confirmed exports, 2,646 unresolved slots, 123 written but unverified slots, 390 texture declarations without a matching decoded slot, 1,810 missing-model declarations, three incomplete model references and 171 model-only declarations. Records include explicit row and side contexts, so several records can describe different selected skins on the same model slot. These are recorded samples, not a full-game coverage count. Physical model copies remain separate in the evidence tables and are deduplicated by context, logical model, mesh name and slot in the register.
 
 Seven role-specific records in CharacterItem.CFT row 693 and AICharacter.CFT rows 148 and 157 reuse slot 0 because each numbered texture field equals its base field. The [duplicate-field evidence](evidence/cft-duplicate-texture-fields-20261114.tsv) keeps the source fields, model and texture paths, mesh, skeleton, attachment, motion model and decoded pixel hash. A repeated field does not add a second native texture slot.
+
+### Blitz Buster SP hair alias
+
+CharacterItem.CFT row selector 1808 (serialized `RecordId` 1809) declares the missing `Blitz_Buster_HAT_SP.dtx` path in `_BLTexFile2` and `_GRTexFile2`. Its `_GRSocketItemModelFile` points to `Blitz_Buster_Hair_SP.ltb`; the guarded alias maps the eligible texture field to `Blitz_Buster_HAIR_SP.dtx`, native slot 0 on the single mesh `V214_Blitz_Buster_GR_hiar`. The guard requires every physical model copy to share the one-mesh, one-slot layout and every matching DTX copy to decode consistently. The separate BL context for `_BLTexFile2` does not satisfy the model-column guard and remains `table-declared-slot-unverified`; its base `_BLTexFile` slot 0 is recorded separately.
+
+The verified model is from `rez4/RF016.REZ` (SHA-256 `E3E42B05BDB7C517F42B166AA464612DCF8138CCE9F5BB21F9CD838C722F6B8C`). It has two nodes (`Scene Root`, `Bone01`), no embedded sockets and one `gr` animation keyframe at 0 ms. The texture is from `rez5/RF017.REZ`, 256×256, stored SHA-256 `CF912D02E906ADD3BA2678C5AE82AB07F5A515C3245B7D659C3D931C5AF63E9C` and decoded-pixel SHA-256 `6787F8976913676118867FF8D2F2B567AD24669DC463A911D2F2CB1BD7414FCF`. Node and model metadata are in the [structure tables](evidence/characteritem-base-20261105-structure-nodes.tsv) and [model summary](evidence/characteritem-base-20261105-structure-models.tsv); the register row retains the source paths and export evidence.
 
 ### AI transport duplicate texture fields
 
