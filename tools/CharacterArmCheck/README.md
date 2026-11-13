@@ -30,6 +30,8 @@ The other-CFT group adds 176 checks after the preceding 588. Parts, MountedWeapo
 
 Float handling adds 51 checks for exact float32 decoding, preserved text/integer columns, finite numeric XLSX cells, culture-independent formatting, subnormals, negative zero, explicit nonfinite text and numeric preview sorting. Six variant checks ensure untyped, absent or directly bound targets do not validate unused texture copies, while eligible targets still reject invalid pixels. The suite now has 821 checks. The [full CFT comparison](../../docs/asset-mapping-register.md#cft-catalog-and-node-templates) independently verifies every field in 555 files and all 160,000 ModelBute XLSX cells. These checks do not establish full-root export performance; the first global index remains too costly.
 
+Physical texture copies are indexed once by archive-relative resource path, and repeat checks reuse their result. This lookup change does not establish full-root export performance; the first global index remains costly.
+
 The release workflow runs these checks before packaging. [Texture-copy checks](../TextureCopyCheck/README.md) separately verify conflicting physical resources; [structure checks](../LtbStructureAudit/README.md) cover nodes, child declarations, bindings and animation blend masks. These checks do not validate animation playback or vertex skinning.
 
 The structure check also covers animation channel encodings, hierarchy traversal and raw keyframe events. The [PView node map](../../docs/evidence/pview-motion-20261105-arm-node-map.tsv) records the 46 shared arm nodes separately from bind-matrix and playback validation.

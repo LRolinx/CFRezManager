@@ -74,6 +74,7 @@ internal static class LithTechModelTextureConfigIndex
     private const int MaxCachedSlotMappingModelDocuments = 128;
     private const int MaxTextureSlotIndex = byte.MaxValue;
     private static readonly ConditionalWeakTable<ExplorerItem, TextureConfigIndex> TextureConfigIndexCache = new();
+    private static readonly ConditionalWeakTable<IReadOnlyList<ExplorerItem>, PhysicalResourceCopyIndex> PhysicalResourceCopyIndexCache = new();
 
     private static readonly string[] ConfigExtensions =
     [
@@ -9454,6 +9455,15 @@ internal static class LithTechModelTextureConfigIndex
         string resourcePath)
     {
         string normalizedPath = NormalizeKey(resourcePath);
+        string extension = Path.GetExtension(normalizedPath);
+        if (TextureExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase))
+        {
+            PhysicalResourceCopyIndex copyIndex = PhysicalResourceCopyIndexCache.GetValue(
+                resourceItems,
+                static items => PhysicalResourceCopyIndex.Create(items));
+            return copyIndex.HasConsistentCopies(normalizedPath);
+        }
+
         ExplorerItem[] copies = resourceItems
             .Where(item => string.Equals(
                 NormalizeKey(item.ArchiveFile?.FullPath ?? item.OutputRelativePath),
@@ -9489,6 +9499,89 @@ internal static class LithTechModelTextureConfigIndex
                (sameByteContent ||
                 string.Equals(Path.GetExtension(normalizedPath), ".dtx", StringComparison.OrdinalIgnoreCase) &&
                 LithTechModelTextureLoader.HaveEquivalentDecodedTexturePixels(copies));
+    }
+
+    private sealed class PhysicalResourceCopyIndex
+    {
+        private readonly Dictionary<string, ExplorerItem[]> _copiesByPath;
+        private readonly Dictionary<string, bool> _consistencyByPath = new(StringComparer.OrdinalIgnoreCase);
+        private readonly object _sync = new();
+
+        private PhysicalResourceCopyIndex(Dictionary<string, ExplorerItem[]> copiesByPath)
+        {
+            _copiesByPath = copiesByPath;
+        }
+
+        public static PhysicalResourceCopyIndex Create(IReadOnlyList<ExplorerItem> resourceItems)
+        {
+            var grouped = new Dictionary<string, List<ExplorerItem>>(StringComparer.OrdinalIgnoreCase);
+            foreach (ExplorerItem item in resourceItems)
+            {
+                string path = NormalizeKey(item.ArchiveFile?.FullPath ?? item.OutputRelativePath);
+                if (path.Length == 0 ||
+                    !TextureExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (!grouped.TryGetValue(path, out List<ExplorerItem>? copies))
+                {
+                    copies = [];
+                    grouped.Add(path, copies);
+                }
+
+                copies.Add(item);
+            }
+
+            return new PhysicalResourceCopyIndex(grouped.ToDictionary(
+                pair => pair.Key,
+                pair => pair.Value.ToArray(),
+                StringComparer.OrdinalIgnoreCase));
+        }
+
+        public bool HasConsistentCopies(string resourcePath)
+        {
+            lock (_sync)
+            {
+                if (_consistencyByPath.TryGetValue(resourcePath, out bool cached))
+                {
+                    return cached;
+                }
+
+                if (!_copiesByPath.TryGetValue(resourcePath, out ExplorerItem[]? copies) || copies.Length == 0)
+                {
+                    _consistencyByPath[resourcePath] = false;
+                    return false;
+                }
+
+                string? expectedHash = null;
+                bool sameByteContent = true;
+                foreach (ExplorerItem copy in copies)
+                {
+                    byte[]? bytes = TryReadItemBytes(copy, 64 * 1024 * 1024);
+                    if (bytes is null)
+                    {
+                        _consistencyByPath[resourcePath] = false;
+                        return false;
+                    }
+
+                    string hash = Convert.ToHexString(MD5.HashData(bytes));
+                    if (expectedHash is not null && !string.Equals(expectedHash, hash, StringComparison.OrdinalIgnoreCase))
+                    {
+                        sameByteContent = false;
+                    }
+
+                    expectedHash = hash;
+                }
+
+                bool consistent = expectedHash is not null &&
+                    (sameByteContent ||
+                     string.Equals(Path.GetExtension(resourcePath), ".dtx", StringComparison.OrdinalIgnoreCase) &&
+                     LithTechModelTextureLoader.HaveEquivalentDecodedTexturePixels(copies));
+                _consistencyByPath[resourcePath] = consistent;
+                return consistent;
+            }
+        }
     }
 
     private static void AddVerifiedCftModelTextureSlotAliases(
