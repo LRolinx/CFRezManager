@@ -36,7 +36,7 @@ CF Rez Manager 是一个 Windows WPF 工具，用来浏览、搜索、预览、�
 - Renewal 斯沃特精英臂模已按 A0017 的 SWAT-ELITE 贴图字段导出两个槽位；该模型是关联旧模型，CFT 未直接声明模型路径。46 个节点、三个挂点和内嵌动画已存表，动画播放仍未验证。
 - 新增 80 条 CharacterType 臂模逻辑槽位绑定记录，涉及 30 条 CFT 行、22 个模型和 36 条贴图路径。CFT 模型/贴图字段与网格槽位已对应，但每条贴图路径都存在像素不同的物理副本，实际游戏版本尚未确认；骨骼、挂点和动画摘要一并保存在[证据表](docs/evidence/character-arms-20261114-logical-bindings.tsv)。
 - 另有 12 条女性 GR 臂模行通过 `_GRPVArmTextureFile` 导出 `Object05` 槽位 1，使用的 DTX 只有一个物理副本。模型行同时声明 BL 和 GR 臂模时，贴图字段前缀决定所属阵营，不再被路径名中的 `_BL` 后缀覆盖；每行导出哈希和模型、骨骼、动画、挂点记录见[证据表](docs/evidence/character-arms-20261114-sidefield-exports.tsv)。
-- WildWest SP 臂模已确认有两个网格、46 个节点、三个挂点和一段内嵌动画，但 CFT 没有对应模型或 SP 贴图字段。已知 BLGR/Santa 臂模的网格签名均与它不同，A9350 上下文仍缺两张贴图；映射保持未确认。
+- WildWest SP 臂模已确认有两个网格、46 个节点、三个挂点和一段内嵌动画，但 CFT 没有对应模型或 SP 贴图字段。全根目录找到 97 条相关资源路径，其中只有 4 张 BLGR 和 4 张 Santa 臂/手 DTX，没有 SP DTX；与 30 个其他网格也没有 UV 签名匹配。A9350 上下文仍缺两张贴图，映射保持未确认。
 - [部件、场景和套装表](docs/asset-mapping-register.md#other-model-tables)另存 341 个模型案例。固定机枪支架采用行内贴图，追击者保留基础皮肤及编号武器皮肤；手部角色词不再被 `IronBeast2Arm` 等资产名中的字符串干扰。新增 13 个贴图输出，阻止 16 处与声明不符的旧皮肤回退，冲突副本继续留待确认。99 份原生模型的骨架、动画和挂点已存表。
 - [UGC 记录](docs/asset-mapping-register.md#ugc-assets)覆盖 44 张表、2,112 个模型案例。LTA/LTC 按所属 shape 读取材质槽和渲染样式，并按 `tex-fs` 保留逐面 UV 接缝，新增 2,097 个已确认贴图输出。1,104 份原生模型的骨架、18,100 条内嵌动画及挂点已存表；物体可选贴图、动作版本和场景挂接继续保留未确认状态。
 - 同一个 CharacterItem 模型被 GR、BL 或男女角色字段重复引用时，保留所有字段来源。两套皮肤使用独立上下文，例如 `row:CharacterItem.CFT#2372:GR` 和 `row:CharacterItem.CFT#2372:BL`；未选择身份或阵营时，存在多套声明的模型不再按网格名称猜选皮肤。
@@ -226,8 +226,8 @@ dotnet run --project .\CFRezManager.csproj -- --decode-cfg --root "C:\Extracted\
 - `CharacterItem.CFT` 行选择器 1808（RecordId 1809）的 `Blitz_Buster_Hair_SP` 特例，在模型列为 `_GRSocketItemModelFile` 时将 `_BLTexFile2` / `_GRTexFile2` 的缺失 `Blitz_Buster_HAT_SP.dtx` 映射到 `V214_Blitz_Buster_GR_hiar` 的原生槽 0。所有模型副本必须有相同的单槽布局，所有匹配 DTX 副本必须一致解码。独立 BL 上下文中的 `_BLTexFile2` 不满足模型列约束，仍标为未验证；基字段 `_BLTexFile` 的槽 0 另有确认。聚焦导出在有、无身份上下文时均写出 1 张贴图且缺失数为 0。骨骼、动画及哈希详见[映射表记录](docs/asset-mapping-register.md#blitz-buster-sp-hair-alias)。
 - 同表第 320 行的身份别名 `ACC_Interaction_BlueLotus` 对应独立模型 `PV-ACC_Interaction_BlueLotus`。只有当别名在同目录 ACC_SD 预览模型中唯一、Joy 与目标模型的所有副本网格布局/UV/槽位/RenderStyle 和权威绑定完全相同、精确 DTX 的所有副本均可解码且 SHA-256 一致，并且目标槽没有直接或冲突映射时，才把 Baihu 贴图推导到该行上下文。`item:21765` 聚焦导出中，Joy 与 BlueLotus 的 `Box002` 槽 0 均导出 `PV-ACC_Baihu.dtx`；BlueLotus 报告为 `cft-identity-model-alias-derived`。该推导不用于无上下文导出。
 - 两个 CFT 引用诊断命令的“已解码内容数”只统计成功读取全部声明行的表；部分表中已提取的行仍保留在引用报告中。逐文件失败和尾部情况用 `--audit-table-decode` 检查。
-- 完整读取声明行且紧接标准 `END` 尾标时，CFT 的路径候选扫描在尾标前结束，防止旧数据残留混入其他模型的贴图候选；尾标后的内容仍由解码审计列为未解释数据。没有完整行/尾标证据的表保留原有部分解析路径。
-- 2026-10-26 的当前目录盘点覆盖 482 个 REZ 归档、2,398 份 CFT/LTC 物理副本；70 份唯一 CFT 内容仍有未解释尾部。当前 `RF100.REZ` 的 `CharacterType.CFT` 有 381 字节未消费数据，路径扫描没有从这段数据建立行级映射。
+- 完整读取声明行且紧接标准 `END` 尾标时，或尾标前只有 NUL 填充时，CFT 路径候选扫描在尾标处结束，防止尾标后的旧数据混入模型贴图候选。含非零数据的尾部仍可参与路径候选扫描，但不会自动当作强类型行关系。
+- 2026-11-14 的完整目录盘点覆盖 482 个 REZ 归档、2,398 份 CFT/LTC 物理副本，没有扫描错误；70 份唯一 CFT 内容仍有未解释尾部，共 33 种尾部哈希。解码尾部中的 `.ltb` / `.dtx` 路径只出现在 `KingsMissionObjectInfo.CFT`，共 39 次、四个唯一路径，对应已记录的十条额外记录。其他 69 份没有识别到这些路径，68 份仍是未解释数据。`RF100.REZ` 的 `CharacterType.CFT` 尾部为 316 个 NUL、64 字节 ASCII `END` 字段和末尾 NUL；表解码仍报告这 381 字节为尾部，路径扫描会在该尾标处停止。详见[证据](docs/evidence/cft-trailing-audit-20261114.tsv)。
 - `--inspect-ltc-model-texture-links`：输出 LTC 强类型模型行、纹理字段、辅助贴图引用和身份别名，用于检查武器与玩家视角模型的对应关系。
 - `--inspect-texture-resource-paths --contains <文本>`：列出路径包含指定文本的贴图逻辑路径、物理副本和 MD5，用于核对同名 DTX 是否存在冲突。
 - CFT 动作引用即使未写扩展名，也只有在完整逻辑路径对应单一资源扩展名、父子模型均解码成功且实际槽位交集非空时才继承贴图。

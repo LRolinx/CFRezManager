@@ -138,13 +138,39 @@ internal static class CrossFireCftTableDecoder
 
     internal static bool TryGetEndMarkerStart(byte[] data, int consumedBytes, out int markerStart)
     {
-        // Diagnostics include an optional NUL in the consumed byte count.
-        markerStart = consumedBytes - 64;
-        if (consumedBytes > 0 && data[consumedBytes - 1] == 0) markerStart--;
-        if (markerStart < 0) return false;
-        int end = markerStart;
-        ConsumeEndMarker(data, ref end);
-        return end == consumedBytes && end > markerStart;
+        markerStart = -1;
+        if (consumedBytes < 0 || consumedBytes > data.Length) return false;
+
+        // Diagnostics may include an END marker and its optional NUL in the
+        // consumed byte count.
+        int precedingMarkerStart = consumedBytes - 64;
+        if (consumedBytes > 0 && data[consumedBytes - 1] == 0) precedingMarkerStart--;
+        if (precedingMarkerStart >= 0)
+        {
+            int end = precedingMarkerStart;
+            ConsumeEndMarker(data, ref end);
+            if (end == consumedBytes && end > precedingMarkerStart)
+            {
+                markerStart = precedingMarkerStart;
+                return true;
+            }
+        }
+
+        // Some tables place NUL padding between the declared rows and the
+        // standard END field. Only skip an all-zero prefix; row-shaped or
+        // other nonzero trailer data remains available to the path scanner.
+        int paddedMarkerStart = consumedBytes;
+        while (paddedMarkerStart < data.Length && data[paddedMarkerStart] == 0)
+        {
+            paddedMarkerStart++;
+        }
+
+        if (paddedMarkerStart == consumedBytes) return false;
+        int paddedEnd = paddedMarkerStart;
+        ConsumeEndMarker(data, ref paddedEnd);
+        if (paddedEnd <= paddedMarkerStart) return false;
+        markerStart = paddedMarkerStart;
+        return true;
     }
 
     private static bool TryReadRows(
