@@ -1,0 +1,2 @@
+"parent_source"	"motion_source"	"parent_nodes"	"motion_nodes"	"node_hierarchy_equal"	"serialized_bind_matrices_equal"	"motion_animation_count"	"status"	"parent_nodes_with_matching_name"	"parent_nonroot_nodes_with_matching_name"	"parent_duplicate_names"	"motion_duplicate_names"	"has_shared_node_names"	"root_only_name_overlap"
+"Models/CHARACTER/BattleRoyal/Sisterhood_BODY_SP_BR.LTB"	"rez3/RF016/Models/CHARACTER/BattleRoyal/M-motion_blue-BR.LTB"	"29"	"29"	"true"	"false"	"237"	"hierarchy-only; playback-unverified"	"29"	"28"	"0"	"0"	"true"	"false"

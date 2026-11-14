@@ -1,0 +1,4 @@
+source	child_index	is_self	declared_path	animation_bindings
+Models/CHARACTER/BattleRoyal/Sisterhood_BODY_SP_BR.LTB	0	true	""	0
+Models/CHARACTER/BattleRoyal/Sisterhood_BODY_SP_BR.LTB	1	false	M-motion_blue-BR.ltb	0
+rez3/RF016/Models/CHARACTER/BattleRoyal/M-motion_blue-BR.LTB	0	true	""	237

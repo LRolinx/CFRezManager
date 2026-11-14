@@ -29,7 +29,7 @@ CF Rez Manager 是一个 Windows WPF 工具，用来浏览、搜索、预览、�
 - [清单字段说明](docs/asset-mapping-register.md) 说明状态和空字段的含义。OBJ 导出目前不保存骨骼名称或动画轨道；未确认的骨骼挂点留空。
 - [全量 CFT 与骨骼模板记录](docs/asset-mapping-register.md#cft-catalog-and-node-templates)覆盖 555 份 CFT、171 个预缓存模型和 4,226 条骨骼名称声明。CFT 浮点字段现在按小数显示和导出，半径、缩放等数值不再显示为整数位值；全部 199,184 个浮点单元格已独立核对。预缓存行没有声明皮肤，不作为贴图绑定；物理贴图副本按资源路径分组并复用核对结果，同一物理模型组的槽位一致性结果也会复用。全目录首次索引仍有高开销，完整导出尚未验证。
 - 贴图映射按目标模型和关联的 CFT/LTC 行构建局部范围。DemonicBeast 的 `preview:3000000:3080` 选择器已确认槽位 0 与武器贴图；同一贴图也会由 `item:3080` 的网格名回退导出，回退来源单独记录。该模型的节点、挂点和内嵌动画已存入清单；完整目录导出仍未验证。
-- 清单已有 27,384 条已确认导出记录；贴图副本冲突、未解析槽位、资源缺失和仅填写目录的模型字段分别标记。CharacterType 臂模已核对 1,586 个行号与阵营组合，保留 704 份物理模型的节点、内嵌动画、挂点和混合权重；其余两个拼写回退项单独标为未确认。
+- 清单已有 27,392 条已确认导出记录；贴图副本冲突、未解析槽位、资源缺失和仅填写目录的模型字段分别标记。CharacterType 臂模已核对 1,586 个行号与阵营组合，保留 704 份物理模型的节点、内嵌动画、挂点和混合权重；其余两个拼写回退项单独标为未确认。
 - 三条目录式 Socket 道具模型引用补充了已确认的 BL 同身份模型/贴图证据；SWAT_X 记录中的 GR 贴图已在独立 NEW_SWAT Pouch 模型槽 0 导出，但原模型字段只给出目录，关联仍未确认。详见[不完整路径记录](docs/asset-mapping-register.md#incomplete-socket-item-model-paths)。
 - CharacterItem.CFT 第 693 行及 AICharacter.CFT 第 148、157 行的重复贴图字段已确认与基础字段相同；七条模型角色记录沿用已导出槽位 0，并保留骨骼、挂点与动作模型信息。[字段和导出证据](docs/evidence/cft-duplicate-texture-fields-20261114.tsv)记录了对应模型、贴图和像素哈希。
 - AICharacter.CFT 第 101、422、428、482 行的三个贴图字段相同，但同名 DTX 在 `rez` 与 `rez2` 有两份像素不同的副本。16 条相关记录已补全模型、网格槽位、六节点骨骼、挂点和 `M-Move`/`M-Open` 动画证据；由于实际资源包版本尚未确认，贴图槽继续保持未验证。
@@ -48,6 +48,7 @@ CF Rez Manager 是一个 Windows WPF 工具，用来浏览、搜索、预览、�
 - 源码新增按需读取原生 LTB 顶点蒙皮的接口和[检查工具](tools/NativeSkinCheck/README.md)。37 份资源的 160 个网格、141,464 个顶点及 2,395 个绘制组已独立核对，绑定与权重哈希加入清单；动画播放和骨骼动画导出仍待验证。
 - 原生姿态计算已核对 241 个采样姿态、19,340 条节点姿态和 1,100,023 个顶点位置，保留根节点动画位移、旋转专用节点及逐三角形绑定规则。检查工具可读取通道报告复核这些结果；游戏实际渲染和动画导出尚未接入。
 - CharacterType 身体模型也按声明字段保留 GR、BL 皮肤，包括 `ModelFile2` 和 BattleRoyal 模型。未编号贴图保留为槽位 0，`TextureFile2` 对应槽位 1；3,888 个组合已实际检查。947 份身体模型的骨架、挂点和外部动作声明已存表，冲突副本继续标记待确认。
+- CharacterType.CFT 第 224、225 行的 Sisterhood BattleRoyal 模型，GR/BL 字段声明路径缺少物理文件的 `_BR` 后缀。导出器按行号将它映射到 `Models/CHARACTER/BattleRoyal/Sisterhood_BODY_SP_BR.LTB`；四个上下文均确认身体槽 0 和脸部槽 1。29 节点骨架与外部动作模型层级一致，但绑定矩阵不同，237 个动作的播放仍未验证。详见[清单记录](docs/asset-mapping-register.md#sisterhood-battle-royal-body-model)和[结构证据](docs/evidence/sisterhood-br-20261114-models.tsv)。
 - CharacterItem 已核对 5,927 个完整模型引用与阵营组合。贴图阵营取自 `GRTexFile`、`BLTexFile` 字段，文件名后缀不覆盖声明；误填在模型字段中的 DTX 不参与主模型贴图配对。另存 2,666 份模型的骨架和动画元数据，并纠正旧清单中的 16 处贴图路径。
 - `CharacterItem.CFT#160` 的 Clan Backpack 男女模型已实际导出：BL、GR 行选择器分别成功，`Box02` 槽 0 对应同一张贴图；`Plane01` 的槽 1–4 字段为空，继续标记未解析。两模型的骨骼层级、内嵌动画及纹理像素哈希见[记录表](docs/evidence/characteritem-socket-export-20261114.tsv)。
 

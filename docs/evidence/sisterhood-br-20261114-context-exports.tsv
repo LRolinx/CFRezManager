@@ -1,0 +1,5 @@
+"context"	"model_path"	"model_archive"	"meshes"	"vertices"	"triangles"	"geometry_skipped"	"textures_exported"	"missing_textures"	"skipped_matched_files"	"exit_code"
+"row:CharacterType.CFT#224:GR"	"Models/CHARACTER/BattleRoyal/Sisterhood_BODY_SP_BR.LTB"	"rez3/RF016.REZ"	"2"	"8063"	"12455"	"0"	"2"	"0"	"0"	"0"
+"row:CharacterType.CFT#225:GR"	"Models/CHARACTER/BattleRoyal/Sisterhood_BODY_SP_BR.LTB"	"rez3/RF016.REZ"	"2"	"8063"	"12455"	"0"	"2"	"0"	"0"	"0"
+"row:CharacterType.CFT#224:BL"	"Models/CHARACTER/BattleRoyal/Sisterhood_BODY_SP_BR.LTB"	"rez3/RF016.REZ"	"2"	"8063"	"12455"	"0"	"2"	"0"	"0"	"0"
+"row:CharacterType.CFT#225:BL"	"Models/CHARACTER/BattleRoyal/Sisterhood_BODY_SP_BR.LTB"	"rez3/RF016.REZ"	"2"	"8063"	"12455"	"0"	"2"	"0"	"0"	"0"

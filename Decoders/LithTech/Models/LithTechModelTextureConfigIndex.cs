@@ -24,6 +24,16 @@ internal static class LithTechModelTextureConfigIndex
         string DeclaredChildModelPath,
         string PhysicalChildModelPath);
 
+    private sealed record VerifiedCftDeclaredModelPathAlias(
+        string TableFileName,
+        int RowIndex,
+        string ModelColumn,
+        string DeclaredModelPath,
+        string PhysicalModelPath,
+        string RelatedModelPath,
+        string TexturePath,
+        int[] TextureSlotIndices);
+
     private sealed record VerifiedCftTextureFieldSlotAlias(
         string TableFileName,
         int RowIndex,
@@ -163,6 +173,31 @@ internal static class LithTechModelTextureConfigIndex
             "Models/Character/AI5/AI_AtlasCrouch.ltb",
             "Models/Characte/AI5/AI_M-motion_AtlasCrouch.ltb",
             "Models/Character/AI5/AI_M-motion_AtlasCrouch.LTB")
+    ];
+
+    // CharacterType rows name a BattleRoyal model without the physical _BR suffix.
+    // Keep the alias limited to those rows and require the declared base model,
+    // body texture and native slot layout to agree before using the physical copy.
+    private static readonly VerifiedCftDeclaredModelPathAlias[] VerifiedCftDeclaredModelPathAliases =
+    [
+        new(
+            "CharacterType.CFT",
+            224,
+            "_BattleRoyal_GRModelFile",
+            "Models/Character/BattleRoyal/Sisterhood_BODY_SP.ltb",
+            "Models/CHARACTER/BattleRoyal/Sisterhood_BODY_SP_BR.LTB",
+            "Models/Character/Sisterhood_BODY_SP.ltb",
+            "ModelTextures/Character/Sisterhood/Sisterhood_BODY_SP.dtx",
+            [0, 1]),
+        new(
+            "CharacterType.CFT",
+            225,
+            "_BattleRoyal_GRModelFile",
+            "Models/Character/BattleRoyal/Sisterhood_BODY_SP.ltb",
+            "Models/CHARACTER/BattleRoyal/Sisterhood_BODY_SP_BR.LTB",
+            "Models/Character/Sisterhood_BODY_SP.ltb",
+            "ModelTextures/Character/Sisterhood/Sisterhood_BODY_SP.dtx",
+            [0, 1])
     ];
 
     // CharacterItem.CFT row 1809 names the SP hair texture in TexFile2, but
@@ -4156,6 +4191,7 @@ internal static class LithTechModelTextureConfigIndex
         IReadOnlyDictionary<uint, IReadOnlyList<string>> weaponPreviewContextsByItemId =
             BuildWeaponPreviewContextsByItemId(crossFireScriptItems);
         var verifiedTexturePathCache = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+        var verifiedCftModelCopyHashCache = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
         var decodedModels = new Dictionary<string, LithTechModelDocument?>(StringComparer.OrdinalIgnoreCase);
         foreach (TextureConfigItem configItem in configItems.Where(configItem =>
                      string.Equals(Path.GetExtension(configItem.Path), ".cft", StringComparison.OrdinalIgnoreCase)))
@@ -4166,7 +4202,13 @@ internal static class LithTechModelTextureConfigIndex
                 continue;
             }
 
-            IEnumerable<CftModelTextureMapping> cftMappings = CftModelTextureMappingDecoder.Extract(cftData);
+            IEnumerable<CftModelTextureMapping> cftMappings = CftModelTextureMappingDecoder.Extract(cftData)
+                .SelectMany(mapping => ExpandVerifiedCftDeclaredModelPathAlias(
+                    configItem.Path,
+                    mapping,
+                    modelItemsByPath,
+                    decodedModels,
+                    verifiedCftModelCopyHashCache));
             if (modelScopePaths is not null)
             {
                 cftMappings = cftMappings.Where(mapping => IsCftModelTextureMappingInScope(
@@ -10713,6 +10755,107 @@ internal static class LithTechModelTextureConfigIndex
             Path.GetFileNameWithoutExtension(reference).Contains("motion", StringComparison.OrdinalIgnoreCase);
     }
 
+    private static VerifiedCftDeclaredModelPathAlias? FindVerifiedCftDeclaredModelPathAlias(
+        string tablePath,
+        CftModelTextureMapping mapping)
+    {
+        if (!mapping.HasTypedRowContext)
+        {
+            return null;
+        }
+
+        return VerifiedCftDeclaredModelPathAliases.FirstOrDefault(alias =>
+            alias.RowIndex == mapping.RowIndex &&
+            Path.GetFileName(tablePath).Equals(alias.TableFileName, StringComparison.OrdinalIgnoreCase) &&
+            mapping.ModelColumn.Equals(alias.ModelColumn, StringComparison.OrdinalIgnoreCase) &&
+            NormalizeKey(mapping.ModelReference).Equals(
+                NormalizeKey(alias.DeclaredModelPath),
+                StringComparison.OrdinalIgnoreCase) &&
+            (mapping.RelatedModelReferences ?? []).Contains(alias.RelatedModelPath, StringComparer.OrdinalIgnoreCase) &&
+            mapping.TextureReferences.Any(texture =>
+                CftModelTextureMappingDecoder.TryGetCharacterBodyTextureSlot(
+                    texture.Column,
+                    out string side,
+                    out int slot) &&
+                side.Equals("GR", StringComparison.OrdinalIgnoreCase) &&
+                slot == 0 &&
+                NormalizeKey(texture.Path).Equals(NormalizeKey(alias.TexturePath), StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private static IEnumerable<CftModelTextureMapping> ExpandVerifiedCftDeclaredModelPathAlias(
+        string tablePath,
+        CftModelTextureMapping mapping,
+        IReadOnlyDictionary<string, ExplorerItem[]> modelItemsByPath,
+        Dictionary<string, LithTechModelDocument?> decodedModels,
+        Dictionary<string, bool> consistentModelCopyHashCache)
+    {
+        VerifiedCftDeclaredModelPathAlias? alias = FindVerifiedCftDeclaredModelPathAlias(tablePath, mapping);
+        if (alias is null)
+        {
+            yield return mapping;
+            yield break;
+        }
+
+        string declaredModelPath = GetLogicalModelResourcePath(mapping.ModelReference);
+        if (modelItemsByPath.ContainsKey(declaredModelPath))
+        {
+            yield return mapping;
+            yield break;
+        }
+
+        string physicalModelPath = GetLogicalModelResourcePath(alias.PhysicalModelPath);
+        if (!modelItemsByPath.TryGetValue(physicalModelPath, out ExplorerItem[]? physicalModelCopies) ||
+            physicalModelCopies.Length == 0 ||
+            !TryGetConsistentLtcModelSlots(physicalModelCopies, decodedModels, out int[] physicalSlots) ||
+            !physicalSlots.SequenceEqual(alias.TextureSlotIndices) ||
+            !HaveConsistentCftModelCopyHashes(
+                physicalModelPath,
+                physicalModelCopies,
+                consistentModelCopyHashCache))
+        {
+            yield return mapping;
+            yield break;
+        }
+
+        yield return mapping with { ModelReference = alias.PhysicalModelPath };
+    }
+
+    private static bool HaveConsistentCftModelCopyHashes(
+        string modelPath,
+        IReadOnlyList<ExplorerItem> modelCopies,
+        Dictionary<string, bool> cache)
+    {
+        string normalizedPath = NormalizeModelResourcePath(modelPath);
+        if (cache.TryGetValue(normalizedPath, out bool cached))
+        {
+            return cached;
+        }
+
+        string? expectedHash = null;
+        foreach (ExplorerItem modelCopy in modelCopies)
+        {
+            byte[]? modelData = TryReadItemBytes(modelCopy, 64 * 1024 * 1024);
+            if (modelData is null || modelData.Length == 0)
+            {
+                cache[normalizedPath] = false;
+                return false;
+            }
+
+            string hash = Convert.ToHexString(SHA256.HashData(modelData));
+            if (expectedHash is not null && !string.Equals(expectedHash, hash, StringComparison.Ordinal))
+            {
+                cache[normalizedPath] = false;
+                return false;
+            }
+
+            expectedHash = hash;
+        }
+
+        bool consistent = expectedHash is not null;
+        cache[normalizedPath] = consistent;
+        return consistent;
+    }
+
     private static IEnumerable<string> GetCftRelatedModelReferences(
         string tablePath,
         CftModelTextureMapping mapping)
@@ -11221,6 +11364,11 @@ internal static class LithTechModelTextureConfigIndex
                     .Where(path => path.Length > 0)
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToArray();
+                VerifiedCftDeclaredModelPathAlias? verifiedModelAlias =
+                    FindVerifiedCftDeclaredModelPathAlias(configItem.Path, mapping);
+                string? verifiedAliasPath = verifiedModelAlias is null
+                    ? null
+                    : NormalizeExtensionlessModelReference(verifiedModelAlias.PhysicalModelPath);
                 bool isGenderedCharacterPvItemModel =
                     string.Equals(
                         Path.GetFileName(configItem.Path),
@@ -11230,6 +11378,7 @@ internal static class LithTechModelTextureConfigIndex
                     IsCharacterPvItemGenderPrefixForModel(mapping.ModelReference, targetModelPath);
                 if (!string.Equals(modelPath, targetModelPath, StringComparison.OrdinalIgnoreCase) &&
                     !relatedModelPaths.Contains(targetModelPath, StringComparer.OrdinalIgnoreCase) &&
+                    !string.Equals(verifiedAliasPath, targetModelPath, StringComparison.OrdinalIgnoreCase) &&
                     !isGenderedCharacterPvItemModel)
                 {
                     continue;
@@ -11241,6 +11390,10 @@ internal static class LithTechModelTextureConfigIndex
                 }
 
                 scopedModelPaths.UnionWith(relatedModelPaths);
+                if (!string.IsNullOrWhiteSpace(verifiedAliasPath))
+                {
+                    scopedModelPaths.Add(verifiedAliasPath);
+                }
             }
         }
 
