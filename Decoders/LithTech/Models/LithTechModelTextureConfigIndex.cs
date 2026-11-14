@@ -17,6 +17,13 @@ internal static class LithTechModelTextureConfigIndex
         string MissingTexturePath,
         string ExistingTexturePath);
 
+    private sealed record VerifiedCftChildModelPathAlias(
+        string TableFileName,
+        int RowIndex,
+        string ParentModelPath,
+        string DeclaredChildModelPath,
+        string PhysicalChildModelPath);
+
     private sealed record VerifiedCftTextureFieldSlotAlias(
         string TableFileName,
         int RowIndex,
@@ -129,6 +136,33 @@ internal static class LithTechModelTextureConfigIndex
             2,
             "ModelTextures/Character/AIMode/AI1_EvilDen/AI_PrincessIron_HAIR.dtx",
             "ModelTextures/SOCKETITEM/BASIC/PrincessIron_pc/PrincessIron_PC_HAIR.dtx")
+    ];
+
+    // AICharacter.CFT Atlas rows spell the child-model directory "Characte".
+    // Keep these aliases row- and parent-specific; normal CFT slot validation
+    // still checks the physical parent/child layouts and texture copies.
+    private static readonly VerifiedCftChildModelPathAlias[] VerifiedCftChildModelPathAliases =
+    [
+        new("AICharacter.CFT", 83,
+            "Models/Character/AI5/AI_Atlas.ltb",
+            "Models/Characte/AI5/AI_M-motion_Atlas.ltb",
+            "Models/Character/AI5/AI_M-motion_Atlas.LTB"),
+        new("AICharacter.CFT", 84,
+            "Models/Character/AI5/AI_Atlas.ltb",
+            "Models/Characte/AI5/AI_M-motion_Atlas.ltb",
+            "Models/Character/AI5/AI_M-motion_Atlas.LTB"),
+        new("AICharacter.CFT", 97,
+            "Models/Character/AI5/AI_AtlasCrouch.ltb",
+            "Models/Characte/AI5/AI_M-motion_AtlasCrouch.ltb",
+            "Models/Character/AI5/AI_M-motion_AtlasCrouch.LTB"),
+        new("AICharacter.CFT", 112,
+            "Models/Character/AI5/AI_Atlas.ltb",
+            "Models/Characte/AI5/AI_M-motion_Atlas.ltb",
+            "Models/Character/AI5/AI_M-motion_Atlas.LTB"),
+        new("AICharacter.CFT", 113,
+            "Models/Character/AI5/AI_AtlasCrouch.ltb",
+            "Models/Characte/AI5/AI_M-motion_AtlasCrouch.ltb",
+            "Models/Character/AI5/AI_M-motion_AtlasCrouch.LTB")
     ];
 
     // CharacterItem.CFT row 1809 names the SP hair texture in TexFile2, but
@@ -4723,7 +4757,11 @@ internal static class LithTechModelTextureConfigIndex
                         continue;
                     }
 
-                    string relatedResourcePath = NormalizeKey(relatedModelReference);
+                    string resolvedRelatedModelReference = ResolveVerifiedCftChildModelPathAlias(
+                        configItem.Path,
+                        mapping,
+                        relatedModelReference);
+                    string relatedResourcePath = NormalizeKey(resolvedRelatedModelReference);
                     ExplorerItem[]? relatedModelItems;
                     bool hasRelatedModel = Path.HasExtension(relatedResourcePath)
                         ? modelItemsByPath.TryGetValue(
@@ -10675,6 +10713,44 @@ internal static class LithTechModelTextureConfigIndex
             Path.GetFileNameWithoutExtension(reference).Contains("motion", StringComparison.OrdinalIgnoreCase);
     }
 
+    private static IEnumerable<string> GetCftRelatedModelReferences(
+        string tablePath,
+        CftModelTextureMapping mapping)
+    {
+        foreach (string reference in (mapping.RelatedModelReferences ?? [])
+                     .Concat(mapping.ChildModelReferences)
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            yield return reference;
+            string resolvedReference = ResolveVerifiedCftChildModelPathAlias(tablePath, mapping, reference);
+            if (!string.Equals(reference, resolvedReference, StringComparison.OrdinalIgnoreCase))
+            {
+                yield return resolvedReference;
+            }
+        }
+    }
+
+    private static string ResolveVerifiedCftChildModelPathAlias(
+        string tablePath,
+        CftModelTextureMapping mapping,
+        string childModelReference)
+    {
+        if (!mapping.ModelColumn.Equals("_ModelFile", StringComparison.OrdinalIgnoreCase) ||
+            !mapping.ChildModelReferences.Contains(childModelReference, StringComparer.OrdinalIgnoreCase))
+        {
+            return childModelReference;
+        }
+
+        string parentModelPath = NormalizeKey(mapping.ModelReference);
+        string declaredChildPath = NormalizeKey(childModelReference);
+        VerifiedCftChildModelPathAlias? alias = VerifiedCftChildModelPathAliases.FirstOrDefault(candidate =>
+            candidate.RowIndex == mapping.RowIndex &&
+            Path.GetFileName(tablePath).Equals(candidate.TableFileName, StringComparison.OrdinalIgnoreCase) &&
+            NormalizeKey(candidate.ParentModelPath).Equals(parentModelPath, StringComparison.OrdinalIgnoreCase) &&
+            NormalizeKey(candidate.DeclaredChildModelPath).Equals(declaredChildPath, StringComparison.OrdinalIgnoreCase));
+        return alias?.PhysicalChildModelPath ?? childModelReference;
+    }
+
     // CharacterPvItem stores a gendered model prefix. Each physical alias must
     // decode with a consistent native slot set before inheriting the row skin.
     private static IEnumerable<CftModelTextureMapping> ExpandCharacterPvItemModels(
@@ -11140,8 +11216,7 @@ internal static class LithTechModelTextureConfigIndex
                 }
 
                 string modelPath = NormalizeExtensionlessModelReference(mapping.ModelReference);
-                string[] relatedModelPaths = (mapping.RelatedModelReferences ?? [])
-                    .Concat(mapping.ChildModelReferences)
+                string[] relatedModelPaths = GetCftRelatedModelReferences(configItem.Path, mapping)
                     .Select(NormalizeExtensionlessModelReference)
                     .Where(path => path.Length > 0)
                     .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -11185,8 +11260,7 @@ internal static class LithTechModelTextureConfigIndex
 
         string modelPath = NormalizeExtensionlessModelReference(mapping.ModelReference);
         if (modelScopePaths.Contains(modelPath) ||
-            (mapping.RelatedModelReferences ?? [])
-            .Concat(mapping.ChildModelReferences)
+            GetCftRelatedModelReferences(tablePath, mapping)
             .Select(NormalizeExtensionlessModelReference)
             .Any(modelScopePaths.Contains))
         {

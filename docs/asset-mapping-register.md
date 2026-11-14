@@ -28,7 +28,7 @@ Starting with v1.2.7, opening a CFT displays all decoded rows in a table with ro
 
 ## Snapshot
 
-The register contains 32,519 records: 27,376 confirmed exports, 2,646 unresolved slots, 123 written but unverified slots, 390 texture declarations without a matching decoded slot, 1,810 missing-model declarations, three incomplete model references and 171 model-only declarations. Records include explicit row and side contexts, so several records can describe different selected skins on the same model slot. These are recorded samples, not a full-game coverage count. Physical model copies remain separate in the evidence tables and are deduplicated by context, logical model, mesh name and slot in the register.
+The register contains 32,519 records: 27,384 confirmed exports, 2,646 unresolved slots, 123 written but unverified slots, 390 texture declarations without a matching decoded slot, 1,802 missing-model declarations, three incomplete model references and 171 model-only declarations. Records include explicit row and side contexts, so several records can describe different selected skins on the same model slot. These are recorded samples, not a full-game coverage count. Physical model copies remain separate in the evidence tables and are deduplicated by context, logical model, mesh name and slot in the register.
 
 Seven role-specific records in CharacterItem.CFT row 693 and AICharacter.CFT rows 148 and 157 reuse slot 0 because each numbered texture field equals its base field. The [duplicate-field evidence](evidence/cft-duplicate-texture-fields-20261114.tsv) keeps the source fields, model and texture paths, mesh, skeleton, attachment, motion model and decoded pixel hash. A repeated field does not add a second native texture slot.
 
@@ -149,6 +149,12 @@ The [750 sampled poses](evidence/view-items-20261105-poses.tsv) cover all embedd
 This batch adds 1,052 register records: 959 confirmed slots, 30 unresolved slots and 63 written but unverified slots. All prior 24,698 records remain unchanged. [519 context checks](evidence/view-items-20261105-guards.tsv) include 86 new gender-prefix cases after the preceding 433. Seven CLI exports verify selectors, exact DTX pixels, missing bases, scoped expansion and invalid-copy isolation. The [49 texture-copy](evidence/view-items-20261105-texture-guards.tsv), [90 native-skin](evidence/view-items-20261105-native-guards.tsv) and [128 structure](evidence/view-items-20261105-structure-guards.tsv) checks pass, for 786 checks in total.
 
 ### AI character and extra-skin tables
+
+#### Atlas motion-child models
+
+AICharacter.CFT rows 83, 84, 97, 112 and 113 spell the child directory `Models/Characte/AI5/`. Their unique physical models are in `Models/CHARACTER/AI5/` in RF016.REZ. The exporter corrects only these row-specific links, then requires the parent and child slots and every referenced DTX copy to validate before binding. Atlas uses `Atlas_body` slot 0 and `Atlas_leg` slot 1; its crouch model uses `AtlasCrouch` slot 0. Focused exports resolve rows 83, 84, 97, 112 and 113 with no missing textures.
+
+The Atlas child has 63 nodes, 19 animations, 13 sockets and two blend masks; the crouch child has 14 nodes, four animations, ten sockets and two blend masks. Both child hierarchies match their corresponding parent model. The [evidence table](evidence/ai-atlas-motion-20261114.tsv) records every node, clip, socket, slot, source hash and row-context export. OBJ contains the exported geometry and textures; animation playback remains unverified.
 
 AICharacter and AIExtraCharacterSkin retain [all 1,010 rows](evidence/ai-family-20261105-tables.tsv) and [29,130 field values](evidence/ai-family-20261105-raw-fields.tsv), including original serialized bytes, render styles, child paths, scale values and attachment/parts fields. Both [row trailers](evidence/ai-family-20261105-trailers.tsv) contain only the expected END marker and padding. The [two extensionless child declarations](evidence/ai-family-20261105-extensionless.tsv) retain their original stem and the found `.ltb` candidate; no `.lta`, `.ltc` or `.dat` candidate was present.
 
